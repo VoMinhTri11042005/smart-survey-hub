@@ -37,7 +37,13 @@ function AppContent() {
       localStorage.removeItem('userRole');
     }
   }, [isAuthenticated, userRole]);
-  const [currentView, setCurrentView] = useState<View>('dashboard');
+  const [currentView, setCurrentView] = useState<View>(() => {
+    return (localStorage.getItem('currentView') as View) || 'dashboard';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('currentView', currentView);
+  }, [currentView]);
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [notifications, setNotifications] = useState<{ id: string; message: string; time: string; read: boolean }[]>([
