@@ -3,6 +3,7 @@ import { CircleDot, CheckSquare, Star, AlignLeft, Minus, GripVertical, Copy, Tra
 import { useState, useRef, useEffect } from 'react';
 import { useSurvey } from '../../context/SurveyContext';
 import { ShareModal } from '../common/ShareModal';
+import ReactMarkdown from 'react-markdown';
 import type { SurveyQuestion, QuestionType } from '../../types';
 
 const questionTypeLabels: Record<QuestionType, { label: string; icon: React.ReactNode }> = {
@@ -14,7 +15,7 @@ const questionTypeLabels: Record<QuestionType, { label: string; icon: React.Reac
 };
 
 export function Builder({ onPublished, onError }: { onPublished?: () => void; onError?: (msg: string) => void }) {
-  const { parseDocx, createSurvey, setCurrentSurvey, isLoading, pendingTemplate, clearPendingTemplate } = useSurvey();
+  const { parseDocx, createSurvey, setCurrentSurvey, isLoading, pendingTemplate, clearPendingTemplate, chatWithAI } = useSurvey();
   
   const [showSurvey, setShowSurvey] = useState(false);
   const [topic, setTopic] = useState('');
@@ -25,6 +26,39 @@ export function Builder({ onPublished, onError }: { onPublished?: () => void; on
   const [activeQuestionId, setActiveQuestionId] = useState<string | null>(null);
   const [isPublishing, setIsPublishing] = useState(false);
   const [publishedSurvey, setPublishedSurvey] = useState<{ id: string; title: string } | null>(null);
+
+  // AI Chat state
+  const [aiMessages, setAiMessages] = useState<{type: 'user'|'bot', text: string}[]>([]);
+  const [aiInput, setAiInput] = useState('');
+  const [isAiTyping, setIsAiTyping] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [aiMessages, isAiTyping]);
+
+  const handleAiChatSubmit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!aiInput.trim() || isAiTyping) return;
+
+    const message = aiInput.trim();
+    setAiInput('');
+    setAiMessages(prev => [...prev, { type: 'user', text: message }]);
+    setIsAiTyping(true);
+
+    try {
+      const response = await chatWithAI(message, surveyTitle, surveyDescription, questions);
+      setAiMessages(prev => [...prev, { type: 'bot', text: response }]);
+    } catch (error) {
+      setAiMessages(prev => [...prev, { type: 'bot', text: 'Xin lỗi, đã có lỗi xảy ra khi kết nối với AI.' }]);
+    } finally {
+      setIsAiTyping(false);
+    }
+  };
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -524,20 +558,55 @@ export function Builder({ onPublished, onError }: { onPublished?: () => void; on
                  Khảo sát có <span className="font-bold text-primary">5-8 câu hỏi</span> thường có tỷ lệ hoàn thành cao hơn 40% trong ngành của bạn.
               </p>
            </div>
+
+           {/* AI Chat History */}
+           {aiMessages.length > 0 && (
+             <div className="space-y-4 pt-4 border-t border-border-subtle">
+               {aiMessages.map((msg, idx) => (
+                 <div key={idx} className={`flex ${msg.type === 'user' ? 'justify-end' : 'justify-start'}`}>
+                   <div className={`max-w-[90%] p-3 text-sm rounded-2xl ${msg.type === 'user' ? 'bg-primary text-white rounded-tr-sm' : 'bg-surface-container-low text-text-primary rounded-tl-sm'}`}>
+                     {msg.type === 'user' ? (
+                       msg.text
+                     ) : (
+                       <div className="prose prose-sm prose-p:my-1 prose-ul:my-1 prose-li:my-0">
+                         <ReactMarkdown>{msg.text}</ReactMarkdown>
+                       </div>
+                     )}
+                   </div>
+                 </div>
+               ))}
+               {isAiTyping && (
+                 <div className="flex justify-start">
+                   <div className="bg-surface-container-low text-text-primary rounded-2xl rounded-tl-sm p-3 flex gap-1">
+                     <span className="w-1.5 h-1.5 bg-text-secondary/50 rounded-full animate-bounce"></span>
+                     <span className="w-1.5 h-1.5 bg-text-secondary/50 rounded-full animate-bounce [animation-delay:0.2s]"></span>
+                     <span className="w-1.5 h-1.5 bg-text-secondary/50 rounded-full animate-bounce [animation-delay:0.4s]"></span>
+                   </div>
+                 </div>
+               )}
+               <div ref={messagesEndRef} />
+             </div>
+           )}
         </div>
 
         {/* AI Chat Input */}
         <div className="p-6 border-t border-border-subtle bg-surface-background/50">
-           <div className="relative">
+           <form onSubmit={handleAiChatSubmit} className="relative">
               <input 
                  type="text" 
+                 value={aiInput}
+                 onChange={(e) => setAiInput(e.target.value)}
                  placeholder="Hỏi AI để được trợ giúp..." 
-                 className="w-full bg-white border border-border-subtle rounded-full py-2.5 pl-4 pr-10 text-sm focus:ring-2 focus:ring-secondary-container/30 focus:border-secondary-container outline-none shadow-sm transition-all"
+                 className="w-full bg-white border border-border-subtle rounded-full py-2.5 pl-4 pr-10 text-sm focus:ring-2 focus:ring-primary/30 focus:border-primary outline-none shadow-sm transition-all"
               />
-              <button className="absolute right-3 top-1/2 -translate-y-1/2 text-secondary-container hover:text-secondary transition-colors cursor-pointer">
+              <button 
+                 type="submit"
+                 disabled={!aiInput.trim() || isAiTyping}
+                 className="absolute right-3 top-1/2 -translate-y-1/2 text-primary hover:text-primary/80 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              >
                  <Send size={18} />
               </button>
-           </div>
+           </form>
         </div>
       </aside>
 
