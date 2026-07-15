@@ -1,5 +1,7 @@
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react';
 import type { Survey, SurveyQuestion, SurveyResponse, SurveyTemplateData, TeamMember, TeamRole } from '../types';
+import { db } from '../services/firebase';
+import { collection, doc, getDocs, getDoc, setDoc, addDoc, deleteDoc, query, orderBy } from 'firebase/firestore';
 
 interface SurveyContextType {
   surveys: Survey[];
@@ -62,23 +64,29 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
 
   const fetchSurveys = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE}/surveys`);
-      if (res.ok) {
-        const data = await res.json();
-        setSurveys(data);
-      }
+      const q = query(collection(db, 'surveys'), orderBy('createdAt', 'desc'));
+      const snapshot = await getDocs(q);
+      const data = snapshot.docs.map(doc => doc.data() as Survey);
+      setSurveys(data);
     } catch (error) {
-      console.error('Error fetching surveys, falling back to local storage');
+      console.error('Error fetching surveys from Firestore:', error);
+      // Fallback
+      const saved = localStorage.getItem('surveys');
+      if (saved) setSurveys(JSON.parse(saved));
     }
   }, []);
 
   const fetchSurveyById = useCallback(async (id: string): Promise<Survey | null> => {
     try {
-      const res = await fetch(`${API_BASE}/surveys/${id}`);
-      if (res.ok) return await res.json();
+      const docRef = doc(db, 'surveys', id);
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        return docSnap.data() as Survey;
+      }
       return null;
     } catch (error) {
-      // Fallback to local storage
+      console.error('Error fetching survey by id from Firestore:', error);
+      // Fallback
       const saved = localStorage.getItem('surveys');
       if (saved) {
         try {
@@ -93,17 +101,20 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
 
   const createSurvey = useCallback(async (surveyData: Omit<Survey, 'id' | 'createdAt' | 'status'> & { status?: string }): Promise<Survey> => {
     try {
-      const res = await fetch(`${API_BASE}/surveys`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(surveyData),
-      });
-      if (!res.ok) throw new Error('API request failed');
-      const survey = await res.json();
+      const newRef = doc(collection(db, 'surveys'));
+      const survey: Survey = {
+        ...surveyData,
+        id: newRef.id,
+        createdAt: new Date().toISOString(),
+        status: (surveyData.status as 'draft' | 'live' | 'closed') || 'draft'
+      };
+      await setDoc(newRef, survey);
       setSurveys(prev => [survey, ...prev]);
       return survey;
     } catch (error) {
-      // Fallback to local storage if API is unavailable (e.g. Vercel deployment without backend)
+      console.error('Error creating survey in Firestore:', error);
+      
+      // Fallback to local storage if API is unavailable
       const newSurvey: Survey = {
         ...surveyData,
         id: Math.random().toString(36).substring(2, 9),
@@ -117,28 +128,35 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
 
   const deleteSurvey = useCallback(async (id: string) => {
     try {
-      await fetch(`${API_BASE}/surveys/${id}`, { method: 'DELETE' });
+      await deleteDoc(doc(db, 'surveys', id));
     } catch (e) {
-      // Ignore error, delete from local state
+      console.error('Error deleting survey from Firestore:', e);
     }
     setSurveys(prev => prev.filter(s => s.id !== id));
     if (currentSurvey?.id === id) setCurrentSurvey(null);
   }, [currentSurvey?.id]);
 
   const submitResponse = useCallback(async (surveyId: string, answers: Record<string, string | string[] | number>) => {
-    await fetch(`${API_BASE}/surveys/${surveyId}/responses`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ answers }),
-    });
+    try {
+      const responsesRef = collection(db, 'surveys', surveyId, 'responses');
+      await addDoc(responsesRef, {
+        surveyId,
+        answers,
+        submittedAt: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error('Error submitting response to Firestore:', error);
+      throw error;
+    }
   }, []);
 
   const fetchResponses = useCallback(async (surveyId: string): Promise<SurveyResponse[]> => {
     try {
-      const res = await fetch(`${API_BASE}/surveys/${surveyId}/responses`);
-      if (res.ok) return await res.json();
-      return [];
-    } catch {
+      const q = query(collection(db, 'surveys', surveyId, 'responses'), orderBy('submittedAt', 'desc'));
+      const snapshot = await getDocs(q);
+      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as SurveyResponse));
+    } catch (error) {
+      console.error('Error fetching responses from Firestore:', error);
       return [];
     }
   }, []);

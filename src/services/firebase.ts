@@ -4,6 +4,7 @@
  */
 
 import { initializeApp } from 'firebase/app';
+import { getFirestore } from 'firebase/firestore';
 import {
   getAuth,
   signInWithPopup,
@@ -24,6 +25,7 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
+const db = getFirestore(app);
 const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({
   prompt: 'select_account'
@@ -42,5 +44,5 @@ export function onAuthChange(callback: (user: User | null) => void) {
   return onAuthStateChanged(auth, callback);
 }
 
-export { auth };
+export { auth, db };
 export type { User };
