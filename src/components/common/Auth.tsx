@@ -115,7 +115,22 @@ export function Auth({ onLogin }: AuthProps) {
           )}
 
           {/* Email/Password Form */}
-          <form className="space-y-5" onSubmit={(e) => { e.preventDefault(); onLogin(role); }}>
+          <form className="space-y-5" onSubmit={(e) => { 
+            e.preventDefault(); 
+            const formData = new FormData(e.currentTarget);
+            const email = formData.get('email') as string;
+            const password = formData.get('password') as string;
+
+            if (role === 'admin') {
+              if (email !== 'admin@smartsurvey.com' || password !== 'demo123456') {
+                setError('Tài khoản hoặc mật khẩu Admin không chính xác.');
+                return;
+              }
+            }
+            
+            setError(null);
+            onLogin(role); 
+          }}>
             <div>
               <label htmlFor="email" className="block text-sm font-semibold text-text-primary">
                 Địa chỉ Email
@@ -159,25 +174,29 @@ export function Auth({ onLogin }: AuthProps) {
               type="submit"
               className="w-full flex justify-center items-center gap-2 py-3 px-4 border border-transparent rounded-xl shadow-md text-sm font-bold text-white bg-primary hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition-all active:scale-[0.98] cursor-pointer"
             >
-              {isLogin ? 'Đăng nhập' : 'Đăng ký'}
+              {role === 'admin' ? 'Đăng nhập' : (isLogin ? 'Đăng nhập' : 'Đăng ký')}
               <ArrowRight size={18} />
             </button>
           </form>
           
-          <div className="mt-6 text-center text-sm font-medium">
-            <span className="text-text-secondary">
-              {isLogin ? "Bạn chưa có tài khoản? " : "Bạn đã có tài khoản? "}
-            </span>
-            <button 
-              onClick={() => setIsLogin(!isLogin)} 
-              className="font-bold text-primary hover:text-primary-container transition-colors cursor-pointer"
-            >
-              {isLogin ? 'Đăng ký' : 'Đăng nhập'}
-            </button>
-          </div>
+          {role === 'user' && (
+            <div className="mt-6 text-center text-sm font-medium">
+              <span className="text-text-secondary">
+                {isLogin ? "Bạn chưa có tài khoản? " : "Bạn đã có tài khoản? "}
+              </span>
+              <button 
+                onClick={() => setIsLogin(!isLogin)} 
+                className="font-bold text-primary hover:text-primary-container transition-colors cursor-pointer"
+              >
+                {isLogin ? 'Đăng ký' : 'Đăng nhập'}
+              </button>
+            </div>
+          )}
 
           <p className="mt-4 text-center text-[10px] text-text-secondary font-medium opacity-60">
-            Đăng nhập bằng email hiện ở chế độ Demo — bất kỳ thông tin nào cũng được chấp nhận.
+            {role === 'admin' 
+              ? 'Mặc định: admin@smartsurvey.com / demo123456' 
+              : 'Đăng nhập người dùng bằng email hiện ở chế độ Demo.'}
           </p>
         </div>
       </div>
