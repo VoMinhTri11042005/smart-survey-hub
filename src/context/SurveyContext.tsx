@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, type ReactNode } from 'react';
+import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react';
 import type { Survey, SurveyQuestion, SurveyResponse, SurveyTemplateData, TeamMember, TeamRole } from '../types';
 
 interface SurveyContextType {
@@ -108,8 +108,7 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
         ...surveyData,
         id: Math.random().toString(36).substring(2, 9),
         createdAt: new Date().toISOString(),
-        status: surveyData.status || 'draft',
-        responseCount: 0
+        status: (surveyData.status as 'draft' | 'live' | 'closed') || 'draft'
       };
       setSurveys(prev => [newSurvey, ...prev]);
       return newSurvey;
