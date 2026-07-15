@@ -26,6 +26,7 @@ function AppContent() {
   const [userRole, setUserRole] = useState<Role | null>(null);
   const [currentView, setCurrentView] = useState<View>('dashboard');
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [notifications, setNotifications] = useState<{ id: string; message: string; time: string; read: boolean }[]>([
     { id: '1', message: 'Chào mừng bạn đến với Smart Survey Hub!', time: 'Hôm nay', read: false }
   ]);
@@ -97,9 +98,9 @@ function AppContent() {
           <Chatbot survey={currentSurvey} />
         </>
       ) : (
-        <div className="flex h-screen bg-surface-background text-text-primary font-sans overflow-hidden selection:bg-secondary-fixed selection:text-on-secondary-fixed">
-          <Sidebar currentView={currentView} onViewChange={setCurrentView} onLogout={() => { setIsAuthenticated(false); setUserRole(null); }} userProfile={userProfile} />
-          <div className="flex-1 flex flex-col overflow-hidden relative">
+        <div className="flex h-screen bg-surface-background text-text-primary font-sans overflow-hidden selection:bg-secondary-fixed selection:text-on-secondary-fixed relative">
+          <Sidebar currentView={currentView} onViewChange={setCurrentView} onLogout={() => { setIsAuthenticated(false); setUserRole(null); }} userProfile={userProfile} isOpen={isMobileMenuOpen} onClose={() => setIsMobileMenuOpen(false)} />
+          <div className="flex-1 flex flex-col overflow-hidden relative w-full">
             <TopBar 
               currentView={currentView} 
               onViewChange={setCurrentView} 
@@ -110,6 +111,7 @@ function AppContent() {
               userProfile={userProfile} 
               notifications={notifications}
               onMarkAllRead={() => setNotifications(prev => prev.map(n => ({ ...n, read: true })))}
+              onMenuClick={() => setIsMobileMenuOpen(true)}
             />
             <main className="flex-1 overflow-y-auto relative bg-surface-background">
               {currentView === 'dashboard' && <Dashboard onViewChange={setCurrentView} userProfile={userProfile} />}

@@ -4,7 +4,7 @@
  */
 
 import { initializeApp } from 'firebase/app';
-import { getFirestore } from 'firebase/firestore';
+import { getDatabase } from 'firebase/database';
 import {
   getAuth,
   signInWithPopup,
@@ -21,11 +21,12 @@ const firebaseConfig = {
   storageBucket: "smart-survey-hub.firebasestorage.app",
   messagingSenderId: "386265874475",
   appId: "1:386265874475:web:284d4bc22a4a93d82fea6e",
+  databaseURL: "https://smart-survey-hub-default-rtdb.asia-southeast1.firebasedatabase.app"
 };
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
-const db = getFirestore(app);
+const db = getDatabase(app);
 const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({
   prompt: 'select_account'
