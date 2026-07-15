@@ -1,5 +1,6 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { X, Copy, Check, Link2, Mail, QrCode, ExternalLink } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 
 interface ShareModalProps {
   isOpen: boolean;
@@ -8,68 +9,11 @@ interface ShareModalProps {
   surveyTitle: string;
 }
 
-// Simple QR Code generator using Canvas
-function generateQR(canvas: HTMLCanvasElement, text: string) {
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return;
-
-  // Simple QR-like pattern (visual representation)
-  const size = 200;
-  canvas.width = size;
-  canvas.height = size;
-
-  // Background
-  ctx.fillStyle = '#ffffff';
-  ctx.fillRect(0, 0, size, size);
-
-  // Generate a deterministic pattern from the text
-  const moduleCount = 25;
-  const moduleSize = size / moduleCount;
-  const hash = text.split('').reduce((a, c) => ((a << 5) - a + c.charCodeAt(0)) | 0, 0);
-
-  ctx.fillStyle = '#1f108e';
-
-  // Position detection patterns (3 corners)
-  const drawFinder = (x: number, y: number) => {
-    ctx.fillRect(x * moduleSize, y * moduleSize, 7 * moduleSize, 7 * moduleSize);
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect((x + 1) * moduleSize, (y + 1) * moduleSize, 5 * moduleSize, 5 * moduleSize);
-    ctx.fillStyle = '#1f108e';
-    ctx.fillRect((x + 2) * moduleSize, (y + 2) * moduleSize, 3 * moduleSize, 3 * moduleSize);
-  };
-
-  drawFinder(0, 0);
-  drawFinder(moduleCount - 7, 0);
-  drawFinder(0, moduleCount - 7);
-
-  // Data modules
-  let seed = Math.abs(hash);
-  for (let row = 0; row < moduleCount; row++) {
-    for (let col = 0; col < moduleCount; col++) {
-      // Skip finder patterns
-      if ((row < 8 && col < 8) || (row < 8 && col > moduleCount - 9) || (row > moduleCount - 9 && col < 8)) continue;
-
-      seed = (seed * 1103515245 + 12345) & 0x7fffffff;
-      if (seed % 3 !== 0) {
-        ctx.fillStyle = '#1f108e';
-        ctx.fillRect(col * moduleSize, row * moduleSize, moduleSize, moduleSize);
-      }
-    }
-  }
-}
-
 export function ShareModal({ isOpen, onClose, surveyId, surveyTitle }: ShareModalProps) {
   const [copied, setCopied] = useState(false);
   const [showQR, setShowQR] = useState(false);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
 
   const shareLink = `${window.location.origin}/survey/${surveyId}`;
-
-  useEffect(() => {
-    if (showQR && canvasRef.current) {
-      generateQR(canvasRef.current, shareLink);
-    }
-  }, [showQR, shareLink]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -226,7 +170,7 @@ export function ShareModal({ isOpen, onClose, surveyId, surveyTitle }: ShareModa
               {showQR && (
                 <div className="mt-4 flex flex-col items-center animate-in slide-in-from-top-2 fade-in duration-300">
                   <div className="p-4 bg-white border-2 border-border-subtle rounded-2xl shadow-sm">
-                    <canvas ref={canvasRef} className="w-[200px] h-[200px]" />
+                    <QRCodeSVG value={shareLink} size={200} fgColor="#1f108e" />
                   </div>
                   <p className="text-xs text-text-secondary mt-3 text-center font-medium">
                     Quét mã QR bằng điện thoại để mở khảo sát
