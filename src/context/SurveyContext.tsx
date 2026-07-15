@@ -33,7 +33,11 @@ interface SurveyContextType {
 
 const SurveyContext = createContext<SurveyContextType | null>(null);
 
-const API_BASE = (import.meta as any).env.VITE_API_URL || '/api';
+let envApi = (import.meta as any).env.VITE_API_URL;
+if (envApi && !envApi.endsWith('/api')) {
+  envApi = envApi.endsWith('/') ? envApi + 'api' : envApi + '/api';
+}
+const API_BASE = envApi || '/api';
 
 export function SurveyProvider({ children }: { children: ReactNode }) {
   const [surveys, setSurveys] = useState<Survey[]>([]);
