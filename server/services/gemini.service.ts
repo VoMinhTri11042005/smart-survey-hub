@@ -143,7 +143,6 @@ QUY TẮC:
     contents: message,
     config: {
       systemInstruction: systemPrompt,
-      maxOutputTokens: 500,
     },
   });
 
