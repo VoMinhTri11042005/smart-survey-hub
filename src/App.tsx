@@ -94,7 +94,7 @@ function AppContent() {
   if (shareSurveyId && shareSurvey) {
     return (
       <>
-        <Respondent survey={shareSurvey} onExit={() => { window.location.href = '/'; }} />
+        <Respondent survey={shareSurvey} isPublic={true} onExit={() => { window.location.href = '/'; }} />
         <Chatbot survey={shareSurvey} />
         <AnimatePresence>{toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}</AnimatePresence>
       </>

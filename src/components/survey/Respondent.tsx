@@ -7,9 +7,10 @@ interface RespondentProps {
   survey: Survey | null;
   onExit: () => void;
   onComplete?: () => void;
+  isPublic?: boolean;
 }
 
-export function Respondent({ survey, onExit, onComplete }: RespondentProps) {
+export function Respondent({ survey, onExit, onComplete, isPublic = false }: RespondentProps) {
   const { submitResponse, fetchMyResponse } = useSurvey();
   const [step, setStep] = useState(0);
   const [answers, setAnswers] = useState<Record<string, any>>({});
@@ -136,13 +137,15 @@ export function Respondent({ survey, onExit, onComplete }: RespondentProps) {
                 <Edit3 size={18} />
                 Sửa lại đáp án
               </button>
-              <button 
-                onClick={onExit} 
-                className="w-full sm:w-auto px-8 py-3.5 bg-primary text-white font-bold rounded-2xl shadow-xl shadow-primary/25 hover:bg-primary/90 transition-all active:scale-95 flex items-center justify-center gap-2"
-              >
-                <Home size={18} />
-                Về trang chủ
-              </button>
+              {!isPublic && (
+                <button 
+                  onClick={onExit} 
+                  className="w-full sm:w-auto px-8 py-3.5 bg-primary text-white font-bold rounded-2xl shadow-xl shadow-primary/25 hover:bg-primary/90 transition-all active:scale-95 flex items-center justify-center gap-2"
+                >
+                  <Home size={18} />
+                  Về trang quản trị
+                </button>
+              )}
             </div>
           </div>
         </main>
