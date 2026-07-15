@@ -32,10 +32,10 @@ export function TopBar({ currentView, onViewChange, onPublish, userProfile, noti
         <button 
           type="button"
           onClick={(e) => { e.preventDefault(); onMenuClick?.(); }}
-          className="md:hidden p-2 text-text-secondary hover:text-primary hover:bg-primary/10 rounded-xl transition-colors cursor-pointer relative z-50"
+          className="md:hidden p-3 -ml-2 text-text-secondary hover:text-primary hover:bg-primary/10 rounded-xl transition-colors cursor-pointer relative z-50 touch-manipulation"
           aria-label="Menu"
         >
-          <Menu size={20} />
+          <Menu size={24} className="pointer-events-none" />
         </button>
         {currentView === 'analytics' && (
           <>

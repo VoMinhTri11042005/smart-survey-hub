@@ -16,13 +16,13 @@ export function Sidebar({ currentView, onViewChange, onLogout, userProfile, isOp
       {/* Mobile Backdrop */}
       {isOpen && (
         <div 
-          className="fixed inset-0 bg-surface-background/80 backdrop-blur-sm z-[90] md:hidden transition-opacity"
+          className="absolute inset-0 bg-surface-background/80 backdrop-blur-sm z-[90] md:hidden transition-opacity"
           onClick={onClose}
         />
       )}
 
       {/* Sidebar Content */}
-      <aside className={`fixed md:relative inset-y-0 w-64 bg-surface-container border-r border-border-subtle flex flex-col h-full flex-shrink-0 transition-all duration-300 ease-in-out z-[100] ${isOpen ? 'left-0' : '-left-64 md:left-0'}`}>
+      <aside className={`absolute md:relative inset-y-0 w-64 bg-surface-container border-r border-border-subtle flex flex-col h-full flex-shrink-0 transition-all duration-300 ease-in-out z-[100] ${isOpen ? 'left-0' : '-left-64 md:left-0'}`}>
         <div className="p-6 pb-4 flex items-center justify-between">
           <div>
             <h1 className="font-display text-4xl font-bold text-primary tracking-tight leading-none">SH</h1>
