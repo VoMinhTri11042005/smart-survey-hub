@@ -72,7 +72,7 @@ export function ShareModal({ isOpen, onClose, surveyId, surveyTitle }: ShareModa
 
       {/* Modal */}
       <div className="fixed inset-0 flex items-center justify-center z-[61] p-4">
-        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md animate-in zoom-in-95 fade-in duration-300 overflow-hidden">
+        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md animate-in zoom-in-95 fade-in duration-300 flex flex-col max-h-[90vh] overflow-hidden">
           {/* Header */}
           <div className="p-6 pb-4 flex items-center justify-between border-b border-border-subtle">
             <div className="flex items-center gap-3">
@@ -93,7 +93,7 @@ export function ShareModal({ isOpen, onClose, surveyId, surveyTitle }: ShareModa
           </div>
 
           {/* Content */}
-          <div className="p-6 space-y-5">
+          <div className="p-6 space-y-5 overflow-y-auto flex-1 custom-scrollbar">
             {/* Copy Link */}
             <div>
               <label className="text-xs font-bold text-text-secondary uppercase tracking-wider mb-2 block">
