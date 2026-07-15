@@ -45,17 +45,21 @@ export function Chatbot({ survey }: { survey: Survey | null }) {
   return (
     <>
       {/* Floating Action Button */}
-      <button
+      <motion.button
+        drag
+        dragMomentum={false}
+        whileDrag={{ scale: 1.1 }}
         onClick={() => setIsOpen(true)}
-        className={`fixed bottom-6 right-6 w-14 h-14 bg-secondary text-white rounded-full shadow-lg flex items-center justify-center hover:scale-110 hover:shadow-xl active:scale-95 transition-all z-50 cursor-pointer ${isOpen ? 'scale-0 opacity-0 pointer-events-none' : 'scale-100 opacity-100'}`}
+        className={`fixed bottom-6 right-6 w-14 h-14 bg-secondary text-white rounded-full shadow-lg flex items-center justify-center hover:scale-110 hover:shadow-xl active:scale-95 transition-all z-50 cursor-grab active:cursor-grabbing ${isOpen ? 'scale-0 opacity-0 pointer-events-none' : 'scale-100 opacity-100'}`}
+        style={{ touchAction: 'none' }}
         aria-label="Mở Trợ lý AI"
       >
-        <MessageSquare size={24} />
-        <span className="absolute -top-1 -right-1 flex h-3 w-3">
+        <MessageSquare size={24} className="pointer-events-none" />
+        <span className="absolute -top-1 -right-1 flex h-3 w-3 pointer-events-none">
           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-sentiment-positive opacity-75"></span>
           <span className="relative inline-flex rounded-full h-3 w-3 bg-sentiment-positive border-2 border-white"></span>
         </span>
-      </button>
+      </motion.button>
 
       {/* Chat Window */}
       <motion.div 
