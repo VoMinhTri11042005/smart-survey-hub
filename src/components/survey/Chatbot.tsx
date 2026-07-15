@@ -153,7 +153,7 @@ export function Chatbot({ survey }: { survey: Survey | null }) {
             <span className="text-[10px] text-text-secondary font-medium">AI có thể mắc lỗi. Hãy luôn xác minh các dữ liệu quan trọng.</span>
           </div>
         </div>
-      </div>
+      </motion.div>
     </>
   );
 }
