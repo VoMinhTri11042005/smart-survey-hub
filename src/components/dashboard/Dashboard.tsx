@@ -49,13 +49,11 @@ export function Dashboard({ onViewChange, userProfile }: { onViewChange?: (view:
         </div>
         <div className="hidden md:flex items-center gap-4">
           <div className="text-right">
-            <div className="text-[10px] font-bold text-text-secondary uppercase tracking-widest">Sử dụng AI</div>
-            <div className="text-sm font-semibold text-secondary">84% Công suất</div>
+            <div className="text-[10px] font-bold text-text-secondary uppercase tracking-widest">Tổng số khảo sát</div>
+            <div className="text-sm font-semibold text-primary">{surveys.length} khảo sát</div>
           </div>
-          <div className="w-12 h-12 rounded-full border-4 border-surface-container-highest flex items-center justify-center relative">
-            <svg className="w-full h-full -rotate-90 absolute inset-0">
-              <circle cx="20" cy="20" r="18" fill="none" stroke="currentColor" strokeWidth="4" className="text-secondary" strokeDasharray="113" strokeDashoffset="18" />
-            </svg>
+          <div className="w-12 h-12 rounded-full bg-primary-container text-primary flex items-center justify-center font-display font-bold text-xl">
+            {surveys.length}
           </div>
         </div>
       </div>
