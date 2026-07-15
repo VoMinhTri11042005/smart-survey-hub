@@ -23,7 +23,7 @@ router.post('/chat', async (req, res) => {
     res.json({ reply });
   } catch (error: any) {
     console.error('Chat error:', error);
-    res.status(500).json({ reply: 'Xin lỗi, đã xảy ra lỗi. Vui lòng thử lại.' });
+    res.status(500).json({ reply: `Xin lỗi, đã xảy ra lỗi: ${error.message || 'Lỗi không xác định'}` });
   }
 });
 

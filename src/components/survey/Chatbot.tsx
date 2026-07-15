@@ -3,6 +3,7 @@ import ReactMarkdown from 'react-markdown';
 import { MessageSquare, X, Send, Sparkles, Bot } from 'lucide-react';
 import { useSurvey } from '../../context/SurveyContext';
 import type { Survey, ChatMessage } from '../../types';
+import { motion, useDragControls } from 'motion/react';
 
 export function Chatbot({ survey }: { survey: Survey | null }) {
   const { chatWithAI } = useSurvey();
@@ -13,6 +14,7 @@ export function Chatbot({ survey }: { survey: Survey | null }) {
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const dragControls = useDragControls();
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -33,8 +35,8 @@ export function Chatbot({ survey }: { survey: Survey | null }) {
         survey?.questions || []
       );
       setMessages(prev => [...prev, { type: 'bot', text: reply }]);
-    } catch {
-      setMessages(prev => [...prev, { type: 'bot', text: 'Xin lỗi, đã xảy ra lỗi. Vui lòng thử lại.' }]);
+    } catch (err: any) {
+      setMessages(prev => [...prev, { type: 'bot', text: `Lỗi: ${err.message || 'Xin lỗi, đã xảy ra lỗi. Vui lòng thử lại.'}` }]);
     } finally {
       setIsTyping(false);
     }
@@ -56,19 +58,28 @@ export function Chatbot({ survey }: { survey: Survey | null }) {
       </button>
 
       {/* Chat Window */}
-      <div className={`fixed bottom-6 right-6 w-[360px] max-w-[calc(100vw-32px)] bg-white rounded-2xl shadow-2xl border border-border-subtle flex flex-col z-50 transition-all origin-bottom-right duration-300 overflow-hidden ${isOpen ? 'scale-100 opacity-100 pointer-events-auto shadow-[0_12px_40px_-10px_rgba(31,16,142,0.2)]' : 'scale-50 opacity-0 pointer-events-none'}`}>
+      <motion.div 
+        drag
+        dragControls={dragControls}
+        dragListener={false}
+        dragMomentum={false}
+        className={`fixed bottom-6 right-6 w-[360px] max-w-[calc(100vw-32px)] bg-white rounded-2xl shadow-2xl border border-border-subtle flex flex-col z-50 transition-all origin-bottom-right duration-300 overflow-hidden ${isOpen ? 'scale-100 opacity-100 pointer-events-auto shadow-[0_12px_40px_-10px_rgba(31,16,142,0.2)]' : 'scale-50 opacity-0 pointer-events-none'}`}
+      >
         {/* Header */}
-        <div className="flex items-center justify-between p-4 bg-primary text-white">
+        <div 
+          className="flex items-center justify-between p-4 bg-primary text-white cursor-move touch-none"
+          onPointerDown={(e) => dragControls.start(e)}
+        >
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center">
+            <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center pointer-events-none">
               <Sparkles size={16} className="text-secondary-fixed" />
             </div>
-            <div>
+            <div className="pointer-events-none">
               <h3 className="font-display font-bold text-sm leading-tight">Trợ lý Thông minh</h3>
-              <p className="text-[10px] text-primary-fixed-dim font-medium uppercase tracking-wider">Trực tuyến</p>
+              <p className="text-[10px] text-primary-fixed-dim font-medium uppercase tracking-wider">Trực tuyến (Kéo để di chuyển)</p>
             </div>
           </div>
-          <button onClick={() => setIsOpen(false)} className="p-1 text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-colors cursor-pointer">
+          <button onClick={() => setIsOpen(false)} onPointerDown={(e) => e.stopPropagation()} className="p-1 text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-colors cursor-pointer">
             <X size={20} />
           </button>
         </div>
