@@ -197,8 +197,8 @@ export function Builder({ onPublished, onError }: { onPublished?: () => void; on
                     {selectedFile ? (
                       <div className="border-2 border-primary/30 bg-primary-fixed/20 rounded-xl p-4 flex items-center gap-3">
                         <FileText size={24} className="text-primary" />
-                        <div className="flex-1">
-                          <p className="text-sm font-semibold text-text-primary">{selectedFile.name}</p>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-text-primary truncate" title={selectedFile.name}>{selectedFile.name}</p>
                           <p className="text-xs text-text-secondary">{(selectedFile.size / 1024).toFixed(1)} KB</p>
                         </div>
                         <button
