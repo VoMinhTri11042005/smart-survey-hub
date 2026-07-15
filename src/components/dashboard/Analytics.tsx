@@ -13,8 +13,10 @@ export function Analytics() {
   useEffect(() => { fetchSurveys(); }, [fetchSurveys]);
 
   useEffect(() => {
-    if (currentSurvey && !selectedSurvey) setSelectedSurvey(currentSurvey);
-  }, [currentSurvey, selectedSurvey]);
+    if (!selectedSurvey && surveys.length > 0) {
+      setSelectedSurvey(currentSurvey || surveys[0]);
+    }
+  }, [currentSurvey, selectedSurvey, surveys]);
 
   useEffect(() => {
     if (!selectedSurvey) return;
