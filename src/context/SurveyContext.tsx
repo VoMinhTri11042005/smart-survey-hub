@@ -16,8 +16,9 @@ interface SurveyContextType {
   setCurrentSurvey: (survey: Survey | null) => void;
   setSearchQuery: (query: string) => void;
 
-  submitResponse: (surveyId: string, answers: Record<string, string | string[] | number>) => Promise<void>;
+  submitResponse: (surveyId: string, respondentId: string, answers: Record<string, string | string[] | number>) => Promise<void>;
   fetchResponses: (surveyId: string) => Promise<SurveyResponse[]>;
+  fetchMyResponse: (surveyId: string, respondentId: string) => Promise<SurveyResponse | null>;
 
   parseDocx: (file: File | null, topic: string) => Promise<{ title: string; questions: SurveyQuestion[] }>;
   chatWithAI: (message: string, surveyTitle: string, surveyDescription: string, questions: SurveyQuestion[], currentQuestionIndex?: number) => Promise<string>;
@@ -138,17 +139,30 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
     if (currentSurvey?.id === id) setCurrentSurvey(null);
   }, [currentSurvey?.id]);
 
-  const submitResponse = useCallback(async (surveyId: string, answers: Record<string, string | string[] | number>) => {
+  const submitResponse = useCallback(async (surveyId: string, respondentId: string, answers: Record<string, string | string[] | number>) => {
     try {
       const res = await fetch(`${API_BASE}/surveys/${surveyId}/responses`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ answers })
+        body: JSON.stringify({ respondentId, answers })
       });
       if (!res.ok) throw new Error('Failed to submit response');
     } catch (error) {
       console.error('Error submitting response via API:', error);
       throw error;
+    }
+  }, []);
+
+  const fetchMyResponse = useCallback(async (surveyId: string, respondentId: string): Promise<SurveyResponse | null> => {
+    try {
+      const res = await fetch(`${API_BASE}/surveys/${surveyId}/responses/my/${respondentId}`);
+      if (res.ok) {
+        return await res.json();
+      }
+      return null;
+    } catch (error) {
+      console.error('Error fetching my response via API:', error);
+      return null;
     }
   }, []);
 
@@ -289,6 +303,7 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
       setSearchQuery,
       submitResponse,
       fetchResponses,
+      fetchMyResponse,
       parseDocx,
       chatWithAI,
       loadTemplate,

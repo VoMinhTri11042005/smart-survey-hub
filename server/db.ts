@@ -35,10 +35,20 @@ export const initDB = async () => {
       CREATE TABLE IF NOT EXISTS responses (
         id VARCHAR(255) PRIMARY KEY,
         survey_id VARCHAR(255) REFERENCES surveys(id) ON DELETE CASCADE,
+        respondent_id VARCHAR(255),
         answers JSONB NOT NULL,
-        submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE (survey_id, respondent_id)
       );
     `);
+
+    // In case table already exists without respondent_id
+    try {
+      await client.query(`ALTER TABLE responses ADD COLUMN IF NOT EXISTS respondent_id VARCHAR(255);`);
+      await client.query(`ALTER TABLE responses ADD CONSTRAINT responses_survey_id_respondent_id_key UNIQUE (survey_id, respondent_id);`);
+    } catch (e) {
+      // Ignore if constraint already exists
+    }
 
     // Create teams table
     await client.query(`

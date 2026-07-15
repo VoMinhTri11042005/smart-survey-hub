@@ -1,5 +1,5 @@
 import { Timer, Undo2, Sparkles, CircleDot, CheckSquare } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useSurvey } from '../../context/SurveyContext';
 import type { Survey, SurveyQuestion } from '../../types';
 
@@ -10,9 +10,36 @@ interface RespondentProps {
 }
 
 export function Respondent({ survey, onExit, onComplete }: RespondentProps) {
-  const { submitResponse } = useSurvey();
+  const { submitResponse, fetchMyResponse } = useSurvey();
   const [step, setStep] = useState(0);
   const [answers, setAnswers] = useState<Record<string, any>>({});
+  const [respondentId, setRespondentId] = useState<string>('');
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    if (!survey) return;
+
+    const initRespondent = async () => {
+      let rid = localStorage.getItem('respondentId');
+      if (!rid) {
+        rid = Math.random().toString(36).substring(2, 10) + Date.now().toString(36);
+        localStorage.setItem('respondentId', rid);
+      }
+      setRespondentId(rid);
+
+      const existingResponse = await fetchMyResponse(survey.id, rid);
+      if (existingResponse && existingResponse.answers) {
+        setAnswers(existingResponse.answers);
+      }
+      setIsLoading(false);
+    };
+
+    initRespondent();
+  }, [survey, fetchMyResponse]);
+
+  if (isLoading) {
+    return <div className="min-h-screen bg-surface-background flex items-center justify-center font-sans text-text-secondary">Đang chuẩn bị khảo sát...</div>;
+  }
 
   if (!survey || !survey.questions || survey.questions.length === 0) {
     return (
@@ -47,7 +74,7 @@ export function Respondent({ survey, onExit, onComplete }: RespondentProps) {
     if (step < totalSteps - 1) {
       setStep(prev => prev + 1);
     } else {
-      try { await submitResponse(survey.id, answers); } catch {}
+      try { await submitResponse(survey.id, respondentId, answers); } catch {}
       if (onComplete) onComplete();
     }
   };

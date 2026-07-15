@@ -121,22 +121,57 @@ router.post('/surveys/:id/responses', async (req, res) => {
       return res.status(404).json({ error: 'Không tìm thấy khảo sát.' });
     }
 
+    const { respondentId, answers } = req.body;
+    if (!respondentId) {
+      return res.status(400).json({ error: 'Thiếu định danh người dùng.' });
+    }
+
     const id = generateId();
     const result = await pool.query(
-      `INSERT INTO responses (id, survey_id, answers) VALUES ($1, $2, $3) RETURNING *`,
-      [id, req.params.id, JSON.stringify(req.body.answers)]
+      `INSERT INTO responses (id, survey_id, respondent_id, answers) 
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (survey_id, respondent_id) 
+       DO UPDATE SET answers = EXCLUDED.answers, submitted_at = CURRENT_TIMESTAMP
+       RETURNING *`,
+      [id, req.params.id, respondentId, JSON.stringify(answers)]
     );
     
     const row = result.rows[0];
     res.json({
       id: row.id,
       surveyId: row.survey_id,
+      respondentId: row.respondent_id,
       answers: row.answers,
       submittedAt: row.submitted_at
     });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to submit response' });
+  }
+});
+
+// ─── Get My Response ───
+router.get('/surveys/:id/responses/my/:respondentId', async (req, res) => {
+  if (!process.env.DATABASE_URL) return res.json(null);
+  try {
+    const result = await pool.query(
+      'SELECT * FROM responses WHERE survey_id = $1 AND respondent_id = $2',
+      [req.params.id, req.params.respondentId]
+    );
+    if (result.rows.length === 0) {
+      return res.json(null);
+    }
+    const row = result.rows[0];
+    res.json({
+      id: row.id,
+      surveyId: row.survey_id,
+      respondentId: row.respondent_id,
+      answers: row.answers,
+      submittedAt: row.submitted_at
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch my response' });
   }
 });
 
