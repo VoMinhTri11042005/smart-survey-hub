@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: smart-survey-backend
+    env: node
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3001
+      - key: GEMINI_API_KEY
+        sync: false # You must set this manually in the Render dashboard

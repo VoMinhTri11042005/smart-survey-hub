@@ -1,0 +1,13 @@
+version: '3.8'
+
+services:
+  smart-survey-hub:
+    build: .
+    container_name: smart-survey-hub
+    ports:
+      - "3001:3001"
+    environment:
+      - PORT=3001
+      # Thêm key của bạn vào file .env rồi chạy `docker-compose up -d`
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+    restart: unless-stopped

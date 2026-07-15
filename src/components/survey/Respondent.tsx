@@ -1,0 +1,207 @@
+import { Timer, Undo2, Sparkles, CircleDot, CheckSquare } from 'lucide-react';
+import { useState } from 'react';
+import { useSurvey } from '../../context/SurveyContext';
+import type { Survey, SurveyQuestion } from '../../types';
+
+interface RespondentProps {
+  survey: Survey | null;
+  onExit: () => void;
+  onComplete?: () => void;
+}
+
+export function Respondent({ survey, onExit, onComplete }: RespondentProps) {
+  const { submitResponse } = useSurvey();
+  const [step, setStep] = useState(0);
+  const [answers, setAnswers] = useState<Record<string, any>>({});
+
+  if (!survey || !survey.questions || survey.questions.length === 0) {
+    return (
+      <div className="min-h-screen bg-surface-background flex flex-col items-center justify-center gap-4 font-sans">
+        <div className="w-16 h-16 bg-surface-container-high rounded-2xl flex items-center justify-center">
+          <Sparkles size={28} className="text-text-secondary" />
+        </div>
+        <h2 className="font-display text-2xl font-bold text-text-primary">Không có khảo sát nào để hiển thị</h2>
+        <p className="text-text-secondary text-sm">Vui lòng quay lại sau hoặc liên hệ quản trị viên.</p>
+        <button onClick={onExit} className="mt-4 px-6 py-2.5 bg-primary text-white rounded-xl font-semibold text-sm hover:bg-primary/90 transition-colors cursor-pointer">
+          Quay lại
+        </button>
+      </div>
+    );
+  }
+
+  const questions = survey.questions;
+  const totalSteps = questions.length;
+  const currentQuestion = questions[step];
+  const progress = Math.round(((step + 1) / totalSteps) * 100);
+  const currentAnswer = answers[currentQuestion.id];
+
+  const setAnswer = (value: any) => {
+    setAnswers(prev => ({ ...prev, [currentQuestion.id]: value }));
+  };
+
+  const clearAnswer = () => {
+    setAnswers(prev => { const n = { ...prev }; delete n[currentQuestion.id]; return n; });
+  };
+
+  const handleNext = async () => {
+    if (step < totalSteps - 1) {
+      setStep(prev => prev + 1);
+    } else {
+      try { await submitResponse(survey.id, answers); } catch {}
+      if (onComplete) onComplete();
+    }
+  };
+
+  const handlePrev = () => { if (step > 0) setStep(prev => prev - 1); };
+
+  const toggleMultiple = (option: string) => {
+    const current: string[] = currentAnswer || [];
+    if (current.includes(option)) {
+      setAnswer(current.filter((o: string) => o !== option));
+    } else {
+      setAnswer([...current, option]);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-surface-background flex flex-col font-sans text-text-primary animate-in fade-in duration-500 selection:bg-secondary-fixed selection:text-on-secondary-fixed">
+      {/* Top Navigation */}
+      <nav className="sticky top-0 z-50 bg-surface-background/90 backdrop-blur-md px-6 py-4 flex flex-col gap-2 border-b border-border-subtle/50">
+        <div className="flex justify-between items-center w-full">
+          <div className="font-display text-2xl font-bold text-primary">{survey.title || 'Khảo sát thông minh'}</div>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1.5 bg-surface-container rounded-full px-3 py-1.5">
+              <Timer size={16} className="text-text-secondary" />
+              <span className="text-xs font-bold text-text-secondary">Còn ~{Math.max(1, totalSteps - step)} phút</span>
+            </div>
+            <button onClick={onExit} className="text-sm font-bold text-text-secondary hover:text-primary transition-colors cursor-pointer px-2">Thoát</button>
+          </div>
+        </div>
+        <div className="mt-2">
+          <div className="flex justify-between items-end mb-2">
+            <span className="text-sm font-bold text-text-primary">Câu hỏi {step + 1} / {totalSteps}</span>
+            <span className="text-xs font-bold text-text-secondary">Hoàn thành {progress}%</span>
+          </div>
+          <div className="h-2 w-full bg-surface-container-highest rounded-full overflow-hidden">
+            <div className="h-full bg-primary transition-all duration-700 ease-out" style={{ width: `${progress}%` }}></div>
+          </div>
+        </div>
+      </nav>
+
+      {/* Main Content */}
+      <main className="flex-grow flex flex-col items-center px-6 pt-12 pb-40 w-full" key={step}>
+        <div className="w-full max-w-[720px] space-y-8 animate-in slide-in-from-bottom-4 duration-500 fade-in">
+          <header className="space-y-2">
+            <h2 className="font-display text-3xl md:text-4xl font-bold text-text-primary tracking-tight leading-tight">
+              {currentQuestion.text}
+            </h2>
+            {currentQuestion.required && (
+              <p className="text-sm text-sentiment-negative font-medium">* Bắt buộc</p>
+            )}
+          </header>
+
+          {/* Star Rating */}
+          {currentQuestion.type === 'star_rating' && (
+            <div className="flex flex-col items-center gap-6 py-8 bg-white border border-border-subtle rounded-2xl shadow-sm">
+              <div className="flex flex-row gap-2">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <button key={star} onClick={() => setAnswer(star)} className="cursor-pointer transition-transform active:scale-90 hover:scale-110 p-1">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="56" height="56" viewBox="0 0 24 24" fill={star <= (currentAnswer || 0) ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={star <= (currentAnswer || 0) ? "text-primary" : "text-surface-container-highest"}>
+                      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                    </svg>
+                  </button>
+                ))}
+              </div>
+              <div className="flex justify-between w-full px-8 text-sm font-semibold text-text-secondary italic">
+                <span>Cần cải thiện</span>
+                <span>Tuyệt vời</span>
+              </div>
+            </div>
+          )}
+
+          {/* Single Choice */}
+          {currentQuestion.type === 'single_choice' && currentQuestion.options && (
+            <div className="space-y-3">
+              {currentQuestion.options.map((option, idx) => (
+                <button key={idx} onClick={() => setAnswer(option)} className={`w-full text-left flex items-center gap-4 p-4 rounded-xl border-2 transition-all cursor-pointer ${currentAnswer === option ? 'border-primary bg-primary-fixed shadow-sm' : 'border-border-subtle bg-white hover:border-primary/30 hover:shadow-sm'}`}>
+                  <CircleDot size={20} className={currentAnswer === option ? 'text-primary' : 'text-text-secondary'} />
+                  <span className={`text-base font-medium ${currentAnswer === option ? 'text-primary' : 'text-text-primary'}`}>{option}</span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Multiple Choice */}
+          {currentQuestion.type === 'multiple_choice' && currentQuestion.options && (
+            <div className="space-y-3">
+              {currentQuestion.options.map((option, idx) => {
+                const selected = (currentAnswer || []).includes(option);
+                return (
+                  <button key={idx} onClick={() => toggleMultiple(option)} className={`w-full text-left flex items-center gap-4 p-4 rounded-xl border-2 transition-all cursor-pointer ${selected ? 'border-primary bg-primary-fixed shadow-sm' : 'border-border-subtle bg-white hover:border-primary/30 hover:shadow-sm'}`}>
+                    <CheckSquare size={20} className={selected ? 'text-primary' : 'text-text-secondary'} />
+                    <span className={`text-base font-medium ${selected ? 'text-primary' : 'text-text-primary'}`}>{option}</span>
+                  </button>
+                );
+              })}
+              <p className="text-xs text-text-secondary font-medium mt-2">Có thể chọn nhiều đáp án</p>
+            </div>
+          )}
+
+          {/* Text */}
+          {currentQuestion.type === 'text' && (
+            <textarea
+              value={currentAnswer || ''}
+              onChange={(e) => setAnswer(e.target.value)}
+              placeholder="Hãy chia sẻ thêm chi tiết..."
+              rows={5}
+              className="w-full bg-white border border-border-subtle rounded-xl p-5 focus:ring-2 focus:ring-secondary/50 focus:border-secondary outline-none transition-all text-base shadow-sm resize-y"
+            />
+          )}
+
+          {/* NPS */}
+          {currentQuestion.type === 'nps' && (
+            <div className="py-6">
+              <div className="flex flex-wrap justify-center gap-2 mb-4">
+                {Array.from({ length: 11 }, (_, i) => (
+                  <button key={i} onClick={() => setAnswer(i)} className={`w-12 h-12 rounded-xl font-bold text-lg transition-all cursor-pointer ${currentAnswer === i ? 'bg-primary text-white shadow-md scale-110' : 'bg-white border border-border-subtle text-text-primary hover:border-primary/30 hover:shadow-sm'}`}>
+                    {i}
+                  </button>
+                ))}
+              </div>
+              <div className="flex justify-between px-2 text-sm font-semibold text-text-secondary italic">
+                <span>Hoàn toàn không</span>
+                <span>Chắc chắn có</span>
+              </div>
+            </div>
+          )}
+        </div>
+      </main>
+
+      {/* Bottom Action Bar */}
+      <div className="fixed bottom-0 w-full bg-white shadow-[0_-4px_24px_rgba(0,0,0,0.06)] px-6 py-5 flex justify-center border-t border-border-subtle/50 z-50">
+        <div className="w-full max-w-[720px] flex flex-col gap-3">
+          <div className="flex items-center justify-between mb-1">
+            <div className="flex items-center gap-2">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-sentiment-positive opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-sentiment-positive"></span>
+              </span>
+              <span className="text-xs font-bold text-text-secondary">Đang tự động lưu...</span>
+            </div>
+            <button onClick={clearAnswer} className="text-primary text-sm font-bold flex items-center gap-1.5 hover:opacity-80 transition-opacity cursor-pointer">
+              <Undo2 size={16} /> Xóa
+            </button>
+          </div>
+          <div className="flex gap-4">
+            <button onClick={handlePrev} disabled={step === 0} className={`flex-1 py-4 bg-white border-2 border-border-subtle rounded-xl text-base font-bold text-text-primary transition-colors shadow-sm ${step === 0 ? 'opacity-50 cursor-not-allowed' : 'hover:bg-surface-container-low active:scale-95 cursor-pointer'}`}>
+              Quay lại
+            </button>
+            <button onClick={handleNext} className="flex-[2] py-4 bg-primary text-white rounded-xl text-lg font-bold shadow-lg shadow-primary/25 hover:bg-primary/90 transition-all active:scale-95 cursor-pointer">
+              {step === totalSteps - 1 ? 'Hoàn thành' : 'Tiếp theo'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
