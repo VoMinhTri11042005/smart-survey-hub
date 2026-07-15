@@ -220,9 +220,16 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
         body: JSON.stringify({ message, surveyTitle, surveyDescription, questions, currentQuestionIndex }),
       });
       const data = await res.json();
-      return data.reply;
+      let reply = data.reply;
+      
+      // Handle raw error messages from backend
+      if (typeof reply === 'string' && reply.includes('"error"') && reply.includes('429')) {
+        return 'Xin lỗi, hệ thống AI đang quá tải hoặc đã hết hạn mức sử dụng miễn phí hôm nay. Bạn vui lòng thử lại sau nhé!';
+      }
+      
+      return reply || 'Xin lỗi, không có phản hồi từ AI.';
     } catch {
-      return 'Xin lỗi, không thể kết nối với AI. Vui lòng thử lại.';
+      return 'Xin lỗi, không thể kết nối với hệ thống AI. Vui lòng kiểm tra lại mạng.';
     }
   }, []);
 
