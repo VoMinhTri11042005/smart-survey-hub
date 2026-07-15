@@ -1,7 +1,5 @@
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react';
 import type { Survey, SurveyQuestion, SurveyResponse, SurveyTemplateData, TeamMember, TeamRole } from '../types';
-import { db } from '../services/firebase';
-import { ref, get, set, push, remove, query, orderByChild } from 'firebase/database';
 
 interface SurveyContextType {
   surveys: Survey[];
@@ -64,19 +62,15 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
 
   const fetchSurveys = useCallback(async () => {
     try {
-      const surveysRef = query(ref(db, 'surveys'), orderByChild('createdAt'));
-      const snapshot = await get(surveysRef);
-      if (snapshot.exists()) {
-        const data: Survey[] = [];
-        snapshot.forEach((childSnapshot) => {
-          data.push({ id: childSnapshot.key as string, ...childSnapshot.val() });
-        });
-        setSurveys(data.reverse());
+      const res = await fetch(`${API_BASE}/surveys`);
+      if (res.ok) {
+        const data = await res.json();
+        setSurveys(data);
       } else {
         setSurveys([]);
       }
     } catch (error) {
-      console.error('Error fetching surveys from Database:', error);
+      console.error('Error fetching surveys from API:', error);
       // Fallback
       const saved = localStorage.getItem('surveys');
       if (saved) setSurveys(JSON.parse(saved));
@@ -85,13 +79,13 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
 
   const fetchSurveyById = useCallback(async (id: string): Promise<Survey | null> => {
     try {
-      const snapshot = await get(ref(db, `surveys/${id}`));
-      if (snapshot.exists()) {
-        return { id, ...snapshot.val() } as Survey;
+      const res = await fetch(`${API_BASE}/surveys/${id}`);
+      if (res.ok) {
+        return await res.json();
       }
       return null;
     } catch (error) {
-      console.error('Error fetching survey by id from Database:', error);
+      console.error('Error fetching survey by id from API:', error);
       // Fallback
       const saved = localStorage.getItem('surveys');
       if (saved) {
@@ -107,25 +101,27 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
 
   const createSurvey = useCallback(async (surveyData: Omit<Survey, 'id' | 'createdAt' | 'status'> & { status?: string }): Promise<Survey> => {
     try {
-      const newRef = push(ref(db, 'surveys'));
-      const survey: Survey = {
-        ...surveyData,
-        id: newRef.key as string,
-        createdAt: new Date().toISOString(),
-        status: (surveyData.status as 'draft' | 'live' | 'closed') || 'draft'
-      };
-      await set(newRef, survey);
+      const res = await fetch(`${API_BASE}/surveys`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...surveyData,
+          status: (surveyData.status as 'draft' | 'live' | 'closed') || 'live'
+        })
+      });
+      if (!res.ok) throw new Error('Failed to create survey');
+      const survey = await res.json();
       setSurveys(prev => [survey, ...prev]);
       return survey;
     } catch (error) {
-      console.error('Error creating survey in Database:', error);
+      console.error('Error creating survey via API:', error);
       
       // Fallback to local storage if API is unavailable
       const newSurvey: Survey = {
         ...surveyData,
         id: Math.random().toString(36).substring(2, 9),
         createdAt: new Date().toISOString(),
-        status: (surveyData.status as 'draft' | 'live' | 'closed') || 'draft'
+        status: (surveyData.status as 'draft' | 'live' | 'closed') || 'live'
       };
       setSurveys(prev => [newSurvey, ...prev]);
       return newSurvey;
@@ -134,9 +130,9 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
 
   const deleteSurvey = useCallback(async (id: string) => {
     try {
-      await remove(ref(db, `surveys/${id}`));
+      await fetch(`${API_BASE}/surveys/${id}`, { method: 'DELETE' });
     } catch (e) {
-      console.error('Error deleting survey from Database:', e);
+      console.error('Error deleting survey via API:', e);
     }
     setSurveys(prev => prev.filter(s => s.id !== id));
     if (currentSurvey?.id === id) setCurrentSurvey(null);
@@ -144,32 +140,27 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
 
   const submitResponse = useCallback(async (surveyId: string, answers: Record<string, string | string[] | number>) => {
     try {
-      const responsesRef = push(ref(db, `responses/${surveyId}`));
-      await set(responsesRef, {
-        surveyId,
-        answers,
-        submittedAt: new Date().toISOString()
+      const res = await fetch(`${API_BASE}/surveys/${surveyId}/responses`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ answers })
       });
+      if (!res.ok) throw new Error('Failed to submit response');
     } catch (error) {
-      console.error('Error submitting response to Database:', error);
+      console.error('Error submitting response via API:', error);
       throw error;
     }
   }, []);
 
   const fetchResponses = useCallback(async (surveyId: string): Promise<SurveyResponse[]> => {
     try {
-      const q = query(ref(db, `responses/${surveyId}`), orderByChild('submittedAt'));
-      const snapshot = await get(q);
-      if (snapshot.exists()) {
-        const data: SurveyResponse[] = [];
-        snapshot.forEach((childSnapshot) => {
-          data.push({ id: childSnapshot.key as string, ...childSnapshot.val() });
-        });
-        return data.reverse();
+      const res = await fetch(`${API_BASE}/surveys/${surveyId}/responses`);
+      if (res.ok) {
+        return await res.json();
       }
       return [];
     } catch (error) {
-      console.error('Error fetching responses from Database:', error);
+      console.error('Error fetching responses via API:', error);
       return [];
     }
   }, []);
