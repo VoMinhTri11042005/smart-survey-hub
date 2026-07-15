@@ -18,6 +18,7 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
   const [isLoading, setIsLoading] = useState(true);
   const [isCompleted, setIsCompleted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
 
   useEffect(() => {
     if (!survey) return;
@@ -66,14 +67,28 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
   const currentAnswer = answers[currentQuestion.id];
 
   const setAnswer = (value: any) => {
+    setErrorMsg('');
     setAnswers(prev => ({ ...prev, [currentQuestion.id]: value }));
   };
 
   const clearAnswer = () => {
+    setErrorMsg('');
     setAnswers(prev => { const n = { ...prev }; delete n[currentQuestion.id]; return n; });
   };
 
+  const validateCurrentQuestion = () => {
+    if (!currentQuestion.required) return true;
+    if (currentAnswer === undefined || currentAnswer === null || currentAnswer === '') return false;
+    if (Array.isArray(currentAnswer) && currentAnswer.length === 0) return false;
+    return true;
+  };
+
   const handleNext = async () => {
+    if (!validateCurrentQuestion()) {
+      setErrorMsg('Vui lòng hoàn thành câu hỏi bắt buộc này để tiếp tục.');
+      return;
+    }
+
     if (step < totalSteps - 1) {
       setStep(prev => prev + 1);
     } else {
@@ -90,9 +105,13 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
     }
   };
 
-  const handlePrev = () => { if (step > 0) setStep(prev => prev - 1); };
+  const handlePrev = () => { 
+    setErrorMsg('');
+    if (step > 0) setStep(prev => prev - 1); 
+  };
 
   const toggleMultiple = (option: string) => {
+    setErrorMsg('');
     const current: string[] = currentAnswer || [];
     if (current.includes(option)) {
       setAnswer(current.filter((o: string) => o !== option));
@@ -255,7 +274,7 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
             <div className="py-6">
               <div className="flex flex-wrap justify-center gap-2 mb-4">
                 {Array.from({ length: 11 }, (_, i) => (
-                  <button key={i} onClick={() => setAnswer(i)} className={`w-12 h-12 rounded-xl font-bold text-lg transition-all cursor-pointer ${currentAnswer === i ? 'bg-primary text-white shadow-md scale-110' : 'bg-white border border-border-subtle text-text-primary hover:border-primary/30 hover:shadow-sm'}`}>
+                  <button key={i} onClick={() => { setAnswer(i); setErrorMsg(''); }} className={`w-12 h-12 rounded-xl font-bold text-lg transition-all cursor-pointer ${currentAnswer === i ? 'bg-primary text-white shadow-md scale-110' : 'bg-white border border-border-subtle text-text-primary hover:border-primary/30 hover:shadow-sm'}`}>
                     {i}
                   </button>
                 ))}
@@ -264,6 +283,13 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
                 <span>Hoàn toàn không</span>
                 <span>Chắc chắn có</span>
               </div>
+            </div>
+          )}
+          
+          {errorMsg && (
+            <div className="mt-4 p-3 bg-sentiment-negative/10 text-sentiment-negative text-sm font-medium rounded-lg flex items-center gap-2 animate-in slide-in-from-bottom-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-sentiment-negative"></span>
+              {errorMsg}
             </div>
           )}
         </div>
