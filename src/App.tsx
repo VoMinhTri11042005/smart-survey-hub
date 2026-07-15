@@ -22,8 +22,21 @@ import { SurveyProvider, useSurvey } from './context/SurveyContext';
 import { SURVEY_TEMPLATES } from './data/templates';
 
 function AppContent() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [userRole, setUserRole] = useState<Role | null>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(() => {
+    return localStorage.getItem('isAuthenticated') === 'true';
+  });
+  const [userRole, setUserRole] = useState<Role | null>(() => {
+    return (localStorage.getItem('userRole') as Role) || null;
+  });
+
+  useEffect(() => {
+    localStorage.setItem('isAuthenticated', isAuthenticated.toString());
+    if (userRole) {
+      localStorage.setItem('userRole', userRole);
+    } else {
+      localStorage.removeItem('userRole');
+    }
+  }, [isAuthenticated, userRole]);
   const [currentView, setCurrentView] = useState<View>('dashboard');
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
