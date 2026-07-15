@@ -149,9 +149,12 @@ export function computeSurveyAnalytics(survey: Survey, responses: SurveyResponse
 export function exportResponsesToCsv(survey: Survey, responses: SurveyResponse[]): string {
   const headers = ['ID', 'Ngày gửi', ...survey.questions.map(q => q.text)];
   const rows = responses.map(r => {
-    const cells = [
-      r.id,
-      new Date(r.submittedAt).toLocaleString('vi-VN'),
+      const d = new Date(r.submittedAt);
+      const dateStr = `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}/${d.getFullYear()} ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+      
+      const cells = [
+        r.id,
+        dateStr,
       ...survey.questions.map(q => {
         const ans = r.answers[q.id];
         if (Array.isArray(ans)) return ans.join('; ');
