@@ -32,10 +32,12 @@ export function Settings({ profile, onUpdateProfile, onClose }: SettingsProps) {
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      // In a real app, upload to storage and get URL
-      // Here we just use object URL for preview
-      const url = URL.createObjectURL(file);
-      setFormData(prev => ({ ...prev, photoURL: url }));
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64String = reader.result as string;
+        setFormData(prev => ({ ...prev, photoURL: base64String }));
+      };
+      reader.readAsDataURL(file);
     }
   };
 
