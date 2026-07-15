@@ -162,7 +162,9 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
           <div className="flex items-center gap-2 md:gap-3 shrink-0">
             <div className="flex items-center gap-1.5 bg-surface-container rounded-full px-2 md:px-3 py-1 md:py-1.5">
               <Timer size={14} className="text-text-secondary md:w-4 md:h-4" />
-              <span className="text-[10px] md:text-xs font-bold text-text-secondary">Còn ~{Math.max(1, totalSteps - step)} phút</span>
+              <span className="text-[10px] md:text-xs font-bold text-text-secondary">
+                {Math.ceil((totalSteps - step) * 0.25) <= 1 ? 'Chưa tới 1 phút' : `Còn ~${Math.ceil((totalSteps - step) * 0.25)} phút`}
+              </span>
             </div>
             <button onClick={onExit} className="text-xs md:text-sm font-bold text-text-secondary hover:text-primary transition-colors cursor-pointer px-1 md:px-2">Thoát</button>
           </div>
