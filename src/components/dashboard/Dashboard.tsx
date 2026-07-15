@@ -7,6 +7,7 @@ import type { View, Survey } from '../../types';
 export function Dashboard({ onViewChange, userProfile }: { onViewChange?: (view: View) => void; userProfile?: { name: string } }) {
   const { surveys, fetchSurveys, setCurrentSurvey, deleteSurvey, searchQuery } = useSurvey();
   const [shareModal, setShareModal] = useState<{ id: string; title: string } | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; title: string } | null>(null);
 
   useEffect(() => { fetchSurveys(); }, [fetchSurveys]);
 
@@ -104,7 +105,7 @@ export function Dashboard({ onViewChange, userProfile }: { onViewChange?: (view:
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {surveys.map((survey: any) => (
+            {filteredSurveys.map((survey: any) => (
               <div key={survey.id} className="bg-surface-container-lowest rounded-2xl border border-border-subtle p-5 hover:shadow-lg transition-all group flex flex-col">
                 <div className="flex justify-between items-start mb-4">
                   <div className={`px-2.5 py-1 rounded-md flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide ${survey.status === 'live' ? 'bg-sentiment-positive/10 text-sentiment-positive' : 'bg-surface-container-high text-text-secondary'}`}>
@@ -115,7 +116,7 @@ export function Dashboard({ onViewChange, userProfile }: { onViewChange?: (view:
                     <button onClick={(e) => { e.stopPropagation(); setShareModal({ id: survey.id, title: survey.title }); }} className="p-1.5 text-text-secondary hover:text-primary transition-colors cursor-pointer rounded-lg hover:bg-surface-container-low" title="Chia sẻ khảo sát">
                       <Share2 size={16} />
                     </button>
-                    <button onClick={(e) => { e.stopPropagation(); deleteSurvey(survey.id); }} className="p-1.5 text-text-secondary hover:text-sentiment-negative transition-colors cursor-pointer rounded-lg hover:bg-sentiment-negative/10" title="Xóa">
+                    <button onClick={(e) => { e.stopPropagation(); setDeleteConfirm({ id: survey.id, title: survey.title }); }} className="p-1.5 text-text-secondary hover:text-sentiment-negative transition-colors cursor-pointer rounded-lg hover:bg-sentiment-negative/10" title="Xóa">
                       <Trash2 size={16} />
                     </button>
                   </div>
@@ -147,6 +148,33 @@ export function Dashboard({ onViewChange, userProfile }: { onViewChange?: (view:
         surveyId={shareModal?.id || ''}
         surveyTitle={shareModal?.title || ''}
       />
+
+      {/* Delete Confirmation Modal */}
+      {deleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-surface-background/80 backdrop-blur-sm p-4">
+          <div className="bg-surface-container-lowest border border-border-subtle rounded-2xl p-6 max-w-sm w-full shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+            <h3 className="font-display text-xl font-bold text-text-primary mb-2">Xóa khảo sát?</h3>
+            <p className="text-text-secondary text-sm mb-6">Bạn có chắc chắn muốn xóa "{deleteConfirm.title}" không? Hành động này không thể hoàn tác.</p>
+            <div className="flex justify-end gap-3">
+              <button 
+                onClick={() => setDeleteConfirm(null)} 
+                className="px-4 py-2 rounded-lg font-semibold text-sm text-text-secondary hover:bg-surface-container-high transition-colors cursor-pointer"
+              >
+                Hủy
+              </button>
+              <button 
+                onClick={() => {
+                  deleteSurvey(deleteConfirm.id);
+                  setDeleteConfirm(null);
+                }} 
+                className="px-4 py-2 bg-sentiment-negative text-white rounded-lg font-semibold text-sm hover:bg-sentiment-negative/90 transition-colors shadow-sm cursor-pointer"
+              >
+                Đồng ý xóa
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

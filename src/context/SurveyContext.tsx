@@ -40,7 +40,20 @@ if (envApi && !envApi.endsWith('/api')) {
 const API_BASE = envApi || '/api';
 
 export function SurveyProvider({ children }: { children: ReactNode }) {
-  const [surveys, setSurveys] = useState<Survey[]>([]);
+  const [surveys, setSurveys] = useState<Survey[]>(() => {
+    try {
+      const saved = localStorage.getItem('surveys');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return [];
+  });
+  
+  useEffect(() => {
+    try {
+      localStorage.setItem('surveys', JSON.stringify(surveys));
+    } catch (e) {}
+  }, [surveys]);
+
   const [currentSurvey, setCurrentSurvey] = useState<Survey | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [pendingTemplate, setPendingTemplate] = useState<SurveyTemplateData | null>(null);
@@ -55,7 +68,7 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
         setSurveys(data);
       }
     } catch (error) {
-      console.error('Error fetching surveys:', error);
+      console.error('Error fetching surveys, falling back to local storage');
     }
   }, []);
 
@@ -65,24 +78,50 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
       if (res.ok) return await res.json();
       return null;
     } catch (error) {
-      console.error('Error fetching survey:', error);
+      // Fallback to local storage
+      const saved = localStorage.getItem('surveys');
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          const found = parsed.find((s: Survey) => s.id === id);
+          if (found) return found;
+        } catch (e) {}
+      }
       return null;
     }
   }, []);
 
   const createSurvey = useCallback(async (surveyData: Omit<Survey, 'id' | 'createdAt' | 'status'> & { status?: string }): Promise<Survey> => {
-    const res = await fetch(`${API_BASE}/surveys`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(surveyData),
-    });
-    const survey = await res.json();
-    setSurveys(prev => [survey, ...prev]);
-    return survey;
+    try {
+      const res = await fetch(`${API_BASE}/surveys`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(surveyData),
+      });
+      if (!res.ok) throw new Error('API request failed');
+      const survey = await res.json();
+      setSurveys(prev => [survey, ...prev]);
+      return survey;
+    } catch (error) {
+      // Fallback to local storage if API is unavailable (e.g. Vercel deployment without backend)
+      const newSurvey: Survey = {
+        ...surveyData,
+        id: Math.random().toString(36).substring(2, 9),
+        createdAt: new Date().toISOString(),
+        status: surveyData.status || 'draft',
+        responseCount: 0
+      };
+      setSurveys(prev => [newSurvey, ...prev]);
+      return newSurvey;
+    }
   }, []);
 
   const deleteSurvey = useCallback(async (id: string) => {
-    await fetch(`${API_BASE}/surveys/${id}`, { method: 'DELETE' });
+    try {
+      await fetch(`${API_BASE}/surveys/${id}`, { method: 'DELETE' });
+    } catch (e) {
+      // Ignore error, delete from local state
+    }
     setSurveys(prev => prev.filter(s => s.id !== id));
     if (currentSurvey?.id === id) setCurrentSurvey(null);
   }, [currentSurvey?.id]);
