@@ -48,8 +48,11 @@ app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+import { initDB } from './db';
+
 // ─── Start Server ───
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
+  await initDB();
   console.log(`\n🚀 Smart Survey Hub API running on http://localhost:${PORT}`);
   console.log(`\n📋 Endpoints:`);
   console.log(`   POST /api/parse-docx           — Upload & parse Word file`);
