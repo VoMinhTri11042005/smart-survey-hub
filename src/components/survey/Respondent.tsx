@@ -66,37 +66,37 @@ export function Respondent({ survey, onExit, onComplete }: RespondentProps) {
   return (
     <div className="min-h-screen bg-surface-background flex flex-col font-sans text-text-primary animate-in fade-in duration-500 selection:bg-secondary-fixed selection:text-on-secondary-fixed">
       {/* Top Navigation */}
-      <nav className="sticky top-0 z-50 bg-surface-background/90 backdrop-blur-md px-6 py-4 flex flex-col gap-2 border-b border-border-subtle/50">
+      <nav className="sticky top-0 z-50 bg-surface-background/90 backdrop-blur-md px-4 md:px-6 py-3 md:py-4 flex flex-col gap-2 border-b border-border-subtle/50">
         <div className="flex justify-between items-center w-full">
-          <div className="font-display text-2xl font-bold text-primary">{survey.title || 'Khảo sát thông minh'}</div>
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1.5 bg-surface-container rounded-full px-3 py-1.5">
-              <Timer size={16} className="text-text-secondary" />
-              <span className="text-xs font-bold text-text-secondary">Còn ~{Math.max(1, totalSteps - step)} phút</span>
+          <div className="font-display text-lg md:text-2xl font-bold text-primary truncate max-w-[200px] md:max-w-md">{survey.title || 'Khảo sát thông minh'}</div>
+          <div className="flex items-center gap-2 md:gap-3 shrink-0">
+            <div className="flex items-center gap-1.5 bg-surface-container rounded-full px-2 md:px-3 py-1 md:py-1.5">
+              <Timer size={14} className="text-text-secondary md:w-4 md:h-4" />
+              <span className="text-[10px] md:text-xs font-bold text-text-secondary">Còn ~{Math.max(1, totalSteps - step)} phút</span>
             </div>
-            <button onClick={onExit} className="text-sm font-bold text-text-secondary hover:text-primary transition-colors cursor-pointer px-2">Thoát</button>
+            <button onClick={onExit} className="text-xs md:text-sm font-bold text-text-secondary hover:text-primary transition-colors cursor-pointer px-1 md:px-2">Thoát</button>
           </div>
         </div>
-        <div className="mt-2">
-          <div className="flex justify-between items-end mb-2">
-            <span className="text-sm font-bold text-text-primary">Câu hỏi {step + 1} / {totalSteps}</span>
-            <span className="text-xs font-bold text-text-secondary">Hoàn thành {progress}%</span>
+        <div className="mt-1 md:mt-2">
+          <div className="flex justify-between items-end mb-1.5 md:mb-2">
+            <span className="text-xs md:text-sm font-bold text-text-primary">Câu hỏi {step + 1} / {totalSteps}</span>
+            <span className="text-[10px] md:text-xs font-bold text-text-secondary">Hoàn thành {progress}%</span>
           </div>
-          <div className="h-2 w-full bg-surface-container-highest rounded-full overflow-hidden">
+          <div className="h-1.5 md:h-2 w-full bg-surface-container-highest rounded-full overflow-hidden">
             <div className="h-full bg-primary transition-all duration-700 ease-out" style={{ width: `${progress}%` }}></div>
           </div>
         </div>
       </nav>
 
       {/* Main Content */}
-      <main className="flex-grow flex flex-col items-center px-6 pt-12 pb-40 w-full" key={step}>
-        <div className="w-full max-w-[720px] space-y-8 animate-in slide-in-from-bottom-4 duration-500 fade-in">
+      <main className="flex-grow flex flex-col items-center px-4 md:px-6 pt-8 md:pt-12 pb-32 md:pb-40 w-full" key={step}>
+        <div className="w-full max-w-[720px] space-y-6 md:space-y-8 animate-in slide-in-from-bottom-4 duration-500 fade-in">
           <header className="space-y-2">
-            <h2 className="font-display text-3xl md:text-4xl font-bold text-text-primary tracking-tight leading-tight">
+            <h2 className="font-display text-2xl md:text-4xl font-bold text-text-primary tracking-tight leading-tight">
               {currentQuestion.text}
             </h2>
             {currentQuestion.required && (
-              <p className="text-sm text-sentiment-negative font-medium">* Bắt buộc</p>
+              <p className="text-xs md:text-sm text-sentiment-negative font-medium">* Bắt buộc</p>
             )}
           </header>
 

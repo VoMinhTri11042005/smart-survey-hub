@@ -1,4 +1,4 @@
-import { LayoutDashboard, FileText, PieChart, Users, Plus, LogOut, Settings } from 'lucide-react';
+import { LayoutDashboard, FileText, PieChart, Users, Plus, LogOut, Settings, X } from 'lucide-react';
 import { View, UserProfile } from '../../types';
 
 interface SidebarProps {
@@ -6,18 +6,39 @@ interface SidebarProps {
   onViewChange: (view: View) => void;
   onLogout: () => void;
   userProfile?: UserProfile;
+  isOpen?: boolean;
+  onClose?: () => void;
 }
 
-export function Sidebar({ currentView, onViewChange, onLogout, userProfile }: SidebarProps) {
+export function Sidebar({ currentView, onViewChange, onLogout, userProfile, isOpen, onClose }: SidebarProps) {
   return (
-    <aside className="w-64 bg-surface-container border-r border-border-subtle flex flex-col h-full flex-shrink-0 transition-all">
-      <div className="p-6 pb-4">
-        <h1 className="font-display text-4xl font-bold text-primary tracking-tight leading-none">SH</h1>
-        <div className="mt-6">
-          <div className="font-display text-xl font-semibold text-primary">Trung tâm Sáng tạo</div>
-          <div className="text-text-secondary text-xs mt-1 font-medium">Điều phối Thông minh</div>
+    <>
+      {/* Mobile Backdrop */}
+      {isOpen && (
+        <div 
+          className="fixed inset-0 bg-surface-background/80 backdrop-blur-sm z-40 md:hidden"
+          onClick={onClose}
+        />
+      )}
+
+      {/* Sidebar Content */}
+      <aside className={`fixed md:relative inset-y-0 left-0 w-64 bg-surface-container border-r border-border-subtle flex flex-col h-full flex-shrink-0 transition-transform duration-300 ease-in-out z-50 ${isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
+        <div className="p-6 pb-4 flex items-center justify-between">
+          <div>
+            <h1 className="font-display text-4xl font-bold text-primary tracking-tight leading-none">SH</h1>
+            <div className="mt-6">
+              <div className="font-display text-xl font-semibold text-primary">Trung tâm Sáng tạo</div>
+              <div className="text-text-secondary text-xs mt-1 font-medium">Điều phối Thông minh</div>
+            </div>
+          </div>
+          {/* Close button for mobile */}
+          <button 
+            onClick={onClose}
+            className="md:hidden p-2 text-text-secondary hover:text-text-primary hover:bg-surface-container-high rounded-full transition-colors"
+          >
+            <X size={20} />
+          </button>
         </div>
-      </div>
       
       <nav className="flex-1 px-4 py-2 space-y-2">
         <button 
@@ -124,5 +145,6 @@ export function Sidebar({ currentView, onViewChange, onLogout, userProfile }: Si
          )}
       </div>
     </aside>
+    </>
   );
 }

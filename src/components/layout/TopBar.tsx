@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Search, Bell, Eye, Check } from 'lucide-react';
+import { Search, Bell, Eye, Check, Menu } from 'lucide-react';
 import { View, UserProfile } from '../../types';
 import { useSurvey } from '../../context/SurveyContext';
 
@@ -17,29 +17,36 @@ interface TopBarProps {
   userProfile?: UserProfile;
   notifications?: Notification[];
   onMarkAllRead?: () => void;
+  onMenuClick?: () => void;
 }
 
-export function TopBar({ currentView, onViewChange, onPublish, userProfile, notifications = [], onMarkAllRead }: TopBarProps) {
+export function TopBar({ currentView, onViewChange, onPublish, userProfile, notifications = [], onMarkAllRead, onMenuClick }: TopBarProps) {
   const { searchQuery, setSearchQuery } = useSurvey();
   const [showNotifications, setShowNotifications] = useState(false);
   
   const unreadCount = notifications.filter(n => !n.read).length;
 
   return (
-    <header className="flex justify-between items-center px-6 py-4 bg-surface-background/90 backdrop-blur-md border-b border-border-subtle sticky top-0 z-10">
-      <div className="flex items-center gap-4 w-1/2">
+    <header className="flex justify-between items-center px-4 md:px-6 py-4 bg-surface-background/90 backdrop-blur-md border-b border-border-subtle sticky top-0 z-10 gap-2 md:gap-4">
+      <div className="flex items-center gap-2 md:gap-4 w-full md:w-1/2 flex-1">
+        <button 
+          onClick={onMenuClick}
+          className="md:hidden p-2 text-text-secondary hover:text-primary hover:bg-primary/10 rounded-xl transition-colors cursor-pointer"
+        >
+          <Menu size={20} />
+        </button>
         {currentView === 'analytics' && (
           <>
-            <span className="font-display text-xl font-bold text-primary tracking-tight">Smart Survey</span>
-            <div className="h-6 w-px bg-border-subtle mx-2"></div>
-            <span className="text-sm font-medium text-text-secondary">Trung tâm phân tích</span>
+            <span className="font-display text-xl font-bold text-primary tracking-tight hidden md:inline">Smart Survey</span>
+            <div className="h-6 w-px bg-border-subtle mx-2 hidden md:block"></div>
+            <span className="text-sm font-medium text-text-secondary truncate">Trung tâm phân tích</span>
           </>
         )}
         {currentView === 'builder' && (
           <>
-            <span className="font-display text-xl font-bold text-primary tracking-tight">Smart Survey</span>
-            <div className="h-6 w-px bg-border-subtle mx-2"></div>
-            <span className="text-sm font-medium text-text-secondary">Trình tạo khảo sát</span>
+            <span className="font-display text-xl font-bold text-primary tracking-tight hidden md:inline">Smart Survey</span>
+            <div className="h-6 w-px bg-border-subtle mx-2 hidden md:block"></div>
+            <span className="text-sm font-medium text-text-secondary truncate">Trình tạo khảo sát</span>
           </>
         )}
         {currentView === 'dashboard' && (
@@ -47,24 +54,24 @@ export function TopBar({ currentView, onViewChange, onPublish, userProfile, noti
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary" size={18} />
             <input 
               type="text" 
-              placeholder="Tìm kiếm khảo sát, người phản hồi hoặc thông tin..." 
-              className="w-full pl-10 pr-4 py-2.5 bg-surface-container-low border border-transparent rounded-xl text-sm focus:bg-white focus:border-border-subtle focus:ring-2 focus:ring-secondary-container/20 outline-none transition-all"
+              placeholder="Tìm kiếm..." 
+              className="w-full pl-10 pr-4 py-2.5 bg-surface-container-low border border-transparent rounded-xl text-sm focus:bg-white focus:border-border-subtle focus:ring-2 focus:ring-secondary-container/20 outline-none transition-all md:placeholder:text-transparent placeholder:text-text-secondary md:placeholder:content-['Tìm_kiếm_khảo_sát,_người_phản_hồi_hoặc_thông_tin...']"
             />
           </div>
         )}
       </div>
 
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-2 md:gap-4 shrink-0">
         {currentView === 'builder' && (
-          <div className="flex items-center gap-3 mr-2">
+          <div className="flex items-center gap-1 md:gap-3 mr-1 md:mr-2">
              <button 
                 onClick={() => onViewChange('respondent')}
-                className="flex items-center gap-2 px-4 py-2 text-primary font-semibold text-sm hover:bg-surface-container-low transition-colors rounded-lg cursor-pointer"
+                className="flex items-center gap-2 px-2 md:px-4 py-2 text-primary font-semibold text-sm hover:bg-surface-container-low transition-colors rounded-lg cursor-pointer"
              >
                 <Eye size={18} />
-                Xem trước
+                <span className="hidden md:inline">Xem trước</span>
              </button>
-             <button onClick={onPublish} className="px-6 py-2 bg-primary text-white font-semibold text-sm rounded-lg shadow-sm hover:opacity-90 active:scale-95 transition-all cursor-pointer">
+             <button onClick={onPublish} className="px-4 md:px-6 py-2 bg-primary text-white font-semibold text-sm rounded-lg shadow-sm hover:opacity-90 active:scale-95 transition-all cursor-pointer">
                 Xuất bản
              </button>
           </div>
@@ -86,12 +93,12 @@ export function TopBar({ currentView, onViewChange, onPublish, userProfile, noti
           </button>
           
           {showNotifications && (
-            <div className="absolute right-0 mt-2 w-80 bg-white rounded-2xl shadow-xl border border-border-subtle overflow-hidden z-50 animate-in fade-in slide-in-from-top-4 duration-200">
+            <div className="absolute right-0 mt-2 w-72 md:w-80 bg-white rounded-2xl shadow-xl border border-border-subtle overflow-hidden z-50 animate-in fade-in slide-in-from-top-4 duration-200">
               <div className="p-4 border-b border-border-subtle flex justify-between items-center bg-surface-background/50">
                 <h3 className="font-bold text-text-primary">Thông báo</h3>
                 {unreadCount > 0 && (
                   <button onClick={onMarkAllRead} className="text-xs text-secondary font-medium hover:underline flex items-center gap-1 cursor-pointer">
-                    <Check size={12} /> Đánh dấu đã đọc
+                    <Check size={12} /> Đọc tất cả
                   </button>
                 )}
               </div>
@@ -114,8 +121,8 @@ export function TopBar({ currentView, onViewChange, onPublish, userProfile, noti
         </div>
         {currentView === 'dashboard' && (
           <>
-            <div className="h-6 w-px bg-border-subtle mx-1"></div>
-            <div className="flex items-center gap-2">
+            <div className="h-6 w-px bg-border-subtle mx-1 hidden md:block"></div>
+            <div className="flex items-center gap-2 hidden md:flex">
               <span className="text-sm font-semibold text-primary">Smart Survey</span>
               <span className="bg-secondary-container/20 text-secondary px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-widest">Enterprise</span>
             </div>

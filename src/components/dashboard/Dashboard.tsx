@@ -39,11 +39,11 @@ export function Dashboard({ onViewChange, userProfile }: { onViewChange?: (view:
   };
 
   return (
-    <div className="p-8 max-w-7xl mx-auto space-y-8 animate-in fade-in duration-500">
+    <div className="p-4 md:p-8 max-w-7xl mx-auto space-y-6 md:space-y-8 animate-in fade-in duration-500">
       {/* Welcome Section */}
-      <div className="flex justify-between items-end">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
         <div>
-          <h2 className="font-display text-3xl font-bold text-text-primary tracking-tight">Chào mừng trở lại, {userProfile?.name || 'bạn'}</h2>
+          <h2 className="font-display text-2xl md:text-3xl font-bold text-text-primary tracking-tight">Chào mừng trở lại, {userProfile?.name || 'bạn'}</h2>
           <p className="text-text-secondary mt-1 text-sm">Dưới đây là hiệu suất điều phối dữ liệu của bạn hôm nay.</p>
         </div>
         <div className="hidden md:flex items-center gap-4">

@@ -67,15 +67,15 @@ export function Settings({ profile, onUpdateProfile, onClose, onShowToast, onAdd
   };
 
   return (
-    <div className="p-8 max-w-3xl mx-auto animate-in fade-in zoom-in-95 duration-500 relative">
+    <div className="p-4 md:p-8 max-w-3xl mx-auto animate-in fade-in zoom-in-95 duration-500 relative">
       {onClose && (
-        <button onClick={onClose} className="absolute right-4 top-4 p-2 text-text-secondary hover:text-text-primary rounded-full hover:bg-surface-container transition-colors">
+        <button onClick={onClose} className="absolute right-2 md:right-4 top-2 md:top-4 p-2 text-text-secondary hover:text-text-primary rounded-full hover:bg-surface-container transition-colors">
           <X size={24} />
         </button>
       )}
 
-      <div className="mb-8">
-        <h1 className="font-display text-3xl font-bold text-text-primary">Cài đặt tài khoản</h1>
+      <div className="mb-6 md:mb-8">
+        <h1 className="font-display text-2xl md:text-3xl font-bold text-text-primary">Cài đặt tài khoản</h1>
         <p className="text-sm text-text-secondary mt-1">Cập nhật thông tin cá nhân và quản lý hồ sơ của bạn.</p>
       </div>
 

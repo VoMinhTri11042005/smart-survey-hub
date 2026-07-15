@@ -142,13 +142,13 @@ export function Builder({ onPublished, onError }: { onPublished?: () => void; on
   };
 
   return (
-    <div className="flex h-full w-full overflow-hidden animate-in fade-in duration-500">
+    <div className="flex flex-col md:flex-row h-full w-full overflow-y-auto md:overflow-hidden animate-in fade-in duration-500">
       
       {/* Left Sidebar: Question Types */}
-      <aside className="w-64 bg-surface-container-low flex flex-col border-r border-border-subtle h-full flex-shrink-0">
-        <div className="p-6">
-          <h2 className="text-xs font-bold text-text-secondary uppercase tracking-wider mb-4">Loại câu hỏi</h2>
-          <div className="space-y-2">
+      <aside className="w-full md:w-64 bg-surface-container-low flex flex-col border-b md:border-b-0 md:border-r border-border-subtle shrink-0">
+        <div className="p-4 md:p-6">
+          <h2 className="text-xs font-bold text-text-secondary uppercase tracking-wider mb-2 md:mb-4">Loại câu hỏi (Kéo thả)</h2>
+          <div className="flex md:flex-col gap-2 overflow-x-auto custom-scrollbar pb-2 md:pb-0">
              <DraggableItem icon={<CircleDot size={20} className="text-primary" />} label="Một lựa chọn" />
              <DraggableItem icon={<CheckSquare size={20} className="text-primary" />} label="Nhiều lựa chọn" />
              <DraggableItem icon={<Star size={20} className="text-primary" />} label="Thang điểm" />
@@ -156,7 +156,7 @@ export function Builder({ onPublished, onError }: { onPublished?: () => void; on
              <DraggableItem icon={<Minus size={20} className="text-primary" />} label="Điểm NPS" />
           </div>
         </div>
-        <div className="mt-auto p-6 border-t border-border-subtle bg-surface-container">
+        <div className="hidden md:block mt-auto p-6 border-t border-border-subtle bg-surface-container">
            <div className="flex items-center gap-3 text-text-secondary text-xs font-medium">
               <Info size={16} />
               <span>Kéo thả vào vùng trung tâm</span>
@@ -165,7 +165,7 @@ export function Builder({ onPublished, onError }: { onPublished?: () => void; on
       </aside>
 
       {/* Center Canvas */}
-      <section className="flex-1 overflow-y-auto bg-surface-background p-8 relative">
+      <section className="flex-1 min-h-[600px] md:min-h-0 md:overflow-y-auto bg-surface-background p-4 md:p-8 relative">
         <div className="max-w-[720px] mx-auto space-y-8 pb-32">
 
            {!showSurvey ? (
@@ -441,24 +441,24 @@ export function Builder({ onPublished, onError }: { onPublished?: () => void; on
                </div>
 
                {/* Publish Bar */}
-               <div className="fixed bottom-0 left-64 right-80 bg-white/95 backdrop-blur-md border-t border-border-subtle p-4 flex items-center justify-between z-20">
-                 <div className="flex items-center gap-3">
-                   <span className="text-sm font-medium text-text-secondary">{questions.length} câu hỏi</span>
-                   <span className="text-text-secondary">•</span>
+               <div className="fixed bottom-0 left-0 md:left-64 right-0 md:right-80 bg-white/95 backdrop-blur-md border-t border-border-subtle p-4 flex items-center justify-between z-20">
+                 <div className="flex items-center gap-2 md:gap-3">
+                   <span className="text-xs md:text-sm font-medium text-text-secondary">{questions.length} câu hỏi</span>
+                   <span className="hidden md:inline text-text-secondary">•</span>
                    <button
                      onClick={() => { setShowSurvey(false); setQuestions([]); setSurveyTitle(''); }}
-                     className="text-sm font-semibold text-text-secondary hover:text-sentiment-negative transition-colors cursor-pointer"
+                     className="text-xs md:text-sm font-semibold text-text-secondary hover:text-sentiment-negative transition-colors cursor-pointer"
                    >
-                     Tạo lại từ đầu
+                     Tạo lại
                    </button>
                  </div>
                  <button
                    onClick={handlePublish}
                    disabled={isPublishing || questions.length === 0}
-                   className="px-8 py-2.5 bg-primary text-white font-bold rounded-xl shadow-md hover:bg-primary/90 active:scale-95 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed"
+                   className="px-4 md:px-8 py-2 md:py-2.5 bg-primary text-white font-bold rounded-xl shadow-md hover:bg-primary/90 active:scale-95 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed text-xs md:text-sm"
                  >
                    {isPublishing ? <RefreshCw size={18} className="animate-spin" /> : <Send size={18} />}
-                   Xuất bản khảo sát
+                   Xuất bản
                  </button>
                </div>
              </>
@@ -468,7 +468,7 @@ export function Builder({ onPublished, onError }: { onPublished?: () => void; on
       </section>
 
       {/* Right Sidebar: AI Orchestrator */}
-      <aside className="w-80 bg-white border-l border-border-subtle h-full flex flex-col flex-shrink-0">
+      <aside className="w-full md:w-80 bg-white border-t md:border-t-0 md:border-l border-border-subtle md:h-full flex flex-col shrink-0">
         <div className="p-6 flex items-center gap-2 border-b border-border-subtle bg-surface-background/50">
            <Sparkles size={20} className="text-secondary-container" />
            <h2 className="font-display text-lg font-bold">Bộ điều phối AI</h2>
