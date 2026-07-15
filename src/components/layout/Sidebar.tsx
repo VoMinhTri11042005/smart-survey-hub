@@ -16,13 +16,13 @@ export function Sidebar({ currentView, onViewChange, onLogout, userProfile, isOp
       {/* Mobile Backdrop */}
       {isOpen && (
         <div 
-          className="fixed inset-0 bg-surface-background/80 backdrop-blur-sm z-40 md:hidden"
+          className="fixed inset-0 bg-surface-background/80 backdrop-blur-sm z-[90] md:hidden"
           onClick={onClose}
         />
       )}
 
       {/* Sidebar Content */}
-      <aside className={`fixed md:relative inset-y-0 left-0 w-64 bg-surface-container border-r border-border-subtle flex flex-col h-full flex-shrink-0 transition-transform duration-300 ease-in-out z-50 ${isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
+      <aside className={`fixed md:relative inset-y-0 left-0 w-64 bg-surface-container border-r border-border-subtle flex flex-col h-full flex-shrink-0 transition-transform duration-300 ease-in-out z-[100] ${isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
         <div className="p-6 pb-4 flex items-center justify-between">
           <div>
             <h1 className="font-display text-4xl font-bold text-primary tracking-tight leading-none">SH</h1>
@@ -42,7 +42,7 @@ export function Sidebar({ currentView, onViewChange, onLogout, userProfile, isOp
       
       <nav className="flex-1 px-4 py-2 space-y-2">
         <button 
-          onClick={() => onViewChange('dashboard')}
+          onClick={() => { onViewChange('dashboard'); onClose?.(); }}
           className={`relative w-full flex items-center gap-3 px-4 py-3.5 rounded-xl transition-all duration-300 text-sm font-semibold cursor-pointer group active:scale-[0.98] ${
             currentView === 'dashboard' 
               ? 'bg-primary/10 text-primary' 
@@ -57,7 +57,7 @@ export function Sidebar({ currentView, onViewChange, onLogout, userProfile, isOp
         </button>
 
         <button 
-          onClick={() => onViewChange('templates')}
+          onClick={() => { onViewChange('templates'); onClose?.(); }}
           className={`relative w-full flex items-center gap-3 px-4 py-3.5 rounded-xl transition-all duration-300 text-sm font-semibold cursor-pointer group active:scale-[0.98] ${
             currentView === 'templates' 
               ? 'bg-primary/10 text-primary' 
@@ -72,7 +72,7 @@ export function Sidebar({ currentView, onViewChange, onLogout, userProfile, isOp
         </button>
 
         <button 
-          onClick={() => onViewChange('analytics')}
+          onClick={() => { onViewChange('analytics'); onClose?.(); }}
           className={`relative w-full flex items-center gap-3 px-4 py-3.5 rounded-xl transition-all duration-300 text-sm font-semibold cursor-pointer group active:scale-[0.98] ${
             currentView === 'analytics' 
               ? 'bg-primary/10 text-primary' 
@@ -87,7 +87,7 @@ export function Sidebar({ currentView, onViewChange, onLogout, userProfile, isOp
         </button>
 
         <button 
-          onClick={() => onViewChange('teams')}
+          onClick={() => { onViewChange('teams'); onClose?.(); }}
           className={`relative w-full flex items-center gap-3 px-4 py-3.5 rounded-xl transition-all duration-300 text-sm font-semibold cursor-pointer group active:scale-[0.98] ${
             currentView === 'teams' 
               ? 'bg-primary/10 text-primary' 
@@ -103,7 +103,7 @@ export function Sidebar({ currentView, onViewChange, onLogout, userProfile, isOp
       </nav>
 
       <div className="p-4 space-y-4 mt-auto">
-         <button onClick={() => onViewChange('builder')} className="w-full flex items-center justify-center gap-2 bg-primary text-white py-2.5 rounded-xl text-sm font-semibold hover:bg-primary/90 transition-colors shadow-sm cursor-pointer">
+         <button onClick={() => { onViewChange('builder'); onClose?.(); }} className="w-full flex items-center justify-center gap-2 bg-primary text-white py-2.5 rounded-xl text-sm font-semibold hover:bg-primary/90 transition-colors shadow-sm cursor-pointer">
             <Plus size={18} />
             Khảo sát mới
          </button>
@@ -124,7 +124,7 @@ export function Sidebar({ currentView, onViewChange, onLogout, userProfile, isOp
              
              <div className="flex items-center border-t border-border-subtle/50 bg-white/50">
                <button 
-                 onClick={() => onViewChange('settings')} 
+                 onClick={() => { onViewChange('settings'); onClose?.(); }} 
                  className={`flex-1 p-2.5 flex items-center justify-center gap-2 text-xs font-semibold hover:bg-surface-container transition-colors cursor-pointer ${currentView === 'settings' ? 'text-primary' : 'text-text-secondary'}`}
                  title="Cài đặt tài khoản"
                >

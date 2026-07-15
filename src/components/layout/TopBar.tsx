@@ -30,8 +30,10 @@ export function TopBar({ currentView, onViewChange, onPublish, userProfile, noti
     <header className="flex justify-between items-center px-4 md:px-6 py-4 bg-surface-background/90 backdrop-blur-md border-b border-border-subtle sticky top-0 z-10 gap-2 md:gap-4">
       <div className="flex items-center gap-2 md:gap-4 w-full md:w-1/2 flex-1">
         <button 
-          onClick={onMenuClick}
-          className="md:hidden p-2 text-text-secondary hover:text-primary hover:bg-primary/10 rounded-xl transition-colors cursor-pointer"
+          type="button"
+          onClick={(e) => { e.preventDefault(); onMenuClick?.(); }}
+          className="md:hidden p-2 text-text-secondary hover:text-primary hover:bg-primary/10 rounded-xl transition-colors cursor-pointer relative z-50"
+          aria-label="Menu"
         >
           <Menu size={20} />
         </button>
