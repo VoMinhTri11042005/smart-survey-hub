@@ -63,11 +63,11 @@ export function Chatbot({ survey }: { survey: Survey | null }) {
         dragControls={dragControls}
         dragListener={false}
         dragMomentum={false}
-        className={`fixed bottom-6 right-6 w-[360px] max-w-[calc(100vw-32px)] bg-white rounded-2xl shadow-2xl border border-border-subtle flex flex-col z-50 transition-all origin-bottom-right duration-300 overflow-hidden ${isOpen ? 'scale-100 opacity-100 pointer-events-auto shadow-[0_12px_40px_-10px_rgba(31,16,142,0.2)]' : 'scale-50 opacity-0 pointer-events-none'}`}
+        className={`fixed bottom-6 right-6 w-[360px] h-[500px] max-h-[calc(100vh-48px)] max-w-[calc(100vw-32px)] bg-white rounded-2xl shadow-2xl border border-border-subtle flex flex-col z-50 transition-all origin-bottom-right duration-300 overflow-hidden ${isOpen ? 'scale-100 opacity-100 pointer-events-auto shadow-[0_12px_40px_-10px_rgba(31,16,142,0.2)]' : 'scale-50 opacity-0 pointer-events-none'}`}
       >
         {/* Header */}
         <div 
-          className="flex items-center justify-between p-4 bg-primary text-white cursor-move touch-none"
+          className="flex items-center justify-between p-4 bg-primary text-white cursor-move touch-none flex-shrink-0"
           onPointerDown={(e) => dragControls.start(e)}
         >
           <div className="flex items-center gap-3">
@@ -85,7 +85,7 @@ export function Chatbot({ survey }: { survey: Survey | null }) {
         </div>
 
         {/* Messages Area */}
-        <div className="flex-1 h-[400px] overflow-y-auto p-4 space-y-4 bg-surface-background custom-scrollbar">
+        <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-surface-background custom-scrollbar">
           {messages.map((msg, idx) => (
             <div key={idx} className={`flex ${msg.type === 'user' ? 'justify-end' : 'justify-start'}`}>
               {msg.type === 'bot' && (
