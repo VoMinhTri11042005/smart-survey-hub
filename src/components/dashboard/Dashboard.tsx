@@ -49,11 +49,12 @@ export function Dashboard({ onViewChange, userProfile }: { onViewChange?: (view:
         </div>
         <div className="hidden md:flex items-center gap-4">
           <div className="text-right">
-            <div className="text-[10px] font-bold text-text-secondary uppercase tracking-widest">Tổng số khảo sát</div>
-            <div className="text-sm font-semibold text-primary">{surveys.length} khảo sát</div>
+            <div className="text-[10px] font-bold text-text-secondary uppercase tracking-widest">Lượt phản hồi</div>
+            <div className="text-sm font-semibold text-primary">Tổng cộng {totalResponses}</div>
           </div>
-          <div className="w-12 h-12 rounded-full bg-primary-container text-primary flex items-center justify-center font-display font-bold text-xl">
-            {surveys.length}
+          <div className="w-12 h-12 rounded-full bg-gradient-to-tr from-primary to-secondary text-white flex items-center justify-center shadow-lg shadow-primary/30 relative group">
+            <Activity size={20} className="group-hover:animate-bounce" />
+            <div className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-sentiment-positive rounded-full border-2 border-surface-background animate-pulse"></div>
           </div>
         </div>
       </div>
