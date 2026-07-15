@@ -40,7 +40,11 @@ function AppContent() {
   });
 
   useEffect(() => {
-    localStorage.setItem('userProfile', JSON.stringify(userProfile));
+    try {
+      localStorage.setItem('userProfile', JSON.stringify(userProfile));
+    } catch (e) {
+      console.error('Failed to save user profile to localStorage', e);
+    }
   }, [userProfile]);
   const [shareSurveyId, setShareSurveyId] = useState<string | null>(null);
   const [shareSurvey, setShareSurvey] = useState<Survey | null>(null);
