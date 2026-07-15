@@ -8,9 +8,10 @@ interface SettingsProps {
   onUpdateProfile: (profile: UserProfile) => void;
   onClose?: () => void;
   onShowToast?: (message: string, type: ToastType) => void;
+  onAddNotification?: (msg: string) => void;
 }
 
-export function Settings({ profile, onUpdateProfile, onClose, onShowToast }: SettingsProps) {
+export function Settings({ profile, onUpdateProfile, onClose, onShowToast, onAddNotification }: SettingsProps) {
   const [formData, setFormData] = useState<UserProfile>(profile);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -23,6 +24,7 @@ export function Settings({ profile, onUpdateProfile, onClose, onShowToast }: Set
       onUpdateProfile(formData);
       setIsSaving(false);
       if (onShowToast) onShowToast('Cập nhật thông tin thành công!', 'success');
+      if (onAddNotification) onAddNotification('Bạn vừa cập nhật thông tin cá nhân');
       if (onClose) onClose();
     }, 800);
   };

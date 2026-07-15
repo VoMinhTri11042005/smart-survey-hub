@@ -1,17 +1,29 @@
-import { Search, Bell, Eye } from 'lucide-react';
+import { useState } from 'react';
+import { Search, Bell, Eye, Check } from 'lucide-react';
 import { View, UserProfile } from '../../types';
 import { useSurvey } from '../../context/SurveyContext';
+
+export interface Notification {
+  id: string;
+  message: string;
+  time: string;
+  read: boolean;
+}
 
 interface TopBarProps {
   currentView: View;
   onViewChange: (view: View) => void;
   onPublish?: () => void;
   userProfile?: UserProfile;
-  onNotificationClick?: () => void;
+  notifications?: Notification[];
+  onMarkAllRead?: () => void;
 }
 
-export function TopBar({ currentView, onViewChange, onPublish, userProfile, onNotificationClick }: TopBarProps) {
+export function TopBar({ currentView, onViewChange, onPublish, userProfile, notifications = [], onMarkAllRead }: TopBarProps) {
   const { searchQuery, setSearchQuery } = useSurvey();
+  const [showNotifications, setShowNotifications] = useState(false);
+  
+  const unreadCount = notifications.filter(n => !n.read).length;
 
   return (
     <header className="flex justify-between items-center px-6 py-4 bg-surface-background/90 backdrop-blur-md border-b border-border-subtle sticky top-0 z-10">
@@ -67,10 +79,39 @@ export function TopBar({ currentView, onViewChange, onPublish, userProfile, onNo
             />
           </div>
         )}
-        <button onClick={onNotificationClick} className="relative text-text-secondary hover:text-text-primary transition-colors p-2 rounded-full hover:bg-surface-container-high/50 cursor-pointer">
-          <Bell size={20} />
-          <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-sentiment-negative rounded-full border-2 border-surface-background"></span>
-        </button>
+        <div className="relative">
+          <button onClick={() => setShowNotifications(!showNotifications)} className="relative text-text-secondary hover:text-text-primary transition-colors p-2 rounded-full hover:bg-surface-container-high/50 cursor-pointer">
+            <Bell size={20} />
+            {unreadCount > 0 && <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-sentiment-negative rounded-full border-2 border-surface-background"></span>}
+          </button>
+          
+          {showNotifications && (
+            <div className="absolute right-0 mt-2 w-80 bg-white rounded-2xl shadow-xl border border-border-subtle overflow-hidden z-50 animate-in fade-in slide-in-from-top-4 duration-200">
+              <div className="p-4 border-b border-border-subtle flex justify-between items-center bg-surface-background/50">
+                <h3 className="font-bold text-text-primary">Thông báo</h3>
+                {unreadCount > 0 && (
+                  <button onClick={onMarkAllRead} className="text-xs text-secondary font-medium hover:underline flex items-center gap-1 cursor-pointer">
+                    <Check size={12} /> Đánh dấu đã đọc
+                  </button>
+                )}
+              </div>
+              <div className="max-h-[320px] overflow-y-auto custom-scrollbar">
+                {notifications.length === 0 ? (
+                  <div className="p-6 text-center text-text-secondary text-sm">
+                    Bạn không có thông báo nào.
+                  </div>
+                ) : (
+                  notifications.map(notif => (
+                    <div key={notif.id} className={`p-4 border-b border-border-subtle hover:bg-surface-container-low transition-colors cursor-pointer ${notif.read ? 'opacity-60' : 'bg-primary-fixed/10'}`}>
+                      <p className="text-sm text-text-primary font-medium">{notif.message}</p>
+                      <p className="text-[10px] text-text-secondary mt-1">{notif.time}</p>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+        </div>
         {currentView === 'dashboard' && (
           <>
             <div className="h-6 w-px bg-border-subtle mx-1"></div>

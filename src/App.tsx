@@ -26,6 +26,9 @@ function AppContent() {
   const [userRole, setUserRole] = useState<Role | null>(null);
   const [currentView, setCurrentView] = useState<View>('dashboard');
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
+  const [notifications, setNotifications] = useState<{ id: string; message: string; time: string; read: boolean }[]>([
+    { id: '1', message: 'Chào mừng bạn đến với Smart Survey Hub!', time: 'Hôm nay', read: false }
+  ]);
   const [userProfile, setUserProfile] = useState<UserProfile>(() => {
     const saved = localStorage.getItem('userProfile');
     if (saved) {
@@ -70,6 +73,10 @@ function AppContent() {
 
   const showToast = (message: string, type: ToastType) => setToast({ message, type });
 
+  const addNotification = (msg: string) => {
+    setNotifications(prev => [{ id: Date.now().toString(), message: msg, time: 'Vừa xong', read: false }, ...prev]);
+  };
+
   if (shareSurveyId && shareSurvey) {
     return (
       <>
@@ -93,14 +100,24 @@ function AppContent() {
         <div className="flex h-screen bg-surface-background text-text-primary font-sans overflow-hidden selection:bg-secondary-fixed selection:text-on-secondary-fixed">
           <Sidebar currentView={currentView} onViewChange={setCurrentView} onLogout={() => { setIsAuthenticated(false); setUserRole(null); }} userProfile={userProfile} />
           <div className="flex-1 flex flex-col overflow-hidden relative">
-            <TopBar currentView={currentView} onViewChange={setCurrentView} onPublish={() => showToast('Khảo sát mới đã được đăng lên bảng điều khiển!', 'success')} userProfile={userProfile} onNotificationClick={() => showToast('Bạn không có thông báo nào mới', 'info')} />
+            <TopBar 
+              currentView={currentView} 
+              onViewChange={setCurrentView} 
+              onPublish={() => { 
+                showToast('Khảo sát mới đã được đăng lên bảng điều khiển!', 'success');
+                addNotification('Bạn vừa xuất bản một khảo sát mới');
+              }} 
+              userProfile={userProfile} 
+              notifications={notifications}
+              onMarkAllRead={() => setNotifications(prev => prev.map(n => ({ ...n, read: true })))}
+            />
             <main className="flex-1 overflow-y-auto relative bg-surface-background">
               {currentView === 'dashboard' && <Dashboard onViewChange={setCurrentView} userProfile={userProfile} />}
               {currentView === 'templates' && <Templates onViewChange={setCurrentView} />}
               {currentView === 'analytics' && <Analytics />}
               {currentView === 'teams' && <Teams />}
-              {currentView === 'settings' && <Settings profile={userProfile} onUpdateProfile={setUserProfile} onClose={() => setCurrentView('dashboard')} onShowToast={showToast} />}
-              {currentView === 'builder' && <Builder onPublished={() => { showToast('Khảo sát đã được xuất bản thành công!', 'success'); setCurrentView('dashboard'); }} onError={(msg) => showToast(msg, 'error')} />}
+              {currentView === 'settings' && <Settings profile={userProfile} onUpdateProfile={setUserProfile} onClose={() => setCurrentView('dashboard')} onShowToast={showToast} onAddNotification={addNotification} />}
+              {currentView === 'builder' && <Builder onPublished={() => { showToast('Khảo sát đã được xuất bản thành công!', 'success'); addNotification('Bạn vừa xuất bản một khảo sát mới'); setCurrentView('dashboard'); }} onError={(msg) => showToast(msg, 'error')} />}
             </main>
           </div>
         </div>
