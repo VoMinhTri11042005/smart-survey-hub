@@ -94,7 +94,7 @@ function AppContent() {
   if (shareSurveyId && shareSurvey) {
     return (
       <>
-        <Respondent survey={shareSurvey} onExit={() => { window.location.href = '/'; }} onComplete={() => { showToast('Cảm ơn bạn! Đã gửi khảo sát thành công.', 'success'); setTimeout(() => { window.location.href = '/'; }, 2000); }} />
+        <Respondent survey={shareSurvey} onExit={() => { window.location.href = '/'; }} />
         <Chatbot survey={shareSurvey} />
         <AnimatePresence>{toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}</AnimatePresence>
       </>
@@ -107,7 +107,7 @@ function AppContent() {
         <Auth onLogin={(role) => { setIsAuthenticated(true); setUserRole(role); }} />
       ) : (userRole === 'user' || currentView === 'respondent') ? (
         <>
-          <Respondent survey={currentSurvey} onExit={() => { if (userRole === 'user') { setIsAuthenticated(false); setUserRole(null); } else { setCurrentView('builder'); } }} onComplete={() => { showToast('Cảm ơn bạn! Đã gửi khảo sát thành công.', 'success'); if (userRole === 'user') { setIsAuthenticated(false); setUserRole(null); } else { setCurrentView('dashboard'); } }} />
+          <Respondent survey={currentSurvey} onExit={() => { if (userRole === 'user') { setIsAuthenticated(false); setUserRole(null); } else { setCurrentView('dashboard'); } }} />
           <Chatbot survey={currentSurvey} />
         </>
       ) : (

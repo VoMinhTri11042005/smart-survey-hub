@@ -1,4 +1,4 @@
-import { Timer, Undo2, Sparkles, CircleDot, CheckSquare } from 'lucide-react';
+import { Timer, Undo2, Sparkles, CircleDot, CheckSquare, CheckCircle2, Home, Edit3 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useSurvey } from '../../context/SurveyContext';
 import type { Survey, SurveyQuestion } from '../../types';
@@ -15,6 +15,8 @@ export function Respondent({ survey, onExit, onComplete }: RespondentProps) {
   const [answers, setAnswers] = useState<Record<string, any>>({});
   const [respondentId, setRespondentId] = useState<string>('');
   const [isLoading, setIsLoading] = useState(true);
+  const [isCompleted, setIsCompleted] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     if (!survey) return;
@@ -74,8 +76,16 @@ export function Respondent({ survey, onExit, onComplete }: RespondentProps) {
     if (step < totalSteps - 1) {
       setStep(prev => prev + 1);
     } else {
-      try { await submitResponse(survey.id, respondentId, answers); } catch {}
-      if (onComplete) onComplete();
+      setIsSubmitting(true);
+      try { 
+        await submitResponse(survey.id, respondentId, answers); 
+        setIsCompleted(true);
+        if (onComplete) onComplete();
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setIsSubmitting(false);
+      }
     }
   };
 
@@ -89,6 +99,56 @@ export function Respondent({ survey, onExit, onComplete }: RespondentProps) {
       setAnswer([...current, option]);
     }
   };
+
+  if (isCompleted) {
+    return (
+      <div className="min-h-screen bg-surface-background flex flex-col font-sans text-text-primary selection:bg-secondary-fixed selection:text-on-secondary-fixed relative overflow-hidden">
+        {/* Luxurious background elements */}
+        <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
+          <div className="absolute -top-40 -right-40 w-96 h-96 bg-primary/20 rounded-full blur-[100px] opacity-70 animate-pulse"></div>
+          <div className="absolute top-1/3 -left-20 w-72 h-72 bg-secondary/20 rounded-full blur-[80px] opacity-60"></div>
+          <div className="absolute -bottom-40 right-1/4 w-80 h-80 bg-sentiment-positive/10 rounded-full blur-[80px]"></div>
+        </div>
+
+        <nav className="relative z-10 px-4 py-4 flex justify-between items-center border-b border-white/10 backdrop-blur-md">
+          <div className="font-display text-xl font-bold text-primary">{survey.title}</div>
+        </nav>
+
+        <main className="flex-1 flex flex-col items-center justify-center p-6 relative z-10 animate-in zoom-in-95 duration-700">
+          <div className="bg-white/80 backdrop-blur-xl p-10 md:p-14 rounded-[40px] shadow-[0_20px_60px_-15px_rgba(0,0,0,0.05)] border border-white/50 text-center max-w-2xl w-full">
+            <div className="mx-auto w-24 h-24 bg-gradient-to-tr from-primary to-secondary rounded-full flex items-center justify-center shadow-2xl shadow-primary/30 mb-8 relative">
+              <CheckCircle2 size={48} className="text-white" />
+              <div className="absolute inset-0 rounded-full border-4 border-white/20 animate-ping"></div>
+            </div>
+            
+            <h1 className="font-display text-4xl md:text-5xl font-extrabold text-text-primary mb-4 tracking-tight leading-tight">
+              Cảm ơn bạn!
+            </h1>
+            <p className="text-text-secondary text-lg md:text-xl mb-10 max-w-lg mx-auto leading-relaxed">
+              Phản hồi của bạn đã được ghi nhận. Những đóng góp quý báu này sẽ giúp chúng tôi nâng cao chất lượng dịch vụ.
+            </p>
+
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+              <button 
+                onClick={() => setIsCompleted(false)} 
+                className="w-full sm:w-auto px-8 py-3.5 bg-surface-container-lowest border border-border-subtle text-text-primary font-bold rounded-2xl hover:bg-surface-container-low transition-colors shadow-sm flex items-center justify-center gap-2"
+              >
+                <Edit3 size={18} />
+                Sửa lại đáp án
+              </button>
+              <button 
+                onClick={onExit} 
+                className="w-full sm:w-auto px-8 py-3.5 bg-primary text-white font-bold rounded-2xl shadow-xl shadow-primary/25 hover:bg-primary/90 transition-all active:scale-95 flex items-center justify-center gap-2"
+              >
+                <Home size={18} />
+                Về trang chủ
+              </button>
+            </div>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-surface-background flex flex-col font-sans text-text-primary animate-in fade-in duration-500 selection:bg-secondary-fixed selection:text-on-secondary-fixed">
@@ -223,8 +283,8 @@ export function Respondent({ survey, onExit, onComplete }: RespondentProps) {
             <button onClick={handlePrev} disabled={step === 0} className={`flex-1 py-4 bg-white border-2 border-border-subtle rounded-xl text-base font-bold text-text-primary transition-colors shadow-sm ${step === 0 ? 'opacity-50 cursor-not-allowed' : 'hover:bg-surface-container-low active:scale-95 cursor-pointer'}`}>
               Quay lại
             </button>
-            <button onClick={handleNext} className="flex-[2] py-4 bg-primary text-white rounded-xl text-lg font-bold shadow-lg shadow-primary/25 hover:bg-primary/90 transition-all active:scale-95 cursor-pointer">
-              {step === totalSteps - 1 ? 'Hoàn thành' : 'Tiếp theo'}
+            <button disabled={isSubmitting} onClick={handleNext} className={`flex-[2] py-4 bg-primary text-white rounded-xl text-lg font-bold shadow-lg shadow-primary/25 hover:bg-primary/90 transition-all active:scale-95 flex items-center justify-center gap-2 ${isSubmitting ? 'opacity-70 cursor-not-allowed' : 'cursor-pointer'}`}>
+              {isSubmitting ? 'Đang gửi...' : step === totalSteps - 1 ? 'Hoàn thành' : 'Tiếp theo'}
             </button>
           </div>
         </div>
