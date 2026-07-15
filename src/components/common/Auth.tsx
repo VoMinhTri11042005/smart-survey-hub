@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Mail, Lock, ArrowRight, Info, User, Settings, RefreshCw } from 'lucide-react';
+import { Mail, Lock, ArrowRight, Info, User, Settings, RefreshCw, Eye, EyeOff } from 'lucide-react';
 import { Role } from '../../types';
 import { signInWithGoogle } from '../../services/firebase';
 
@@ -12,6 +12,7 @@ export function Auth({ onLogin }: AuthProps) {
   const [role, setRole] = useState<Role>('admin');
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleGoogleLogin = async () => {
     setError(null);
@@ -125,7 +126,6 @@ export function Auth({ onLogin }: AuthProps) {
                 </div>
                 <input
                   id="email" name="email" type="email" autoComplete="email" required
-                  defaultValue={role === 'admin' ? "admin@smartsurvey.com" : "user@smartsurvey.com"}
                   className="block w-full pl-10 pr-3 py-2.5 border border-border-subtle rounded-xl text-sm font-medium placeholder-text-secondary focus:outline-none focus:ring-2 focus:ring-secondary/50 focus:border-secondary transition-all"
                   placeholder="you@company.com"
                 />
@@ -141,11 +141,17 @@ export function Auth({ onLogin }: AuthProps) {
                   <Lock className="h-5 w-5 text-text-secondary" />
                 </div>
                 <input
-                  id="password" name="password" type="password" autoComplete="current-password" required
-                  defaultValue="demo123456"
-                  className="block w-full pl-10 pr-3 py-2.5 border border-border-subtle rounded-xl text-sm font-medium placeholder-text-secondary focus:outline-none focus:ring-2 focus:ring-secondary/50 focus:border-secondary transition-all"
+                  id="password" name="password" type={showPassword ? 'text' : 'password'} autoComplete="current-password" required
+                  className="block w-full pl-10 pr-10 py-2.5 border border-border-subtle rounded-xl text-sm font-medium placeholder-text-secondary focus:outline-none focus:ring-2 focus:ring-secondary/50 focus:border-secondary transition-all"
                   placeholder="••••••••"
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-text-secondary hover:text-text-primary focus:outline-none cursor-pointer"
+                >
+                  {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                </button>
               </div>
             </div>
 
