@@ -4,7 +4,7 @@ import { useSurvey } from '../../context/SurveyContext';
 import { ShareModal } from '../common/ShareModal';
 import type { View, Survey } from '../../types';
 
-export function Dashboard({ onViewChange }: { onViewChange?: (view: View) => void }) {
+export function Dashboard({ onViewChange, userProfile }: { onViewChange?: (view: View) => void; userProfile?: { name: string } }) {
   const { surveys, fetchSurveys, setCurrentSurvey, deleteSurvey, searchQuery } = useSurvey();
   const [shareModal, setShareModal] = useState<{ id: string; title: string } | null>(null);
 
@@ -43,7 +43,7 @@ export function Dashboard({ onViewChange }: { onViewChange?: (view: View) => voi
       {/* Welcome Section */}
       <div className="flex justify-between items-end">
         <div>
-          <h2 className="font-display text-3xl font-bold text-text-primary tracking-tight">Chào mừng trở lại, Alex</h2>
+          <h2 className="font-display text-3xl font-bold text-text-primary tracking-tight">Chào mừng trở lại, {userProfile?.name || 'bạn'}</h2>
           <p className="text-text-secondary mt-1 text-sm">Dưới đây là hiệu suất điều phối dữ liệu của bạn hôm nay.</p>
         </div>
         <div className="hidden md:flex items-center gap-4">

@@ -1,31 +1,29 @@
 import { useState } from 'react';
 import { Camera, Save, User, Mail, Briefcase, RefreshCw, X } from 'lucide-react';
 import type { UserProfile } from '../../types';
+import { ToastType } from '../common/Toast';
 
 interface SettingsProps {
   profile: UserProfile;
   onUpdateProfile: (profile: UserProfile) => void;
   onClose?: () => void;
+  onShowToast?: (message: string, type: ToastType) => void;
 }
 
-export function Settings({ profile, onUpdateProfile, onClose }: SettingsProps) {
+export function Settings({ profile, onUpdateProfile, onClose, onShowToast }: SettingsProps) {
   const [formData, setFormData] = useState<UserProfile>(profile);
   const [isSaving, setIsSaving] = useState(false);
-  const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setIsSaving(true);
-    setMessage(null);
 
     // Simulate API call
     setTimeout(() => {
       onUpdateProfile(formData);
       setIsSaving(false);
-      setMessage({ type: 'success', text: 'Cập nhật thông tin thành công!' });
-      setTimeout(() => {
-        if (onClose) onClose();
-      }, 1500);
+      if (onShowToast) onShowToast('Cập nhật thông tin thành công!', 'success');
+      if (onClose) onClose();
     }, 800);
   };
 
@@ -78,13 +76,6 @@ export function Settings({ profile, onUpdateProfile, onClose }: SettingsProps) {
         <h1 className="font-display text-3xl font-bold text-text-primary">Cài đặt tài khoản</h1>
         <p className="text-sm text-text-secondary mt-1">Cập nhật thông tin cá nhân và quản lý hồ sơ của bạn.</p>
       </div>
-
-      {message && (
-        <div className={`mb-6 p-4 rounded-xl text-sm font-medium flex items-center justify-between ${message.type === 'success' ? 'bg-sentiment-positive/10 text-sentiment-positive border border-sentiment-positive/30' : 'bg-sentiment-negative/10 text-sentiment-negative border border-sentiment-negative/30'}`}>
-          {message.text}
-          <button onClick={() => setMessage(null)}><X size={16} /></button>
-        </div>
-      )}
 
       <div className="bg-white rounded-3xl border border-border-subtle shadow-sm overflow-hidden">
         <form onSubmit={handleSubmit} className="p-6 md:p-8">

@@ -95,11 +95,11 @@ function AppContent() {
           <div className="flex-1 flex flex-col overflow-hidden relative">
             <TopBar currentView={currentView} onViewChange={setCurrentView} onPublish={() => showToast('Khảo sát mới đã được đăng lên bảng điều khiển!', 'success')} userProfile={userProfile} onNotificationClick={() => showToast('Bạn không có thông báo nào mới', 'info')} />
             <main className="flex-1 overflow-y-auto relative bg-surface-background">
-              {currentView === 'dashboard' && <Dashboard onViewChange={setCurrentView} />}
+              {currentView === 'dashboard' && <Dashboard onViewChange={setCurrentView} userProfile={userProfile} />}
               {currentView === 'templates' && <Templates onViewChange={setCurrentView} />}
               {currentView === 'analytics' && <Analytics />}
               {currentView === 'teams' && <Teams />}
-              {currentView === 'settings' && <Settings profile={userProfile} onUpdateProfile={setUserProfile} onClose={() => setCurrentView('dashboard')} />}
+              {currentView === 'settings' && <Settings profile={userProfile} onUpdateProfile={setUserProfile} onClose={() => setCurrentView('dashboard')} onShowToast={showToast} />}
               {currentView === 'builder' && <Builder onPublished={() => { showToast('Khảo sát đã được xuất bản thành công!', 'success'); setCurrentView('dashboard'); }} onError={(msg) => showToast(msg, 'error')} />}
             </main>
           </div>
