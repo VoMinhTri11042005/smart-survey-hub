@@ -88,8 +88,26 @@ export function ShareModal({ isOpen, onClose, surveyId, surveyTitle }: ShareModa
     window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareLink)}`, '_blank', 'width=600,height=400');
   };
 
-  const shareViaZalo = () => {
-    window.open(`https://zalo.me/share?url=${encodeURIComponent(shareLink)}`, '_blank', 'width=600,height=400');
+  const shareViaZalo = async () => {
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    
+    if (navigator.share && isMobile) {
+      try {
+        await navigator.share({
+          title: surveyTitle,
+          text: `Mời bạn tham gia khảo sát: ${surveyTitle}`,
+          url: shareLink
+        });
+        return;
+      } catch (e) {
+        console.error('Native share failed', e);
+      }
+    }
+    
+    // Fallback cho PC hoặc khi Web Share API không khả dụng
+    copyLink();
+    alert('Hệ thống đã tự động sao chép liên kết khảo sát!\n\nTrình duyệt sẽ mở Zalo Web, bạn chỉ cần chọn người nhận và dán (Ctrl+V) liên kết vào khung chat để chia sẻ nhé.');
+    window.open('https://chat.zalo.me', '_blank');
   };
 
   const shareViaEmail = () => {
