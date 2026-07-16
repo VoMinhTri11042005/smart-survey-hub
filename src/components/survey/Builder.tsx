@@ -474,14 +474,28 @@ export function Builder({ onPublished, onError }: { onPublished?: () => void; on
                        </div>
                      )}
 
-                     {/* Required toggle */}
+                     {/* Footer Settings */}
                      {isActive && (
-                       <div className="mt-4 pt-4 border-t border-border-subtle flex items-center justify-between">
-                         <span className="text-sm font-medium text-text-secondary">Bắt buộc trả lời</span>
-                         <label className="relative inline-flex items-center cursor-pointer">
-                           <input type="checkbox" className="sr-only peer" checked={q.required} onChange={(e) => updateQuestion(q.id, { required: e.target.checked })} />
-                           <div className="w-11 h-6 bg-surface-container-highest peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-border-subtle after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
-                         </label>
+                       <div className="mt-4 pt-4 border-t border-border-subtle flex flex-col sm:flex-row sm:items-center justify-end gap-4">
+                         {isQuiz && (q.type === 'single_choice' || q.type === 'multiple_choice') && (
+                           <div className="flex items-center gap-2">
+                             <span className="text-sm font-medium text-text-secondary">Điểm:</span>
+                             <input
+                               type="number"
+                               min="0"
+                               value={q.points !== undefined ? q.points : 1}
+                               onChange={(e) => updateQuestion(q.id, { points: parseInt(e.target.value) || 0 })}
+                               className="w-16 px-2 py-1 bg-surface-background border border-border-subtle rounded-md text-sm text-center focus:ring-2 focus:ring-primary/50 outline-none"
+                             />
+                           </div>
+                         )}
+                         <div className="flex items-center gap-3">
+                           <span className="text-sm font-medium text-text-secondary">Bắt buộc trả lời</span>
+                           <label className="relative inline-flex items-center cursor-pointer">
+                             <input type="checkbox" className="sr-only peer" checked={q.required} onChange={(e) => updateQuestion(q.id, { required: e.target.checked })} />
+                             <div className="w-11 h-6 bg-surface-container-highest peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-border-subtle after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+                           </label>
+                         </div>
                        </div>
                      )}
                    </div>

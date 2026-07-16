@@ -107,13 +107,14 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
           totalQ = 0;
           survey.questions.forEach(q => {
             if ((q.type === 'single_choice' || q.type === 'multiple_choice') && q.correctAnswer) {
-              totalQ++;
+              const qPoints = q.points !== undefined ? q.points : 1;
+              totalQ! += qPoints;
               const userAnswer = answers[q.id];
               if (q.type === 'single_choice' && userAnswer === q.correctAnswer) {
-                score++;
+                score! += qPoints;
               } else if (q.type === 'multiple_choice' && Array.isArray(userAnswer) && Array.isArray(q.correctAnswer)) {
                 if (userAnswer.length === q.correctAnswer.length && userAnswer.every(a => (q.correctAnswer as string[]).includes(a))) {
-                  score++;
+                  score! += qPoints;
                 }
               }
             }

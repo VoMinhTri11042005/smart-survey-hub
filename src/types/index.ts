@@ -19,6 +19,7 @@ export interface SurveyQuestion {
   options?: string[];
   required: boolean;
   correctAnswer?: string | string[]; // For quiz mode
+  points?: number; // Custom points for quiz mode
 }
 
 export interface Survey {
