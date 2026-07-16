@@ -174,17 +174,23 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
               {survey.isQuiz ? 'Hoàn thành Bài kiểm tra!' : 'Cảm ơn bạn!'}
             </h1>
             {survey.isQuiz ? (
-              <div className="mb-10 text-center animate-in slide-in-from-bottom-4 duration-700 delay-150 fill-mode-both">
-                <p className="text-text-secondary text-lg mb-2 font-medium">Điểm số của bạn:</p>
-                <div className="text-6xl font-display font-extrabold text-primary drop-shadow-md">
-                  {quizScore ?? 0} <span className="text-3xl text-text-secondary/50">/ {quizTotal ?? 0}</span>
-                </div>
-                {quizTotal !== undefined && quizTotal > 0 && (
-                  <div className="mt-4 inline-block bg-primary-fixed text-primary px-4 py-1.5 rounded-full text-sm font-bold">
-                    Đạt {Math.round(((quizScore ?? 0) / quizTotal) * 100)}%
+              survey.showScore !== false ? (
+                <div className="mb-10 text-center animate-in slide-in-from-bottom-4 duration-700 delay-150 fill-mode-both">
+                  <p className="text-text-secondary text-lg mb-2 font-medium">Điểm số của bạn:</p>
+                  <div className="text-6xl font-display font-extrabold text-primary drop-shadow-md">
+                    {quizScore ?? 0} <span className="text-3xl text-text-secondary/50">/ {quizTotal ?? 0}</span>
                   </div>
-                )}
-              </div>
+                  {quizTotal !== undefined && quizTotal > 0 && (
+                    <div className="mt-4 inline-block bg-primary-fixed text-primary px-4 py-1.5 rounded-full text-sm font-bold">
+                      Đạt {Math.round(((quizScore ?? 0) / quizTotal) * 100)}%
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <p className="text-text-secondary text-lg md:text-xl mb-10 max-w-lg mx-auto leading-relaxed">
+                  Đã ghi nhận kết quả bài làm của bạn.
+                </p>
+              )
             ) : (
               <p className="text-text-secondary text-lg md:text-xl mb-10 max-w-lg mx-auto leading-relaxed">
                 Phản hồi của bạn đã được ghi nhận. Những đóng góp quý báu này sẽ giúp chúng tôi nâng cao chất lượng dịch vụ.

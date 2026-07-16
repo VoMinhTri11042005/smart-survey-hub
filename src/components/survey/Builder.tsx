@@ -28,6 +28,7 @@ export function Builder({ onPublished, onError }: { onPublished?: () => void; on
   const [activeQuestionId, setActiveQuestionId] = useState<string | null>(null);
   const [isPublishing, setIsPublishing] = useState(false);
   const [isQuiz, setIsQuiz] = useState(false);
+  const [showScore, setShowScore] = useState(true);
   const [publishedSurvey, setPublishedSurvey] = useState<{ id: string; title: string } | null>(null);
 
   // AI Chat state
@@ -102,6 +103,7 @@ export function Builder({ onPublished, onError }: { onPublished?: () => void; on
         description: surveyDescription,
         questions,
         isQuiz,
+        showScore,
       });
       setCurrentSurvey(survey);
       setPublishedSurvey({ id: survey.id, title: survey.title });
@@ -543,6 +545,21 @@ export function Builder({ onPublished, onError }: { onPublished?: () => void; on
                        Chế độ chấm điểm
                      </span>
                    </label>
+                   {isQuiz && (
+                     <>
+                       <span className="hidden md:inline text-text-secondary">•</span>
+                       <label className="flex items-center gap-2 cursor-pointer group">
+                         <div className="relative">
+                           <input type="checkbox" className="sr-only" checked={showScore} onChange={(e) => setShowScore(e.target.checked)} />
+                           <div className={`block w-8 h-5 rounded-full transition-colors ${showScore ? 'bg-primary' : 'bg-surface-container-highest'}`}></div>
+                           <div className={`absolute left-[3px] top-[3px] bg-white w-3.5 h-3.5 rounded-full transition-transform ${showScore ? 'translate-x-3' : ''}`}></div>
+                         </div>
+                         <span className="text-xs md:text-sm font-semibold text-text-secondary group-hover:text-text-primary transition-colors">
+                           Hiện điểm cuối bài
+                         </span>
+                       </label>
+                     </>
+                   )}
                    <span className="hidden md:inline text-text-secondary">•</span>
                    <button
                      onClick={() => { setShowSurvey(false); setQuestions([]); setSurveyTitle(''); setIsQuiz(false); }}

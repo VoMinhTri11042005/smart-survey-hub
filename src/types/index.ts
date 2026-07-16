@@ -30,6 +30,7 @@ export interface Survey {
   createdAt: string;
   status: 'draft' | 'live' | 'closed';
   isQuiz?: boolean;
+  showScore?: boolean;
 }
 
 export interface SurveyResponse {
