@@ -154,11 +154,11 @@ export function Settings({ profile, onUpdateProfile, onClose, onShowToast, onAdd
                 <input
                   type="email"
                   value={formData.email}
-                  disabled
-                  className="w-full px-4 py-3 bg-surface-container/50 border border-border-subtle rounded-xl text-text-secondary opacity-70 cursor-not-allowed"
-                  placeholder="email@example.com"
+                  onChange={e => setFormData(prev => ({ ...prev, email: e.target.value }))}
+                  required
+                  className="w-full px-4 py-3 bg-surface-container-low border border-border-subtle rounded-xl text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all"
+                  placeholder="Nhập địa chỉ email của bạn"
                 />
-                <p className="text-xs text-text-secondary mt-1.5">Email không thể thay đổi vì được liên kết với tài khoản đăng nhập.</p>
               </div>
             </div>
 
