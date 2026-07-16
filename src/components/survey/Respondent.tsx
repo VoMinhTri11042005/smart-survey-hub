@@ -176,8 +176,8 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
     <div className="min-h-screen bg-surface-background flex flex-col font-sans text-text-primary animate-in fade-in duration-500 selection:bg-secondary-fixed selection:text-on-secondary-fixed">
       {/* Top Navigation */}
       <nav className="sticky top-0 z-50 bg-surface-background/90 backdrop-blur-md px-4 md:px-6 py-3 md:py-4 flex flex-col gap-2 border-b border-border-subtle/50">
-        <div className="flex justify-between items-center w-full">
-          <div className="font-display text-lg md:text-2xl font-bold text-primary truncate max-w-[200px] md:max-w-md">{survey.title || 'Khảo sát thông minh'}</div>
+        <div className="flex justify-between items-start md:items-center w-full">
+          <div className="font-display text-lg md:text-2xl font-bold text-primary flex-1 pr-4 break-words">{survey.title || 'Khảo sát thông minh'}</div>
           <div className="flex items-center gap-2 md:gap-3 shrink-0">
             <div className="flex items-center gap-1.5 bg-surface-container rounded-full px-2 md:px-3 py-1 md:py-1.5">
               <Timer size={14} className="text-text-secondary md:w-4 md:h-4" />
