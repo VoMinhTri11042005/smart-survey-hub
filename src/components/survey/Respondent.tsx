@@ -231,8 +231,21 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
       {/* Main Content */}
       <main className="flex-grow flex flex-col items-center px-4 md:px-6 pt-8 md:pt-12 pb-32 md:pb-40 w-full" key={step}>
         <div className="w-full max-w-[720px] space-y-6 md:space-y-8 animate-in slide-in-from-bottom-4 duration-500 fade-in">
+          {step === 0 && (
+            <div className="bg-white border-t-[10px] border-t-primary rounded-2xl shadow-sm p-6 md:p-10 border border-border-subtle mb-8">
+              <h1 className="font-display text-3xl md:text-4xl font-extrabold text-text-primary mb-4 leading-tight">
+                {survey.title || 'Khảo sát thông minh'}
+              </h1>
+              {survey.description && (
+                <div className="text-base md:text-lg text-text-secondary whitespace-pre-wrap leading-relaxed">
+                  {survey.description}
+                </div>
+              )}
+            </div>
+          )}
+
           <header className="space-y-2">
-            <h2 className="font-display text-2xl md:text-4xl font-bold text-text-primary tracking-tight leading-tight">
+            <h2 className="font-display text-2xl md:text-3xl font-bold text-text-primary tracking-tight leading-tight">
               {currentQuestion.text}
             </h2>
             {currentQuestion.required && (

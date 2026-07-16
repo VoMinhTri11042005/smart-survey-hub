@@ -316,21 +316,31 @@ export function Builder({ onPublished, onError }: { onPublished?: () => void; on
            ) : (
              <>
                {/* Survey Title */}
-               <div className="bg-white rounded-2xl border border-border-subtle shadow-sm p-6">
+               <div className="bg-white rounded-2xl border border-border-subtle shadow-sm p-6 md:p-8">
                  <label className="text-xs font-bold text-text-secondary uppercase tracking-wider mb-2 block">Tiêu đề khảo sát</label>
-                 <input
-                   type="text"
+                 <textarea
                    value={surveyTitle}
                    onChange={(e) => setSurveyTitle(e.target.value)}
-                   className="w-full font-display text-2xl font-bold text-text-primary border-none focus:ring-0 p-0 outline-none bg-transparent"
+                   onInput={(e) => {
+                     const target = e.target as HTMLTextAreaElement;
+                     target.style.height = 'auto';
+                     target.style.height = `${target.scrollHeight}px`;
+                   }}
+                   className="w-full font-display text-3xl md:text-4xl font-bold text-text-primary border-none focus:ring-0 p-0 outline-none bg-transparent resize-none overflow-hidden"
                    placeholder="Nhập tiêu đề khảo sát..."
+                   rows={1}
                  />
-                 <input
-                   type="text"
+                 <textarea
                    value={surveyDescription}
                    onChange={(e) => setSurveyDescription(e.target.value)}
-                   className="w-full text-sm text-text-secondary border-none focus:ring-0 p-0 outline-none bg-transparent mt-2"
+                   onInput={(e) => {
+                     const target = e.target as HTMLTextAreaElement;
+                     target.style.height = 'auto';
+                     target.style.height = `${target.scrollHeight}px`;
+                   }}
+                   className="w-full text-base text-text-secondary border-none focus:ring-0 p-0 outline-none bg-transparent mt-4 resize-none overflow-hidden"
                    placeholder="Mô tả ngắn gọn về khảo sát..."
+                   rows={1}
                  />
                </div>
 
