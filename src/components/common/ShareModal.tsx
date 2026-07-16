@@ -112,7 +112,7 @@ export function ShareModal({ isOpen, onClose, surveyId, surveyTitle }: ShareModa
                   }`}
                 >
                   {copied ? <Check size={16} /> : <Copy size={16} />}
-                  {copied ? 'Đã sao' : 'Sao chép'}
+                  {copied ? 'Đã sao chép' : 'Sao chép'}
                 </button>
               </div>
             </div>
