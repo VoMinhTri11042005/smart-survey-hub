@@ -18,6 +18,7 @@ export interface SurveyQuestion {
   text: string;
   options?: string[];
   required: boolean;
+  correctAnswer?: string | string[]; // For quiz mode
 }
 
 export interface Survey {
@@ -27,12 +28,15 @@ export interface Survey {
   questions: SurveyQuestion[];
   createdAt: string;
   status: 'draft' | 'live' | 'closed';
+  isQuiz?: boolean;
 }
 
 export interface SurveyResponse {
   id: string;
   surveyId: string;
   answers: Record<string, string | string[] | number>;
+  score?: number;
+  totalQuizQuestions?: number;
   submittedAt: string;
 }
 

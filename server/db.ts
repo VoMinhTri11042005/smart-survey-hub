@@ -25,6 +25,7 @@ export const initDB = async () => {
         title VARCHAR(255) NOT NULL,
         description TEXT,
         questions JSONB NOT NULL,
+        is_quiz BOOLEAN DEFAULT FALSE,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         status VARCHAR(50) DEFAULT 'draft'
       );
@@ -37,14 +38,20 @@ export const initDB = async () => {
         survey_id VARCHAR(255) REFERENCES surveys(id) ON DELETE CASCADE,
         respondent_id VARCHAR(255),
         answers JSONB NOT NULL,
+        score INT,
+        total_quiz_questions INT,
         submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         UNIQUE (survey_id, respondent_id)
       );
     `);
 
-    // In case table already exists without respondent_id
+    // In case table already exists without respondent_id or quiz columns
     try {
+      await client.query(`ALTER TABLE surveys ADD COLUMN IF NOT EXISTS is_quiz BOOLEAN DEFAULT FALSE;`);
+      
       await client.query(`ALTER TABLE responses ADD COLUMN IF NOT EXISTS respondent_id VARCHAR(255);`);
+      await client.query(`ALTER TABLE responses ADD COLUMN IF NOT EXISTS score INT;`);
+      await client.query(`ALTER TABLE responses ADD COLUMN IF NOT EXISTS total_quiz_questions INT;`);
       await client.query(`ALTER TABLE responses ADD CONSTRAINT responses_survey_id_respondent_id_key UNIQUE (survey_id, respondent_id);`);
     } catch (e) {
       // Ignore if constraint already exists

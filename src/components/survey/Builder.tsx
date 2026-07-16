@@ -25,6 +25,7 @@ export function Builder({ onPublished, onError }: { onPublished?: () => void; on
   const [questions, setQuestions] = useState<SurveyQuestion[]>([]);
   const [activeQuestionId, setActiveQuestionId] = useState<string | null>(null);
   const [isPublishing, setIsPublishing] = useState(false);
+  const [isQuiz, setIsQuiz] = useState(false);
   const [publishedSurvey, setPublishedSurvey] = useState<{ id: string; title: string } | null>(null);
 
   // AI Chat state
@@ -98,6 +99,7 @@ export function Builder({ onPublished, onError }: { onPublished?: () => void; on
         title: surveyTitle,
         description: surveyDescription,
         questions,
+        isQuiz,
       });
       setCurrentSurvey(survey);
       setPublishedSurvey({ id: survey.id, title: survey.title });
@@ -163,7 +165,7 @@ export function Builder({ onPublished, onError }: { onPublished?: () => void; on
   };
 
   const changeQuestionType = (questionId: string, newType: QuestionType) => {
-    const updates: Partial<SurveyQuestion> = { type: newType };
+    const updates: Partial<SurveyQuestion> = { type: newType, correctAnswer: undefined };
     if (newType === 'single_choice' || newType === 'multiple_choice') {
       const q = questions.find(q => q.id === questionId);
       if (!q?.options || q.options.length === 0) {
@@ -173,6 +175,22 @@ export function Builder({ onPublished, onError }: { onPublished?: () => void; on
       updates.options = undefined;
     }
     updateQuestion(questionId, updates);
+  };
+
+  const toggleCorrectAnswer = (questionId: string, optionValue: string) => {
+    const q = questions.find(q => q.id === questionId);
+    if (!q) return;
+    if (q.type === 'single_choice') {
+      updateQuestion(questionId, { correctAnswer: optionValue });
+    } else if (q.type === 'multiple_choice') {
+      let current = q.correctAnswer;
+      if (!Array.isArray(current)) current = current ? [current] : [];
+      if (current.includes(optionValue)) {
+        updateQuestion(questionId, { correctAnswer: current.filter(val => val !== optionValue) });
+      } else {
+        updateQuestion(questionId, { correctAnswer: [...current, optionValue] });
+      }
+    }
   };
 
   return (
@@ -400,11 +418,24 @@ export function Builder({ onPublished, onError }: { onPublished?: () => void; on
                      {(q.type === 'single_choice' || q.type === 'multiple_choice') && q.options && (
                        <div className="space-y-2 mt-3">
                          {q.options.map((opt, optIdx) => (
-                           <div key={optIdx} className="flex items-center gap-3 p-3 bg-surface-background rounded-xl border border-border-subtle group">
-                             {q.type === 'single_choice'
-                               ? <CircleDot size={18} className="text-text-secondary flex-shrink-0" />
-                               : <CheckSquare size={18} className="text-text-secondary flex-shrink-0" />
-                             }
+                           <div key={optIdx} className={`flex items-center gap-3 p-3 bg-surface-background rounded-xl border group ${isQuiz && ((q.type === 'single_choice' && q.correctAnswer === opt) || (q.type === 'multiple_choice' && Array.isArray(q.correctAnswer) && q.correctAnswer.includes(opt))) ? 'border-sentiment-positive bg-sentiment-positive/5' : 'border-border-subtle'}`}>
+                             {isQuiz ? (
+                               <button
+                                 onClick={(e) => { e.stopPropagation(); toggleCorrectAnswer(q.id, opt); }}
+                                 className={`flex-shrink-0 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors cursor-pointer ${
+                                   (q.type === 'single_choice' && q.correctAnswer === opt) || (q.type === 'multiple_choice' && Array.isArray(q.correctAnswer) && q.correctAnswer.includes(opt))
+                                     ? 'border-sentiment-positive bg-sentiment-positive text-white' 
+                                     : 'border-text-secondary hover:border-sentiment-positive'
+                                 }`}
+                                 title="Đánh dấu là đáp án đúng"
+                               >
+                                 {((q.type === 'single_choice' && q.correctAnswer === opt) || (q.type === 'multiple_choice' && Array.isArray(q.correctAnswer) && q.correctAnswer.includes(opt))) && <CheckCircle2 size={12} />}
+                               </button>
+                             ) : (
+                               q.type === 'single_choice'
+                                 ? <CircleDot size={18} className="text-text-secondary flex-shrink-0" />
+                                 : <CheckSquare size={18} className="text-text-secondary flex-shrink-0" />
+                             )}
                              <input
                                type="text"
                                value={opt}
@@ -476,11 +507,22 @@ export function Builder({ onPublished, onError }: { onPublished?: () => void; on
 
                {/* Publish Bar */}
                <div className="fixed bottom-0 left-0 md:left-64 right-0 md:right-80 bg-white/95 backdrop-blur-md border-t border-border-subtle p-4 flex items-center justify-between z-20">
-                 <div className="flex items-center gap-2 md:gap-3">
+                 <div className="flex items-center gap-2 md:gap-4">
                    <span className="text-xs md:text-sm font-medium text-text-secondary">{questions.length} câu hỏi</span>
                    <span className="hidden md:inline text-text-secondary">•</span>
+                   <label className="flex items-center gap-2 cursor-pointer group">
+                     <div className="relative">
+                       <input type="checkbox" className="sr-only" checked={isQuiz} onChange={(e) => setIsQuiz(e.target.checked)} />
+                       <div className={`block w-10 h-6 rounded-full transition-colors ${isQuiz ? 'bg-sentiment-positive' : 'bg-surface-container-highest'}`}></div>
+                       <div className={`absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${isQuiz ? 'translate-x-4' : ''}`}></div>
+                     </div>
+                     <span className={`text-xs md:text-sm font-semibold transition-colors ${isQuiz ? 'text-sentiment-positive' : 'text-text-secondary group-hover:text-text-primary'}`}>
+                       Chế độ chấm điểm
+                     </span>
+                   </label>
+                   <span className="hidden md:inline text-text-secondary">•</span>
                    <button
-                     onClick={() => { setShowSurvey(false); setQuestions([]); setSurveyTitle(''); }}
+                     onClick={() => { setShowSurvey(false); setQuestions([]); setSurveyTitle(''); setIsQuiz(false); }}
                      className="text-xs md:text-sm font-semibold text-text-secondary hover:text-sentiment-negative transition-colors cursor-pointer"
                    >
                      Tạo lại

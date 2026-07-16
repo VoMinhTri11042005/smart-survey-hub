@@ -31,6 +31,8 @@ export interface SurveyAnalytics {
   starRatings: StarRatingResult[];
   textResponses: { questionText: string; responses: string[] }[];
   recentResponses: SurveyResponse[];
+  averageScore?: number;
+  quizTotalQuestions?: number;
 }
 
 export function calculateNps(scores: number[]): NpsResult | null {
@@ -58,6 +60,20 @@ export function calculateNps(scores: number[]): NpsResult | null {
 export function computeSurveyAnalytics(survey: Survey, responses: SurveyResponse[]): SurveyAnalytics {
   const totalResponses = responses.length;
   const requiredCount = survey.questions.filter(q => q.required).length;
+
+  let totalScore = 0;
+  let quizCount = 0;
+  let quizTotalQuestions = 0;
+  
+  if (survey.isQuiz) {
+    responses.forEach(r => {
+      if (r.score !== undefined && r.totalQuizQuestions !== undefined) {
+        totalScore += r.score;
+        quizTotalQuestions = r.totalQuizQuestions;
+        quizCount++;
+      }
+    });
+  }
 
   let fullyAnswered = 0;
   for (const resp of responses) {
@@ -143,11 +159,16 @@ export function computeSurveyAnalytics(survey: Survey, responses: SurveyResponse
     starRatings,
     textResponses,
     recentResponses: [...responses].sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime()).slice(0, 10),
+    averageScore: quizCount > 0 ? Number((totalScore / quizCount).toFixed(1)) : undefined,
+    quizTotalQuestions: quizTotalQuestions > 0 ? quizTotalQuestions : undefined,
   };
 }
 
 export function exportResponsesToCsv(survey: Survey, responses: SurveyResponse[]): string {
-  const headers = ['ID', 'Ngày gửi', ...survey.questions.map(q => q.text)];
+  const headers = ['ID', 'Ngày gửi'];
+  if (survey.isQuiz) headers.push('Điểm số', 'Tổng số câu', 'Tỷ lệ %');
+  headers.push(...survey.questions.map(q => q.text));
+  
   const rows = responses.map(r => {
       const d = new Date(r.submittedAt);
       const dateStr = `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}/${d.getFullYear()} ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
@@ -155,12 +176,20 @@ export function exportResponsesToCsv(survey: Survey, responses: SurveyResponse[]
       const cells = [
         r.id,
         dateStr,
-      ...survey.questions.map(q => {
+      ];
+      
+      if (survey.isQuiz) {
+        cells.push(r.score ?? '');
+        cells.push(r.totalQuizQuestions ?? '');
+        cells.push(r.totalQuizQuestions ? Math.round(((r.score ?? 0) / r.totalQuizQuestions) * 100) + '%' : '');
+      }
+
+      cells.push(...survey.questions.map(q => {
         const ans = r.answers[q.id];
         if (Array.isArray(ans)) return ans.join('; ');
         return ans !== undefined ? String(ans) : '';
-      }),
-    ];
+      }));
+      
     return cells.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',');
   });
   return [headers.map(h => `"${h.replace(/"/g, '""')}"`).join(','), ...rows].join('\n');

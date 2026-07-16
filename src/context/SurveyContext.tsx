@@ -16,7 +16,7 @@ interface SurveyContextType {
   setCurrentSurvey: (survey: Survey | null) => void;
   setSearchQuery: (query: string) => void;
 
-  submitResponse: (surveyId: string, respondentId: string, answers: Record<string, string | string[] | number>) => Promise<void>;
+  submitResponse: (surveyId: string, respondentId: string, answers: Record<string, string | string[] | number>, score?: number, totalQuizQuestions?: number) => Promise<void>;
   fetchResponses: (surveyId: string) => Promise<SurveyResponse[]>;
   fetchMyResponse: (surveyId: string, respondentId: string) => Promise<SurveyResponse | null>;
 
@@ -139,12 +139,12 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
     if (currentSurvey?.id === id) setCurrentSurvey(null);
   }, [currentSurvey?.id]);
 
-  const submitResponse = useCallback(async (surveyId: string, respondentId: string, answers: Record<string, string | string[] | number>) => {
+  const submitResponse = useCallback(async (surveyId: string, respondentId: string, answers: Record<string, string | string[] | number>, score?: number, totalQuizQuestions?: number) => {
     try {
       const res = await fetch(`${API_BASE}/surveys/${surveyId}/responses`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ respondentId, answers })
+        body: JSON.stringify({ respondentId, answers, score, totalQuizQuestions })
       });
       if (!res.ok) throw new Error('Failed to submit response');
     } catch (error) {

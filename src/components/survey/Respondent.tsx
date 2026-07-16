@@ -19,6 +19,8 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
   const [isCompleted, setIsCompleted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [quizScore, setQuizScore] = useState<number | undefined>(undefined);
+  const [quizTotal, setQuizTotal] = useState<number | undefined>(undefined);
 
   useEffect(() => {
     if (!survey) return;
@@ -32,8 +34,11 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
       setRespondentId(rid);
 
       const existingResponse = await fetchMyResponse(survey.id, rid);
-      if (existingResponse && existingResponse.answers) {
+      if (existingResponse && existingResponse.answers && Object.keys(existingResponse.answers).length > 0) {
         setAnswers(existingResponse.answers);
+        if (existingResponse.score !== undefined) setQuizScore(existingResponse.score);
+        if (existingResponse.totalQuizQuestions !== undefined) setQuizTotal(existingResponse.totalQuizQuestions);
+        setIsCompleted(true);
       }
       setIsLoading(false);
     };
@@ -94,7 +99,30 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
     } else {
       setIsSubmitting(true);
       try { 
-        await submitResponse(survey.id, respondentId, answers); 
+        let score = undefined;
+        let totalQ = undefined;
+        
+        if (survey.isQuiz) {
+          score = 0;
+          totalQ = 0;
+          survey.questions.forEach(q => {
+            if ((q.type === 'single_choice' || q.type === 'multiple_choice') && q.correctAnswer) {
+              totalQ++;
+              const userAnswer = answers[q.id];
+              if (q.type === 'single_choice' && userAnswer === q.correctAnswer) {
+                score++;
+              } else if (q.type === 'multiple_choice' && Array.isArray(userAnswer) && Array.isArray(q.correctAnswer)) {
+                if (userAnswer.length === q.correctAnswer.length && userAnswer.every(a => (q.correctAnswer as string[]).includes(a))) {
+                  score++;
+                }
+              }
+            }
+          });
+          setQuizScore(score);
+          setQuizTotal(totalQ);
+        }
+        
+        await submitResponse(survey.id, respondentId, answers, score, totalQ); 
         setIsCompleted(true);
         if (onComplete) onComplete();
       } catch (e) {
@@ -142,20 +170,27 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
             </div>
             
             <h1 className="font-display text-4xl md:text-5xl font-extrabold text-text-primary mb-4 tracking-tight leading-tight">
-              Cảm ơn bạn!
+              {survey.isQuiz ? 'Hoàn thành Bài kiểm tra!' : 'Cảm ơn bạn!'}
             </h1>
-            <p className="text-text-secondary text-lg md:text-xl mb-10 max-w-lg mx-auto leading-relaxed">
-              Phản hồi của bạn đã được ghi nhận. Những đóng góp quý báu này sẽ giúp chúng tôi nâng cao chất lượng dịch vụ.
-            </p>
+            {survey.isQuiz ? (
+              <div className="mb-10 text-center animate-in slide-in-from-bottom-4 duration-700 delay-150 fill-mode-both">
+                <p className="text-text-secondary text-lg mb-2 font-medium">Điểm số của bạn:</p>
+                <div className="text-6xl font-display font-extrabold text-primary drop-shadow-md">
+                  {quizScore ?? 0} <span className="text-3xl text-text-secondary/50">/ {quizTotal ?? 0}</span>
+                </div>
+                {quizTotal !== undefined && quizTotal > 0 && (
+                  <div className="mt-4 inline-block bg-primary-fixed text-primary px-4 py-1.5 rounded-full text-sm font-bold">
+                    Đạt {Math.round(((quizScore ?? 0) / quizTotal) * 100)}%
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="text-text-secondary text-lg md:text-xl mb-10 max-w-lg mx-auto leading-relaxed">
+                Phản hồi của bạn đã được ghi nhận. Những đóng góp quý báu này sẽ giúp chúng tôi nâng cao chất lượng dịch vụ.
+              </p>
+            )}
 
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-              <button 
-                onClick={() => setIsCompleted(false)} 
-                className="w-full sm:w-auto px-8 py-3.5 bg-surface-container-lowest border border-border-subtle text-text-primary font-bold rounded-2xl hover:bg-surface-container-low transition-colors shadow-sm flex items-center justify-center gap-2"
-              >
-                <Edit3 size={18} />
-                Sửa lại đáp án
-              </button>
               {!isPublic && (
                 <button 
                   onClick={onExit} 
@@ -229,7 +264,7 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
             <div className="space-y-3">
               {currentQuestion.options.map((option, idx) => (
                 <button key={idx} onClick={() => setAnswer(option)} className={`w-full text-left flex items-center gap-4 p-4 rounded-xl border-2 transition-all cursor-pointer ${currentAnswer === option ? 'border-primary bg-primary-fixed shadow-sm' : 'border-border-subtle bg-white hover:border-primary/30 hover:shadow-sm'}`}>
-                  <CircleDot size={20} className={currentAnswer === option ? 'text-primary' : 'text-text-secondary'} />
+                  <CircleDot size={20} className={`flex-shrink-0 ${currentAnswer === option ? 'text-primary' : 'text-text-secondary'}`} />
                   <span className={`text-base font-medium ${currentAnswer === option ? 'text-primary' : 'text-text-primary'}`}>{option}</span>
                 </button>
               ))}
@@ -243,7 +278,7 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
                 const selected = (currentAnswer || []).includes(option);
                 return (
                   <button key={idx} onClick={() => toggleMultiple(option)} className={`w-full text-left flex items-center gap-4 p-4 rounded-xl border-2 transition-all cursor-pointer ${selected ? 'border-primary bg-primary-fixed shadow-sm' : 'border-border-subtle bg-white hover:border-primary/30 hover:shadow-sm'}`}>
-                    <CheckSquare size={20} className={selected ? 'text-primary' : 'text-text-secondary'} />
+                    <CheckSquare size={20} className={`flex-shrink-0 ${selected ? 'text-primary' : 'text-text-secondary'}`} />
                     <span className={`text-base font-medium ${selected ? 'text-primary' : 'text-text-primary'}`}>{option}</span>
                   </button>
                 );

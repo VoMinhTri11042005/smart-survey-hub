@@ -13,12 +13,12 @@ router.post('/surveys', async (req, res) => {
   if (!process.env.DATABASE_URL) return res.status(500).json({ error: 'Database not configured' });
   try {
     const id = req.body.id || generateId();
-    const { title, description, questions, status } = req.body;
+    const { title, description, questions, status, isQuiz } = req.body;
     
     const result = await pool.query(
-      `INSERT INTO surveys (id, title, description, questions, status) 
-       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-      [id, title, description, JSON.stringify(questions), status || 'live']
+      `INSERT INTO surveys (id, title, description, questions, is_quiz, status) 
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+      [id, title, description, JSON.stringify(questions), Boolean(isQuiz), status || 'live']
     );
     
     // PostgreSQL usually returns camelCase if specified or snake_case
@@ -57,6 +57,7 @@ router.get('/surveys', async (_req, res) => {
       questions: row.questions,
       createdAt: row.created_at,
       status: row.status,
+      isQuiz: row.is_quiz || false,
       responseCount: parseInt(row.responseCount, 10)
     }));
     res.json(surveys);
@@ -89,6 +90,7 @@ router.get('/surveys/:id', async (req, res) => {
       questions: row.questions,
       createdAt: row.created_at,
       status: row.status,
+      isQuiz: row.is_quiz || false,
       responseCount: parseInt(row.responseCount, 10)
     });
   } catch (err) {
@@ -121,19 +123,19 @@ router.post('/surveys/:id/responses', async (req, res) => {
       return res.status(404).json({ error: 'Không tìm thấy khảo sát.' });
     }
 
-    const { respondentId, answers } = req.body;
+    const { respondentId, answers, score, totalQuizQuestions } = req.body;
     if (!respondentId) {
       return res.status(400).json({ error: 'Thiếu định danh người dùng.' });
     }
 
     const id = generateId();
     const result = await pool.query(
-      `INSERT INTO responses (id, survey_id, respondent_id, answers) 
-       VALUES ($1, $2, $3, $4)
+      `INSERT INTO responses (id, survey_id, respondent_id, answers, score, total_quiz_questions) 
+       VALUES ($1, $2, $3, $4, $5, $6)
        ON CONFLICT (survey_id, respondent_id) 
-       DO UPDATE SET answers = EXCLUDED.answers, submitted_at = CURRENT_TIMESTAMP
+       DO UPDATE SET answers = EXCLUDED.answers, score = EXCLUDED.score, total_quiz_questions = EXCLUDED.total_quiz_questions, submitted_at = CURRENT_TIMESTAMP
        RETURNING *`,
-      [id, req.params.id, respondentId, JSON.stringify(answers)]
+      [id, req.params.id, respondentId, JSON.stringify(answers), score ?? null, totalQuizQuestions ?? null]
     );
     
     const row = result.rows[0];
@@ -142,6 +144,8 @@ router.post('/surveys/:id/responses', async (req, res) => {
       surveyId: row.survey_id,
       respondentId: row.respondent_id,
       answers: row.answers,
+      score: row.score,
+      totalQuizQuestions: row.total_quiz_questions,
       submittedAt: row.submitted_at
     });
   } catch (err) {
@@ -167,6 +171,8 @@ router.get('/surveys/:id/responses/my/:respondentId', async (req, res) => {
       surveyId: row.survey_id,
       respondentId: row.respondent_id,
       answers: row.answers,
+      score: row.score,
+      totalQuizQuestions: row.total_quiz_questions,
       submittedAt: row.submitted_at
     });
   } catch (err) {
@@ -184,6 +190,8 @@ router.get('/surveys/:id/responses', async (req, res) => {
       id: row.id,
       surveyId: row.survey_id,
       answers: row.answers,
+      score: row.score,
+      totalQuizQuestions: row.total_quiz_questions,
       submittedAt: row.submitted_at
     }));
     res.json(responses);

@@ -242,6 +242,19 @@ export function Analytics() {
                 <p className="font-display text-3xl font-bold text-text-primary">{analytics.completionRate}%</p>
               </div>
             </div>
+            {selectedSurvey?.isQuiz && analytics.averageScore !== undefined && (
+              <div className="col-span-2 bg-primary-fixed/20 p-6 rounded-3xl border border-primary/20 shadow-sm flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center text-primary shadow-sm">
+                    <CheckCircle className="text-primary" size={24} />
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold text-primary uppercase tracking-widest mb-1">Điểm số trung bình</p>
+                    <p className="font-display text-2xl font-bold text-primary">{analytics.averageScore} / {analytics.quizTotalQuestions}</p>
+                  </div>
+                </div>
+              </div>
+            )}
             <div className="col-span-2 bg-secondary-fixed p-6 rounded-3xl border border-secondary-fixed-dim shadow-sm flex items-center justify-between">
               <div className="flex items-center gap-4">
                 <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center text-primary shadow-sm">
@@ -284,7 +297,11 @@ export function Analytics() {
                   <div key={r.id} className="flex items-center justify-between p-3 bg-surface-container-low rounded-xl">
                     <span className="text-xs font-mono text-text-secondary">#{r.id.slice(0, 6)}</span>
                     <span className="text-xs text-text-secondary">{new Date(r.submittedAt).toLocaleString('vi-VN')}</span>
-                    <span className="text-xs font-bold text-primary">{Object.keys(r.answers).length} câu trả lời</span>
+                    {selectedSurvey?.isQuiz && r.score !== undefined ? (
+                      <span className="text-xs font-bold text-sentiment-positive">{r.score}/{r.totalQuizQuestions} điểm</span>
+                    ) : (
+                      <span className="text-xs font-bold text-primary">{Object.keys(r.answers).length} câu trả lời</span>
+                    )}
                   </div>
                 ))}
               </div>
