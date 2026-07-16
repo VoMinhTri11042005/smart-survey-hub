@@ -4,8 +4,8 @@ import { useState, useRef, useEffect } from 'react';
 import { useSurvey } from '../../context/SurveyContext';
 import { ShareModal } from '../common/ShareModal';
 import ReactMarkdown from 'react-markdown';
-import ReactQuill from 'react-quill';
-import 'react-quill/dist/quill.snow.css';
+import ReactQuill from 'react-quill-new';
+import 'react-quill-new/dist/quill.snow.css';
 import type { SurveyQuestion, QuestionType } from '../../types';
 
 const questionTypeLabels: Record<QuestionType, { label: string; icon: React.ReactNode }> = {
