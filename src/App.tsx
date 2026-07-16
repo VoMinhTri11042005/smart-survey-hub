@@ -66,7 +66,13 @@ function AppContent() {
   useEffect(() => {
     const fetchUserProfile = async () => {
       try {
-        const response = await fetch('/api/user/admin');
+        let envApi = (import.meta as any).env.VITE_API_URL;
+        if (envApi && !envApi.endsWith('/api')) {
+          envApi = envApi.endsWith('/') ? envApi + 'api' : envApi + '/api';
+        }
+        const apiBase = envApi || '/api';
+        
+        const response = await fetch(`${apiBase}/user/admin`);
         if (response.ok) {
           const data = await response.json();
           setUserProfile(data);

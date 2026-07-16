@@ -20,7 +20,13 @@ export function Settings({ profile, onUpdateProfile, onClose, onShowToast, onAdd
     setIsSaving(true);
 
     try {
-      const res = await fetch('/api/user', {
+      let envApi = (import.meta as any).env.VITE_API_URL;
+      if (envApi && !envApi.endsWith('/api')) {
+        envApi = envApi.endsWith('/') ? envApi + 'api' : envApi + '/api';
+      }
+      const apiBase = envApi || '/api';
+
+      const res = await fetch(`${apiBase}/user`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: 'admin', ...formData })
