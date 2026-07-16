@@ -62,6 +62,23 @@ function AppContent() {
     };
   });
 
+  // Fetch user profile from DB on load
+  useEffect(() => {
+    const fetchUserProfile = async () => {
+      try {
+        const response = await fetch('/api/user/admin');
+        if (response.ok) {
+          const data = await response.json();
+          setUserProfile(data);
+          localStorage.setItem('userProfile', JSON.stringify(data));
+        }
+      } catch (error) {
+        console.error('Error fetching user profile:', error);
+      }
+    };
+    fetchUserProfile();
+  }, []);
+
   useEffect(() => {
     try {
       localStorage.setItem('userProfile', JSON.stringify(userProfile));

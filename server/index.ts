@@ -9,6 +9,7 @@ import uploadRoutes from './routes/upload.routes';
 import surveyRoutes from './routes/survey.routes';
 import chatRoutes from './routes/chat.routes';
 import teamRoutes from './routes/team.routes';
+import userRoutes from './routes/user.routes';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -25,6 +26,7 @@ app.use('/api', uploadRoutes);
 app.use('/api', surveyRoutes);
 app.use('/api', chatRoutes);
 app.use('/api', teamRoutes);
+app.use('/api', userRoutes);
 
 // ─── Serve Frontend in Production ───
 const __filename = fileURLToPath(import.meta.url);

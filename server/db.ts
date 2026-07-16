@@ -61,6 +61,25 @@ export const initDB = async () => {
       );
     `);
 
+    // Create users table for user profiles
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id VARCHAR(255) PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        email VARCHAR(255),
+        photo_url TEXT,
+        tagline VARCHAR(255),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    // Insert default admin user if not exists
+    await client.query(`
+      INSERT INTO users (id, name, email, photo_url, tagline)
+      VALUES ('admin', 'Alex Chen', 'alex@company.com', 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=80&w=150&auto=format&fit=crop', 'Nhà sáng tạo Cấp 3')
+      ON CONFLICT (id) DO NOTHING;
+    `);
+
     client.release();
     console.log('✅ PostgreSQL Database connected and tables initialized.');
   } catch (err) {

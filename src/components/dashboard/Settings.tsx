@@ -15,18 +15,31 @@ export function Settings({ profile, onUpdateProfile, onClose, onShowToast, onAdd
   const [formData, setFormData] = useState<UserProfile>(profile);
   const [isSaving, setIsSaving] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSaving(true);
 
-    // Simulate API call
-    setTimeout(() => {
-      onUpdateProfile(formData);
+    try {
+      const res = await fetch('/api/user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: 'admin', ...formData })
+      });
+      
+      if (res.ok) {
+        onUpdateProfile(formData);
+        if (onShowToast) onShowToast('Cập nhật thông tin và đồng bộ thành công!', 'success');
+        if (onAddNotification) onAddNotification('Bạn vừa cập nhật thông tin cá nhân');
+        if (onClose) onClose();
+      } else {
+        if (onShowToast) onShowToast('Lỗi khi đồng bộ!', 'error');
+      }
+    } catch (error) {
+      console.error(error);
+      if (onShowToast) onShowToast('Lỗi kết nối mạng!', 'error');
+    } finally {
       setIsSaving(false);
-      if (onShowToast) onShowToast('Cập nhật thông tin thành công!', 'success');
-      if (onAddNotification) onAddNotification('Bạn vừa cập nhật thông tin cá nhân');
-      if (onClose) onClose();
-    }, 800);
+    }
   };
 
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
