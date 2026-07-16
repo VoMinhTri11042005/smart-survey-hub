@@ -196,25 +196,7 @@ export function Builder({ onPublished, onError }: { onPublished?: () => void; on
   return (
     <div className="flex flex-col md:flex-row h-full w-full overflow-y-auto md:overflow-hidden animate-in fade-in duration-500">
       
-      {/* Left Sidebar: Question Types */}
-      <aside className="w-full md:w-64 bg-surface-container-low flex flex-col border-b md:border-b-0 md:border-r border-border-subtle shrink-0">
-        <div className="p-4 md:p-6">
-          <h2 className="text-xs font-bold text-text-secondary uppercase tracking-wider mb-2 md:mb-4">Loại câu hỏi (Kéo thả)</h2>
-          <div className="flex md:flex-col gap-2 overflow-x-auto custom-scrollbar pb-2 md:pb-0">
-             <DraggableItem icon={<CircleDot size={20} className="text-primary" />} label="Một lựa chọn" />
-             <DraggableItem icon={<CheckSquare size={20} className="text-primary" />} label="Nhiều lựa chọn" />
-             <DraggableItem icon={<Star size={20} className="text-primary" />} label="Thang điểm" />
-             <DraggableItem icon={<AlignLeft size={20} className="text-primary" />} label="Văn bản tự do" />
-             <DraggableItem icon={<Minus size={20} className="text-primary" />} label="Điểm NPS" />
-          </div>
-        </div>
-        <div className="hidden md:block mt-auto p-6 border-t border-border-subtle bg-surface-container">
-           <div className="flex items-center gap-3 text-text-secondary text-xs font-medium">
-              <Info size={16} />
-              <span>Kéo thả vào vùng trung tâm</span>
-           </div>
-        </div>
-      </aside>
+
 
       {/* Center Canvas */}
       <section className="flex-1 min-h-[600px] md:min-h-0 md:overflow-y-auto bg-surface-background p-4 md:p-8 relative">
@@ -664,11 +646,4 @@ export function Builder({ onPublished, onError }: { onPublished?: () => void; on
   );
 }
 
-function DraggableItem({ icon, label }: { icon: React.ReactNode, label: string }) {
-  return (
-    <div className="flex items-center gap-3 p-3.5 bg-white border border-border-subtle rounded-xl cursor-grab hover:shadow-md hover:border-primary/30 transition-all group">
-      {icon}
-      <span className="text-sm font-semibold text-text-primary group-hover:text-primary transition-colors">{label}</span>
-    </div>
-  );
-}
+
