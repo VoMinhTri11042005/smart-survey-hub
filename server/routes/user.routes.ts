@@ -5,6 +5,9 @@ const router = Router();
 
 // GET user profile
 router.get('/user/:id', async (req, res) => {
+  if (!process.env.DATABASE_URL) {
+    return res.status(404).json({ error: 'Database not configured' });
+  }
   try {
     const { id } = req.params;
     const result = await pool.query('SELECT * FROM users WHERE id = $1', [id]);
@@ -26,6 +29,10 @@ router.get('/user/:id', async (req, res) => {
 
 // POST/PUT update user profile
 router.post('/user', async (req, res) => {
+  if (!process.env.DATABASE_URL) {
+    // If testing locally without DB, just return success so frontend uses localStorage
+    return res.json({ success: true, message: 'Local profile updated' });
+  }
   try {
     const { id = 'admin', name, email, photoURL, tagline } = req.body;
     
