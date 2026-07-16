@@ -4,6 +4,14 @@ import { useSurvey } from '../../context/SurveyContext';
 import { computeSurveyAnalytics, exportResponsesToCsv } from '../../utils/analytics';
 import type { Survey, SurveyResponse } from '../../types';
 
+const stripHtml = (html: string) => {
+  const tmp = document.createElement("DIV");
+  tmp.innerHTML = html;
+  return tmp.textContent || tmp.innerText || "";
+};
+
+
+
 export function Analytics() {
   const { surveys, currentSurvey, setCurrentSurvey, fetchSurveys, fetchResponses } = useSurvey();
   const [selectedSurvey, setSelectedSurvey] = useState<Survey | null>(currentSurvey);
@@ -182,7 +190,7 @@ export function Analytics() {
               <div className="flex-1 flex flex-col justify-center space-y-6">
                 {analytics.choiceDistributions.slice(0, 4).map(dist => (
                   <div key={dist.questionId} className="space-y-3">
-                    <p className="text-xs font-semibold text-text-secondary">{dist.questionText}</p>
+                    <p className="text-xs font-semibold text-text-secondary">{stripHtml(dist.questionText)}</p>
                     {dist.options.slice(0, 4).map((opt, i) => (
                       <ProgressBar
                         key={opt.label}
@@ -203,7 +211,7 @@ export function Analytics() {
             <div className="lg:col-span-5 grid grid-cols-1 gap-4">
               {analytics.starRatings.map(sr => (
                 <div key={sr.questionId} className="bg-surface-container-lowest p-6 rounded-3xl border border-border-subtle shadow-sm">
-                  <p className="text-xs font-semibold text-text-secondary mb-2 line-clamp-2">{sr.questionText}</p>
+                  <p className="text-xs font-semibold text-text-secondary mb-2 line-clamp-2">{stripHtml(sr.questionText)}</p>
                   <div className="flex items-end gap-2">
                     <span className="font-display text-4xl font-bold text-primary">{sr.average}</span>
                     <span className="text-text-secondary text-sm mb-1">/ 5 sao</span>

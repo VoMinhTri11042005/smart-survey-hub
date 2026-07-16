@@ -246,9 +246,10 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
           )}
 
           <header className="space-y-2">
-            <h2 className="font-display text-2xl md:text-3xl font-bold text-text-primary tracking-tight leading-tight">
-              {currentQuestion.text}
-            </h2>
+            <h2 
+              className="font-display text-2xl md:text-3xl font-bold text-text-primary tracking-tight leading-tight"
+              dangerouslySetInnerHTML={{ __html: currentQuestion.text }}
+            />
             {currentQuestion.required && (
               <p className="text-xs md:text-sm text-sentiment-negative font-medium">* Bắt buộc</p>
             )}

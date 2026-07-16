@@ -4,6 +4,8 @@ import { useState, useRef, useEffect } from 'react';
 import { useSurvey } from '../../context/SurveyContext';
 import { ShareModal } from '../common/ShareModal';
 import ReactMarkdown from 'react-markdown';
+import ReactQuill from 'react-quill';
+import 'react-quill/dist/quill.snow.css';
 import type { SurveyQuestion, QuestionType } from '../../types';
 
 const questionTypeLabels: Record<QuestionType, { label: string; icon: React.ReactNode }> = {
@@ -377,13 +379,28 @@ export function Builder({ onPublished, onError }: { onPublished?: () => void; on
                      </div>
 
                      {/* Question Text */}
-                     <input
-                       type="text"
-                       value={q.text}
-                       onChange={(e) => updateQuestion(q.id, { text: e.target.value })}
-                       className="w-full font-display text-xl font-semibold text-text-primary border-none focus:ring-0 p-0 outline-none bg-transparent mb-4"
-                       placeholder="Nhập nội dung câu hỏi..."
-                     />
+                     {isActive ? (
+                       <div className="mb-4 builder-quill">
+                         <ReactQuill
+                           theme="snow"
+                           value={q.text}
+                           onChange={(val) => updateQuestion(q.id, { text: val })}
+                           placeholder="Nhập nội dung câu hỏi..."
+                           modules={{
+                             toolbar: [
+                               ['bold', 'italic', 'underline', 'strike'],
+                               [{ 'color': [] }, { 'background': [] }],
+                               ['clean']
+                             ]
+                           }}
+                         />
+                       </div>
+                     ) : (
+                       <div 
+                         className="font-display text-xl font-semibold text-text-primary mb-4" 
+                         dangerouslySetInnerHTML={{ __html: q.text || 'Nhập nội dung câu hỏi...' }} 
+                       />
+                     )}
 
                      {/* Question Type Selector (active only) */}
                      {isActive && (
