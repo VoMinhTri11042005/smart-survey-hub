@@ -4,7 +4,17 @@ import { useSurvey } from '../../context/SurveyContext';
 import { ShareModal } from '../common/ShareModal';
 import type { View, Survey } from '../../types';
 
-export function Dashboard({ onViewChange, userProfile }: { onViewChange?: (view: View) => void; userProfile?: { name: string } }) {
+export function Dashboard({ 
+  onViewChange, 
+  userProfile,
+  onShowToast,
+  onAddNotification
+}: { 
+  onViewChange?: (view: View) => void; 
+  userProfile?: { name: string };
+  onShowToast?: (msg: string, type: 'success' | 'error' | 'info') => void;
+  onAddNotification?: (msg: string) => void;
+}) {
   const { surveys, fetchSurveys, setCurrentSurvey, deleteSurvey, searchQuery } = useSurvey();
   const [shareModal, setShareModal] = useState<{ id: string; title: string } | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; title: string } | null>(null);
@@ -162,9 +172,16 @@ export function Dashboard({ onViewChange, userProfile }: { onViewChange?: (view:
                 Hủy
               </button>
               <button 
-                onClick={() => {
-                  deleteSurvey(deleteConfirm.id);
-                  setDeleteConfirm(null);
+                onClick={async () => {
+                  try {
+                    await deleteSurvey(deleteConfirm.id);
+                    if (onShowToast) onShowToast('Đã xóa khảo sát thành công!', 'success');
+                    if (onAddNotification) onAddNotification(`Bạn đã xóa khảo sát "${deleteConfirm.title}"`);
+                  } catch (error) {
+                    if (onShowToast) onShowToast('Không thể xóa khảo sát. Vui lòng thử lại.', 'error');
+                  } finally {
+                    setDeleteConfirm(null);
+                  }
                 }} 
                 className="px-4 py-2 bg-sentiment-negative text-white rounded-lg font-semibold text-sm hover:bg-sentiment-negative/90 transition-colors shadow-sm cursor-pointer"
               >

@@ -156,7 +156,7 @@ function AppContent() {
               onMenuClick={() => setIsMobileMenuOpen(true)}
             />
             <main className="flex-1 overflow-y-auto relative bg-surface-background">
-              {currentView === 'dashboard' && <Dashboard onViewChange={setCurrentView} userProfile={userProfile} />}
+              {currentView === 'dashboard' && <Dashboard onViewChange={setCurrentView} userProfile={userProfile} onShowToast={showToast} onAddNotification={addNotification} />}
               {currentView === 'templates' && <Templates onViewChange={setCurrentView} />}
               {currentView === 'analytics' && <Analytics />}
               {currentView === 'teams' && <Teams />}
