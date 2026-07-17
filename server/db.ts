@@ -9,6 +9,11 @@ const pool = new Pool({
   ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false
 });
 
+// Catch unhandled errors on idle clients to prevent the app from crashing
+pool.on('error', (err, client) => {
+  console.error('Unexpected error on idle client', err);
+});
+
 export const initDB = async () => {
   if (!process.env.DATABASE_URL) {
     console.warn('⚠️ WARNING: DATABASE_URL is not set. Database will fail.');
