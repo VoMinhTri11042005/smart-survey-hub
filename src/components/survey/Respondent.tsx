@@ -23,7 +23,10 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
   const [quizTotal, setQuizTotal] = useState<number | undefined>(undefined);
 
   useEffect(() => {
-    if (!survey) return;
+    if (!survey) {
+      setIsLoading(false);
+      return;
+    }
 
     const initRespondent = async () => {
       let rid = localStorage.getItem('respondentId');
