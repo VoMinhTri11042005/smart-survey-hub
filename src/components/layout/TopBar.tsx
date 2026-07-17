@@ -57,6 +57,8 @@ export function TopBar({ currentView, onViewChange, onPublish, userProfile, noti
             <input 
               type="text" 
               placeholder="Tìm kiếm..." 
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-10 pr-4 py-2.5 bg-surface-container-low border border-transparent rounded-xl text-sm focus:bg-white focus:border-border-subtle focus:ring-2 focus:ring-secondary-container/20 outline-none transition-all md:placeholder:text-transparent placeholder:text-text-secondary md:placeholder:content-['Tìm_kiếm_khảo_sát,_người_phản_hồi_hoặc_thông_tin...']"
             />
           </div>
