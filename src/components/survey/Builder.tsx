@@ -1,5 +1,5 @@
 import React from 'react';
-import { CircleDot, CheckSquare, Star, AlignLeft, Minus, GripVertical, Copy, Trash2, Plus, GitBranch, Sparkles, RefreshCw, Send, CheckCircle2, Info, UploadCloud, ChevronDown, X, FileText } from 'lucide-react';
+import { CircleDot, CheckSquare, Star, AlignLeft, Minus, GripVertical, Copy, Trash2, Plus, GitBranch, Sparkles, RefreshCw, Send, CheckCircle2, Check, Info, UploadCloud, ChevronDown, X, FileText } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { useSurvey } from '../../context/SurveyContext';
 import { ShareModal } from '../common/ShareModal';
@@ -439,14 +439,16 @@ export function Builder({ onPublished, onError }: { onPublished?: () => void; on
                              {isQuiz ? (
                                <button
                                  onClick={(e) => { e.stopPropagation(); toggleCorrectAnswer(q.id, opt); }}
-                                 className={`flex-shrink-0 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors cursor-pointer ${
+                                 className={`flex-shrink-0 w-5 h-5 ${q.type === 'multiple_choice' ? 'rounded-md' : 'rounded-full'} border-2 flex items-center justify-center transition-colors cursor-pointer ${
                                    (q.type === 'single_choice' && q.correctAnswer === opt) || (q.type === 'multiple_choice' && Array.isArray(q.correctAnswer) && q.correctAnswer.includes(opt))
                                      ? 'border-sentiment-positive bg-sentiment-positive text-white' 
                                      : 'border-text-secondary hover:border-sentiment-positive'
                                  }`}
                                  title="Đánh dấu là đáp án đúng"
                                >
-                                 {((q.type === 'single_choice' && q.correctAnswer === opt) || (q.type === 'multiple_choice' && Array.isArray(q.correctAnswer) && q.correctAnswer.includes(opt))) && <CheckCircle2 size={12} />}
+                                 {((q.type === 'single_choice' && q.correctAnswer === opt) || (q.type === 'multiple_choice' && Array.isArray(q.correctAnswer) && q.correctAnswer.includes(opt))) && (
+                                    q.type === 'multiple_choice' ? <Check size={14} strokeWidth={3} /> : <CheckCircle2 size={12} />
+                                 )}
                                </button>
                              ) : (
                                q.type === 'single_choice'
