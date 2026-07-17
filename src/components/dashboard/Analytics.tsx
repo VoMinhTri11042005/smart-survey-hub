@@ -194,7 +194,7 @@ export function Analytics() {
                     {dist.options.slice(0, 4).map((opt, i) => (
                       <ProgressBar
                         key={opt.label}
-                        label={opt.label}
+                        label={stripHtml(opt.label)}
                         count={`${opt.count} phản hồi`}
                         percent={opt.percent}
                         color={['bg-primary-container', 'bg-secondary-container', 'bg-primary-fixed-dim', 'bg-surface-container-highest'][i % 4]}

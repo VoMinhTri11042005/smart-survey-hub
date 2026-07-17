@@ -49,3 +49,84 @@
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
 }
+
+/* Quill Customizations */
+.quill-title .ql-container.ql-snow {
+  border: none;
+  font-family: var(--font-display);
+  font-size: 2.25rem;
+  line-height: 2.5rem;
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+.quill-title .ql-editor {
+  padding: 0;
+}
+.quill-title .ql-editor.ql-blank::before {
+  left: 0;
+  font-style: normal;
+  color: #94a3b8;
+}
+
+.quill-desc .ql-container.ql-snow {
+  border: none;
+  font-family: var(--font-sans);
+  font-size: 1rem;
+  color: var(--color-text-secondary);
+}
+.quill-desc .ql-editor {
+  padding: 0;
+  padding-top: 0.5rem;
+}
+.quill-desc .ql-editor.ql-blank::before {
+  left: 0;
+  font-style: normal;
+  color: #94a3b8;
+}
+
+/* Hide toolbar unless focused */
+.quill-smart-toolbar .ql-toolbar {
+  opacity: 0;
+  height: 0;
+  overflow: hidden;
+  border: none !important;
+  padding: 0 !important;
+  transition: opacity 0.2s;
+}
+.quill-smart-toolbar:focus-within .ql-toolbar {
+  opacity: 1;
+  height: auto;
+  padding: 8px !important;
+  border-bottom: 1px solid var(--color-border-subtle) !important;
+  margin-bottom: 8px;
+}
+
+/* Options */
+.quill-option .ql-container.ql-snow {
+  border: none;
+  font-family: var(--font-sans);
+  font-size: 1rem;
+  color: var(--color-text-primary);
+}
+.quill-option .ql-editor {
+  padding: 0;
+}
+.quill-option .ql-editor p {
+  margin: 0;
+}
+.quill-option .ql-editor.ql-blank::before {
+  left: 0;
+  font-style: normal;
+  color: #94a3b8;
+}
+
+/* Rendered HTML overrides for Respondent */
+.rendered-html p {
+  margin-bottom: 0.5em;
+}
+.rendered-html p:last-child {
+  margin-bottom: 0;
+}
+.rendered-option p {
+  margin: 0;
+}

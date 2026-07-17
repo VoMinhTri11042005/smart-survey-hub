@@ -322,30 +322,36 @@ export function Builder({ onPublished, onError }: { onPublished?: () => void; on
                {/* Survey Title */}
                <div className="bg-white rounded-2xl border border-border-subtle shadow-sm p-6 md:p-8">
                  <label className="text-xs font-bold text-text-secondary uppercase tracking-wider mb-2 block">Tiêu đề khảo sát</label>
-                 <textarea
-                   value={surveyTitle}
-                   onChange={(e) => setSurveyTitle(e.target.value)}
-                   onInput={(e) => {
-                     const target = e.target as HTMLTextAreaElement;
-                     target.style.height = 'auto';
-                     target.style.height = `${target.scrollHeight}px`;
-                   }}
-                   className="w-full font-display text-3xl md:text-4xl font-bold text-text-primary border-none focus:ring-0 p-0 outline-none bg-transparent resize-none overflow-hidden"
-                   placeholder="Nhập tiêu đề khảo sát..."
-                   rows={1}
-                 />
-                 <textarea
-                   value={surveyDescription}
-                   onChange={(e) => setSurveyDescription(e.target.value)}
-                   onInput={(e) => {
-                     const target = e.target as HTMLTextAreaElement;
-                     target.style.height = 'auto';
-                     target.style.height = `${target.scrollHeight}px`;
-                   }}
-                   className="w-full text-base text-text-secondary border-none focus:ring-0 p-0 outline-none bg-transparent mt-4 resize-none overflow-hidden"
-                   placeholder="Mô tả ngắn gọn về khảo sát..."
-                   rows={1}
-                 />
+                 <div className="quill-title quill-smart-toolbar w-full -ml-3">
+                   <ReactQuill
+                     theme="snow"
+                     value={surveyTitle}
+                     onChange={setSurveyTitle}
+                     placeholder="Nhập tiêu đề khảo sát..."
+                     modules={{
+                       toolbar: [
+                         ['bold', 'italic', 'underline', 'strike'],
+                         [{ 'color': [] }, { 'background': [] }],
+                         ['clean']
+                       ]
+                     }}
+                   />
+                 </div>
+                 <div className="quill-desc quill-smart-toolbar w-full mt-4 -ml-3">
+                   <ReactQuill
+                     theme="snow"
+                     value={surveyDescription}
+                     onChange={setSurveyDescription}
+                     placeholder="Mô tả ngắn gọn về khảo sát..."
+                     modules={{
+                       toolbar: [
+                         ['bold', 'italic', 'underline', 'strike'],
+                         [{ 'color': [] }, { 'background': [] }],
+                         ['clean']
+                       ]
+                     }}
+                   />
+                 </div>
                </div>
 
                {/* Question Cards */}
@@ -447,13 +453,21 @@ export function Builder({ onPublished, onError }: { onPublished?: () => void; on
                                  ? <CircleDot size={18} className="text-text-secondary flex-shrink-0" />
                                  : <CheckSquare size={18} className="text-text-secondary flex-shrink-0" />
                              )}
-                             <input
-                               type="text"
-                               value={opt}
-                               onChange={(e) => updateOption(q.id, optIdx, e.target.value)}
-                               className="flex-1 bg-transparent border-none focus:ring-0 text-sm font-medium p-0 outline-none"
-                               placeholder={`Lựa chọn ${optIdx + 1}`}
-                             />
+                             <div className="flex-1 quill-option quill-smart-toolbar -ml-3">
+                               <ReactQuill
+                                 theme="snow"
+                                 value={opt}
+                                 onChange={(val) => updateOption(q.id, optIdx, val)}
+                                 placeholder={`Lựa chọn ${optIdx + 1}`}
+                                 modules={{
+                                   toolbar: [
+                                     ['bold', 'italic', 'underline', 'strike'],
+                                     [{ 'color': [] }, { 'background': [] }],
+                                     ['clean']
+                                   ]
+                                 }}
+                               />
+                             </div>
                              {isActive && q.options && q.options.length > 2 && (
                                <button onClick={(e) => { e.stopPropagation(); removeOption(q.id, optIdx); }} className="opacity-0 group-hover:opacity-100 text-text-secondary hover:text-sentiment-negative transition-all cursor-pointer">
                                  <X size={16} />

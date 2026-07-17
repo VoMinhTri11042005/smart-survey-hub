@@ -240,13 +240,15 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
         <div className="w-full max-w-[720px] space-y-6 md:space-y-8 animate-in slide-in-from-bottom-4 duration-500 fade-in">
           {step === 0 && (
             <div className="bg-white border-t-[10px] border-t-primary rounded-2xl shadow-sm p-6 md:p-10 border border-border-subtle mb-8">
-              <h1 className="font-display text-3xl md:text-4xl font-extrabold text-text-primary mb-4 leading-tight">
-                {survey.title || 'Khảo sát thông minh'}
-              </h1>
+              <h1 
+                className="font-display text-3xl md:text-4xl font-extrabold text-text-primary mb-4 leading-tight rendered-html"
+                dangerouslySetInnerHTML={{ __html: survey.title || 'Khảo sát thông minh' }}
+              />
               {survey.description && (
-                <div className="text-base md:text-lg text-text-secondary whitespace-pre-wrap leading-relaxed">
-                  {survey.description}
-                </div>
+                <div 
+                  className="text-base md:text-lg text-text-secondary leading-relaxed rendered-html"
+                  dangerouslySetInnerHTML={{ __html: survey.description }}
+                />
               )}
             </div>
           )}
@@ -285,8 +287,8 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
             <div className="space-y-3">
               {currentQuestion.options.map((option, idx) => (
                 <button key={idx} onClick={() => setAnswer(option)} className={`w-full text-left flex items-center gap-4 p-4 rounded-xl border-2 transition-all cursor-pointer ${currentAnswer === option ? 'border-primary bg-primary-fixed shadow-sm' : 'border-border-subtle bg-white hover:border-primary/30 hover:shadow-sm'}`}>
-                  <CircleDot size={20} className={`flex-shrink-0 ${currentAnswer === option ? 'text-primary' : 'text-text-secondary'}`} />
-                  <span className={`text-base font-medium ${currentAnswer === option ? 'text-primary' : 'text-text-primary'}`}>{option}</span>
+                  <CircleDot size={20} className={`flex-shrink-0 mt-0.5 ${currentAnswer === option ? 'text-primary' : 'text-text-secondary'}`} />
+                  <span className={`text-base font-medium rendered-option ${currentAnswer === option ? 'text-primary' : 'text-text-primary'}`} dangerouslySetInnerHTML={{ __html: option }} />
                 </button>
               ))}
             </div>
@@ -299,8 +301,8 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
                 const selected = (currentAnswer || []).includes(option);
                 return (
                   <button key={idx} onClick={() => toggleMultiple(option)} className={`w-full text-left flex items-center gap-4 p-4 rounded-xl border-2 transition-all cursor-pointer ${selected ? 'border-primary bg-primary-fixed shadow-sm' : 'border-border-subtle bg-white hover:border-primary/30 hover:shadow-sm'}`}>
-                    <CheckSquare size={20} className={`flex-shrink-0 ${selected ? 'text-primary' : 'text-text-secondary'}`} />
-                    <span className={`text-base font-medium ${selected ? 'text-primary' : 'text-text-primary'}`}>{option}</span>
+                    <CheckSquare size={20} className={`flex-shrink-0 mt-0.5 ${selected ? 'text-primary' : 'text-text-secondary'}`} />
+                    <span className={`text-base font-medium rendered-option ${selected ? 'text-primary' : 'text-text-primary'}`} dangerouslySetInnerHTML={{ __html: option }} />
                   </button>
                 );
               })}
