@@ -322,7 +322,7 @@ export function Builder({ onPublished, onError }: { onPublished?: () => void; on
                {/* Survey Title */}
                <div className="bg-white rounded-2xl border border-border-subtle shadow-sm p-6 md:p-8">
                  <label className="text-xs font-bold text-text-secondary uppercase tracking-wider mb-2 block">Tiêu đề khảo sát</label>
-                 <div className="quill-title quill-smart-toolbar w-full -ml-3">
+                 <div className="quill-title quill-smart-toolbar w-full">
                    <ReactQuill
                      theme="snow"
                      value={surveyTitle}
@@ -337,7 +337,7 @@ export function Builder({ onPublished, onError }: { onPublished?: () => void; on
                      }}
                    />
                  </div>
-                 <div className="quill-desc quill-smart-toolbar w-full mt-4 -ml-3">
+                 <div className="quill-desc quill-smart-toolbar w-full mt-4">
                    <ReactQuill
                      theme="snow"
                      value={surveyDescription}
@@ -455,7 +455,7 @@ export function Builder({ onPublished, onError }: { onPublished?: () => void; on
                                  ? <CircleDot size={18} className="text-text-secondary flex-shrink-0" />
                                  : <CheckSquare size={18} className="text-text-secondary flex-shrink-0" />
                              )}
-                             <div className="flex-1 quill-option quill-smart-toolbar -ml-3">
+                             <div className="flex-1 quill-option quill-smart-toolbar">
                                <ReactQuill
                                  theme="snow"
                                  value={opt}
