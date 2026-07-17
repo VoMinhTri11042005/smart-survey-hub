@@ -16,6 +16,14 @@ const questionTypeLabels: Record<QuestionType, { label: string; icon: React.Reac
   nps: { label: 'Điểm NPS', icon: <Minus size={16} className="text-primary" /> },
 };
 
+const quillModules = {
+  toolbar: [
+    ['bold', 'italic', 'underline', 'strike'],
+    [{ 'color': [] }, { 'background': [] }],
+    ['clean']
+  ]
+};
+
 export function Builder({ onPublished, onError }: { onPublished?: () => void; onError?: (msg: string) => void }) {
   const { parseDocx, createSurvey, setCurrentSurvey, isLoading, pendingTemplate, clearPendingTemplate, chatWithAI } = useSurvey();
   
@@ -328,13 +336,7 @@ export function Builder({ onPublished, onError }: { onPublished?: () => void; on
                      value={surveyTitle}
                      onChange={setSurveyTitle}
                      placeholder="Nhập tiêu đề khảo sát..."
-                     modules={{
-                       toolbar: [
-                         ['bold', 'italic', 'underline', 'strike'],
-                         [{ 'color': [] }, { 'background': [] }],
-                         ['clean']
-                       ]
-                     }}
+                     modules={quillModules}
                    />
                  </div>
                  <div className="quill-desc quill-smart-toolbar w-full mt-4">
@@ -343,13 +345,7 @@ export function Builder({ onPublished, onError }: { onPublished?: () => void; on
                      value={surveyDescription}
                      onChange={setSurveyDescription}
                      placeholder="Mô tả ngắn gọn về khảo sát..."
-                     modules={{
-                       toolbar: [
-                         ['bold', 'italic', 'underline', 'strike'],
-                         [{ 'color': [] }, { 'background': [] }],
-                         ['clean']
-                       ]
-                     }}
+                     modules={quillModules}
                    />
                  </div>
                </div>
@@ -394,13 +390,7 @@ export function Builder({ onPublished, onError }: { onPublished?: () => void; on
                            value={q.text}
                            onChange={(val) => updateQuestion(q.id, { text: val })}
                            placeholder="Nhập nội dung câu hỏi..."
-                           modules={{
-                             toolbar: [
-                               ['bold', 'italic', 'underline', 'strike'],
-                               [{ 'color': [] }, { 'background': [] }],
-                               ['clean']
-                             ]
-                           }}
+                           modules={quillModules}
                          />
                        </div>
                      ) : (
@@ -461,13 +451,7 @@ export function Builder({ onPublished, onError }: { onPublished?: () => void; on
                                  value={opt}
                                  onChange={(val) => updateOption(q.id, optIdx, val)}
                                  placeholder={`Lựa chọn ${optIdx + 1}`}
-                                 modules={{
-                                   toolbar: [
-                                     ['bold', 'italic', 'underline', 'strike'],
-                                     [{ 'color': [] }, { 'background': [] }],
-                                     ['clean']
-                                   ]
-                                 }}
+                                 modules={quillModules}
                                />
                              </div>
                              {isActive && q.options && q.options.length > 2 && (
