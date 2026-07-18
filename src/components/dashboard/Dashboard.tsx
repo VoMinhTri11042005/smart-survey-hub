@@ -8,7 +8,7 @@ const stripHtml = (html: string | undefined) => {
   if (!html) return "";
   const tmp = document.createElement("DIV");
   tmp.innerHTML = html;
-  return tmp.textContent || tmp.innerText || "";
+  return (tmp.textContent || tmp.innerText || "").replace(/\u00A0/g, ' ');
 };
 
 export function Dashboard({ 
@@ -138,8 +138,8 @@ export function Dashboard({
                   </div>
                 </div>
                 <div className="cursor-pointer" onClick={() => handleSurveyClick(survey)}>
-                  <h4 className="font-display text-lg font-bold text-text-primary group-hover:text-primary transition-colors mb-1 leading-tight">{stripHtml(survey.title)}</h4>
-                  <p className="text-text-secondary text-xs mb-4 line-clamp-2">{stripHtml(survey.description) || 'Không có mô tả'}</p>
+                  <h4 className="font-display text-lg font-bold text-text-primary group-hover:text-primary transition-colors mb-1 leading-tight line-clamp-2 break-words" title={stripHtml(survey.title)}>{stripHtml(survey.title)}</h4>
+                  <p className="text-text-secondary text-xs mb-4 line-clamp-2 break-words">{stripHtml(survey.description) || 'Không có mô tả'}</p>
                 </div>
                 <div className="flex items-center justify-between mt-auto pt-4 border-t border-border-subtle">
                   <div>
