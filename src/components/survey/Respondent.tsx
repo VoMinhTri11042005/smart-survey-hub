@@ -1,7 +1,7 @@
 import { Timer, Undo2, Sparkles, CircleDot, CheckSquare, CheckCircle2, Home, Edit3 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useSurvey } from '../../context/SurveyContext';
-import { stripHtml } from '../../utils/stringUtils';
+import { stripHtml, cleanHtmlWhitespace } from '../../utils/stringUtils';
 import type { Survey, SurveyQuestion } from '../../types';
 
 interface RespondentProps {
@@ -245,13 +245,13 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
           {step === 0 && (
             <div className="bg-white border-t-[10px] border-t-primary rounded-2xl shadow-sm p-6 md:p-10 border border-border-subtle mb-8">
               <h1 
-                className="font-display text-3xl md:text-4xl font-extrabold text-text-primary mb-4 leading-tight rendered-html"
-                dangerouslySetInnerHTML={{ __html: survey.title || 'Khảo sát thông minh' }}
+                className="font-display text-3xl md:text-4xl font-extrabold text-text-primary mb-4 leading-tight rendered-html break-words"
+                dangerouslySetInnerHTML={{ __html: cleanHtmlWhitespace(survey.title) || 'Khảo sát thông minh' }}
               />
               {survey.description && (
                 <div 
-                  className="text-base md:text-lg text-text-secondary leading-relaxed rendered-html"
-                  dangerouslySetInnerHTML={{ __html: survey.description }}
+                  className="text-base md:text-lg text-text-secondary leading-relaxed rendered-html break-words"
+                  dangerouslySetInnerHTML={{ __html: cleanHtmlWhitespace(survey.description) }}
                 />
               )}
             </div>
@@ -259,8 +259,8 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
 
           <header className="space-y-2">
             <h2 
-              className="font-display text-2xl md:text-3xl font-bold text-text-primary tracking-tight leading-tight"
-              dangerouslySetInnerHTML={{ __html: currentQuestion.text }}
+              className="font-display text-2xl md:text-3xl font-bold text-text-primary tracking-tight leading-tight break-words"
+              dangerouslySetInnerHTML={{ __html: cleanHtmlWhitespace(currentQuestion.text) }}
             />
             {currentQuestion.required && (
               <p className="text-xs md:text-sm text-sentiment-negative font-medium">* Bắt buộc</p>
@@ -292,7 +292,7 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
               {currentQuestion.options.map((option, idx) => (
                 <button key={idx} onClick={() => setAnswer(option)} className={`w-full text-left flex items-center gap-4 p-4 rounded-xl border-2 transition-all cursor-pointer ${currentAnswer === option ? 'border-primary bg-primary-fixed shadow-sm' : 'border-border-subtle bg-white hover:border-primary/30 hover:shadow-sm'}`}>
                   <CircleDot size={20} className={`flex-shrink-0 mt-0.5 ${currentAnswer === option ? 'text-primary' : 'text-text-secondary'}`} />
-                  <span className={`text-base font-medium rendered-option ${currentAnswer === option ? 'text-primary' : 'text-text-primary'}`} dangerouslySetInnerHTML={{ __html: option }} />
+                  <span className={`text-base font-medium rendered-option break-words ${currentAnswer === option ? 'text-primary' : 'text-text-primary'}`} dangerouslySetInnerHTML={{ __html: cleanHtmlWhitespace(option) }} />
                 </button>
               ))}
             </div>
@@ -306,7 +306,7 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
                 return (
                   <button key={idx} onClick={() => toggleMultiple(option)} className={`w-full text-left flex items-center gap-4 p-4 rounded-xl border-2 transition-all cursor-pointer ${selected ? 'border-primary bg-primary-fixed shadow-sm' : 'border-border-subtle bg-white hover:border-primary/30 hover:shadow-sm'}`}>
                     <CheckSquare size={20} className={`flex-shrink-0 mt-0.5 ${selected ? 'text-primary' : 'text-text-secondary'}`} />
-                    <span className={`text-base font-medium rendered-option ${selected ? 'text-primary' : 'text-text-primary'}`} dangerouslySetInnerHTML={{ __html: option }} />
+                    <span className={`text-base font-medium rendered-option break-words ${selected ? 'text-primary' : 'text-text-primary'}`} dangerouslySetInnerHTML={{ __html: cleanHtmlWhitespace(option) }} />
                   </button>
                 );
               })}
