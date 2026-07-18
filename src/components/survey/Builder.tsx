@@ -334,7 +334,7 @@ export function Builder({ onPublished, onError }: { onPublished?: () => void; on
                    <ReactQuill
                      theme="snow"
                      value={surveyTitle}
-                     onChange={setSurveyTitle}
+                     onChange={(val) => { if (val !== surveyTitle) setSurveyTitle(val); }}
                      placeholder="Nhập tiêu đề khảo sát..."
                      modules={quillModules}
                    />
@@ -343,7 +343,7 @@ export function Builder({ onPublished, onError }: { onPublished?: () => void; on
                    <ReactQuill
                      theme="snow"
                      value={surveyDescription}
-                     onChange={setSurveyDescription}
+                     onChange={(val) => { if (val !== surveyDescription) setSurveyDescription(val); }}
                      placeholder="Mô tả ngắn gọn về khảo sát..."
                      modules={quillModules}
                    />
@@ -388,7 +388,7 @@ export function Builder({ onPublished, onError }: { onPublished?: () => void; on
                          <ReactQuill
                            theme="snow"
                            value={q.text}
-                           onChange={(val) => updateQuestion(q.id, { text: val })}
+                           onChange={(val) => { if (val !== q.text) updateQuestion(q.id, { text: val }); }}
                            placeholder="Nhập nội dung câu hỏi..."
                            modules={quillModules}
                          />
@@ -449,7 +449,7 @@ export function Builder({ onPublished, onError }: { onPublished?: () => void; on
                                <ReactQuill
                                  theme="snow"
                                  value={opt}
-                                 onChange={(val) => updateOption(q.id, optIdx, val)}
+                                 onChange={(val) => { if (val !== opt) updateOption(q.id, optIdx, val); }}
                                  placeholder={`Lựa chọn ${optIdx + 1}`}
                                  modules={quillModules}
                                />
