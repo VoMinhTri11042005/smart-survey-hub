@@ -8,7 +8,7 @@ const stripHtml = (html: string | undefined) => {
   if (!html) return "";
   const tmp = document.createElement("DIV");
   tmp.innerHTML = html;
-  return (tmp.textContent || tmp.innerText || "").replace(/\u00A0/g, ' ');
+  return (tmp.textContent || tmp.innerText || "").replace(/\s+/g, ' ').trim();
 };
 
 export function Dashboard({ 
@@ -122,7 +122,7 @@ export function Dashboard({
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredSurveys.map((survey: any) => (
-              <div key={survey.id} className="bg-surface-container-lowest rounded-2xl border border-border-subtle p-5 hover:shadow-lg transition-all group flex flex-col">
+              <div key={survey.id} className="bg-surface-container-lowest rounded-2xl border border-border-subtle p-5 hover:shadow-lg transition-all group flex flex-col min-w-0">
                 <div className="flex justify-between items-start mb-4">
                   <div className={`px-2.5 py-1 rounded-md flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide ${survey.status === 'live' ? 'bg-sentiment-positive/10 text-sentiment-positive' : 'bg-surface-container-high text-text-secondary'}`}>
                     {survey.status === 'live' && <span className="w-1.5 h-1.5 rounded-full bg-sentiment-positive animate-pulse"></span>}
@@ -137,11 +137,11 @@ export function Dashboard({
                     </button>
                   </div>
                 </div>
-                <div className="cursor-pointer" onClick={() => handleSurveyClick(survey)}>
+                <div className="cursor-pointer min-w-0" onClick={() => handleSurveyClick(survey)}>
                   <h4 className="font-display text-lg font-bold text-text-primary group-hover:text-primary transition-colors mb-1 leading-tight line-clamp-2 break-all" title={stripHtml(survey.title)}>{stripHtml(survey.title)}</h4>
                   <p className="text-text-secondary text-xs mb-4 line-clamp-2 break-all">{stripHtml(survey.description) || 'Không có mô tả'}</p>
                 </div>
-                <div className="flex items-center justify-between mt-auto pt-4 border-t border-border-subtle">
+                <div className="flex items-center justify-between mt-auto pt-4 border-t border-border-subtle min-w-0">
                   <div>
                     <div className="text-xl font-bold text-text-primary">{survey.responseCount || 0}</div>
                     <div className="text-[10px] text-text-secondary uppercase font-bold tracking-widest">Phản hồi</div>
