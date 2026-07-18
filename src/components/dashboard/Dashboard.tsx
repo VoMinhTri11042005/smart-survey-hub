@@ -2,14 +2,8 @@ import { BarChart3, Activity, Sparkles, Trash2, Share2 } from 'lucide-react';
 import { useEffect, useState, useMemo } from 'react';
 import { useSurvey } from '../../context/SurveyContext';
 import { ShareModal } from '../common/ShareModal';
+import { stripHtml } from '../../utils/stringUtils';
 import type { View, Survey } from '../../types';
-
-const stripHtml = (html: string | undefined) => {
-  if (!html) return "";
-  const tmp = document.createElement("DIV");
-  tmp.innerHTML = html;
-  return (tmp.textContent || tmp.innerText || "").replace(/\s+/g, ' ').trim();
-};
 
 export function Dashboard({ 
   onViewChange, 
@@ -162,7 +156,7 @@ export function Dashboard({
         isOpen={!!shareModal}
         onClose={() => setShareModal(null)}
         surveyId={shareModal?.id || ''}
-        surveyTitle={shareModal?.title || ''}
+        surveyTitle={stripHtml(shareModal?.title) || ''}
       />
 
       {/* Delete Confirmation Modal */}
@@ -170,7 +164,7 @@ export function Dashboard({
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-surface-background/80 backdrop-blur-sm p-4">
           <div className="bg-surface-container-lowest border border-border-subtle rounded-2xl p-6 max-w-sm w-full shadow-2xl animate-in fade-in zoom-in-95 duration-200">
             <h3 className="font-display text-xl font-bold text-text-primary mb-2">Xóa khảo sát?</h3>
-            <p className="text-text-secondary text-sm mb-6">Bạn có chắc chắn muốn xóa "{deleteConfirm.title}" không? Hành động này không thể hoàn tác.</p>
+            <p className="text-text-secondary text-sm mb-6">Bạn có chắc chắn muốn xóa "{stripHtml(deleteConfirm.title)}" không? Hành động này không thể hoàn tác.</p>
             <div className="flex justify-end gap-3">
               <button 
                 onClick={() => setDeleteConfirm(null)} 
@@ -183,7 +177,7 @@ export function Dashboard({
                   try {
                     await deleteSurvey(deleteConfirm.id);
                     if (onShowToast) onShowToast('Đã xóa khảo sát thành công!', 'success');
-                    if (onAddNotification) onAddNotification(`Bạn đã xóa khảo sát "${deleteConfirm.title}"`);
+                    if (onAddNotification) onAddNotification(`Bạn đã xóa khảo sát "${stripHtml(deleteConfirm.title)}"`);
                   } catch (error) {
                     if (onShowToast) onShowToast('Không thể xóa khảo sát. Vui lòng thử lại.', 'error');
                   } finally {

@@ -2,15 +2,8 @@ import { Info, Sparkles, Timer, CheckCircle, TrendingUp, Download, ChevronDown, 
 import { useEffect, useState } from 'react';
 import { useSurvey } from '../../context/SurveyContext';
 import { computeSurveyAnalytics, exportResponsesToCsv } from '../../utils/analytics';
+import { stripHtml } from '../../utils/stringUtils';
 import type { Survey, SurveyResponse } from '../../types';
-
-const stripHtml = (html: string) => {
-  const tmp = document.createElement("DIV");
-  tmp.innerHTML = html;
-  return tmp.textContent || tmp.innerText || "";
-};
-
-
 
 export function Analytics() {
   const { surveys, currentSurvey, setCurrentSurvey, fetchSurveys, fetchResponses } = useSurvey();
@@ -43,7 +36,7 @@ export function Analytics() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `${selectedSurvey.title.replace(/[^a-zA-Z0-9\u00C0-\u024F]/g, '_')}_responses.csv`;
+    link.download = `${stripHtml(selectedSurvey.title).replace(/[^a-zA-Z0-9\u00C0-\u024F]/g, '_')}_responses.csv`;
     link.click();
     URL.revokeObjectURL(url);
   };
@@ -90,13 +83,13 @@ export function Analytics() {
               className="font-display text-2xl md:text-4xl font-bold text-text-primary tracking-tight bg-transparent border-none outline-none cursor-pointer appearance-none pr-8"
             >
               {surveys.map(s => (
-                <option key={s.id} value={s.id}>{s.title}</option>
+                <option key={s.id} value={s.id}>{stripHtml(s.title)}</option>
               ))}
             </select>
             <ChevronDown size={20} className="absolute right-0 top-1/2 -translate-y-1/2 text-text-secondary pointer-events-none" />
           </div>
           <p className="text-text-secondary mt-2 text-sm">
-            {selectedSurvey?.description || 'Bảng điều khiển phân tích phản hồi theo thời gian thực.'}
+            {stripHtml(selectedSurvey?.description) || 'Bảng điều khiển phân tích phản hồi theo thời gian thực.'}
           </p>
         </div>
 
