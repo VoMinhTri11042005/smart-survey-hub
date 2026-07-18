@@ -96,6 +96,7 @@
 .quill-smart-toolbar:focus-within .ql-toolbar {
   opacity: 1;
   height: auto;
+  overflow: visible;
   padding: 8px !important;
   border-bottom: 1px solid var(--color-border-subtle) !important;
   margin-bottom: 8px;
