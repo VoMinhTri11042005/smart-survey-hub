@@ -80,10 +80,12 @@ export function Analytics() {
                 const s = surveys.find(sv => sv.id === e.target.value);
                 if (s) handleSelectSurvey(s);
               }}
-              className="font-display text-2xl md:text-4xl font-bold text-text-primary tracking-tight bg-transparent border-none outline-none cursor-pointer appearance-none pr-8"
+              className="max-w-full font-display text-2xl md:text-4xl font-bold text-text-primary tracking-tight bg-transparent border-none outline-none cursor-pointer appearance-none pr-8 truncate"
             >
               {surveys.map(s => (
-                <option key={s.id} value={s.id}>{stripHtml(s.title)}</option>
+                <option key={s.id} value={s.id} className="text-base font-sans font-normal text-text-primary">
+                  {stripHtml(s.title)}
+                </option>
               ))}
             </select>
             <ChevronDown size={20} className="absolute right-0 top-1/2 -translate-y-1/2 text-text-secondary pointer-events-none" />
