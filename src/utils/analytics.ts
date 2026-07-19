@@ -1,4 +1,5 @@
 import type { Survey, SurveyQuestion, SurveyResponse } from '../types';
+import { stripHtml, cleanHtmlWhitespace } from './stringUtils';
 
 export interface ChoiceDistribution {
   questionId: string;
@@ -167,7 +168,7 @@ export function computeSurveyAnalytics(survey: Survey, responses: SurveyResponse
 export function exportResponsesToCsv(survey: Survey, responses: SurveyResponse[]): string {
   const headers = ['ID', 'Ngày gửi'];
   if (survey.isQuiz) headers.push('Điểm số', 'Tổng số câu', 'Tỷ lệ %');
-  headers.push(...survey.questions.map(q => q.text));
+  headers.push(...survey.questions.map(q => stripHtml(cleanHtmlWhitespace(q.text))));
   
   const rows = responses.map(r => {
       const d = new Date(r.submittedAt);
@@ -186,8 +187,8 @@ export function exportResponsesToCsv(survey: Survey, responses: SurveyResponse[]
 
       cells.push(...survey.questions.map(q => {
         const ans = r.answers[q.id];
-        if (Array.isArray(ans)) return ans.join('; ');
-        return ans !== undefined ? String(ans) : '';
+        if (Array.isArray(ans)) return stripHtml(cleanHtmlWhitespace(ans.join('; ')));
+        return ans !== undefined ? stripHtml(cleanHtmlWhitespace(String(ans))) : '';
       }));
       
     return cells.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',');
