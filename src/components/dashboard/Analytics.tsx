@@ -2,7 +2,7 @@ import { Info, Sparkles, Timer, CheckCircle, TrendingUp, Download, ChevronDown, 
 import { useEffect, useState } from 'react';
 import { useSurvey } from '../../context/SurveyContext';
 import { computeSurveyAnalytics, exportResponsesToCsv } from '../../utils/analytics';
-import { stripHtml } from '../../utils/stringUtils';
+import { stripHtml, toUnaccented } from '../../utils/stringUtils';
 import type { Survey, SurveyResponse } from '../../types';
 
 export function Analytics() {
@@ -36,7 +36,8 @@ export function Analytics() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `${stripHtml(selectedSurvey.title).replace(/[^a-zA-Z0-9\u00C0-\u024F]/g, '_')}_responses.csv`;
+    const safeTitle = toUnaccented(stripHtml(selectedSurvey.title)).replace(/[^a-zA-Z0-9]/g, '_').replace(/_+/g, '_');
+    link.download = `${safeTitle}_responses.csv`;
     link.click();
     URL.revokeObjectURL(url);
   };
