@@ -35,6 +35,29 @@ const toDateTimeLocalValue = (value: string | null | undefined) => {
 export function Builder({ onPublished, onError }: { onPublished?: () => void; onError?: (msg: string) => void }) {
   const { parseDocx, createSurvey, setCurrentSurvey, isLoading, pendingTemplate, clearPendingTemplate, chatWithAI, fetchDrafts, saveDraft, deleteDraft } = useSurvey();
   const DRAFT_STORAGE_KEY = 'smart-survey-hub-builder-draft';
+  const LEGACY_DRAFT_STORAGE_KEY = 'smart-survey-hub-drafts';
+
+  const readDraftsFromStorage = () => {
+    const candidates = [DRAFT_STORAGE_KEY, LEGACY_DRAFT_STORAGE_KEY];
+    const collected: any[] = [];
+
+    for (const key of candidates) {
+      try {
+        const raw = localStorage.getItem(key);
+        if (!raw) continue;
+        const value = JSON.parse(raw);
+        if (Array.isArray(value)) {
+          collected.push(...value);
+        } else if (value) {
+          collected.push(value);
+        }
+      } catch (error) {
+        console.error('Failed to read draft storage', error);
+      }
+    }
+
+    return collected.filter(Boolean);
+  };
   
   const [showSurvey, setShowSurvey] = useState(false);
   const [topic, setTopic] = useState('');
@@ -104,11 +127,12 @@ export function Builder({ onPublished, onError }: { onPublished?: () => void; on
     const loadDrafts = async () => {
       const drafts = await fetchDrafts();
       if (!drafts || drafts.length === 0) {
-        const saved = localStorage.getItem(DRAFT_STORAGE_KEY);
+        const savedDrafts = readDraftsFromStorage();
+        const saved = savedDrafts[0];
         if (!saved) return;
 
         try {
-          const draft = JSON.parse(saved) as {
+          const draft = saved as {
             surveyTitle?: string;
             surveyDescription?: string;
             questions?: SurveyQuestion[];
@@ -116,18 +140,25 @@ export function Builder({ onPublished, onError }: { onPublished?: () => void; on
             showScore?: boolean;
             displayMode?: SurveyDisplayMode;
             closesAt?: string | null;
+            title?: string;
+            description?: string;
+            id?: string;
           };
 
-          if (draft.surveyTitle || draft.surveyDescription || draft.questions?.length) {
-            setSurveyTitle(draft.surveyTitle || '');
-            setSurveyDescription(draft.surveyDescription || '');
-            setQuestions(draft.questions || []);
+          const extractedQuestions = draft.questions || [];
+          const title = draft.surveyTitle ?? draft.title ?? '';
+          const description = draft.surveyDescription ?? draft.description ?? '';
+
+          if (title || description || extractedQuestions.length) {
+            setSurveyTitle(title);
+            setSurveyDescription(description);
+            setQuestions(extractedQuestions);
             setIsQuiz(Boolean(draft.isQuiz));
             setShowScore(draft.showScore !== false);
             setDisplayMode(draft.displayMode || 'single');
             setClosesAt(draft.closesAt || null);
             setShowSurvey(true);
-            setActiveQuestionId(draft.questions?.[0]?.id || null);
+            setActiveQuestionId(extractedQuestions[0]?.id || null);
           }
         } catch (error) {
           console.error('Failed to restore saved survey draft', error);
@@ -175,6 +206,7 @@ export function Builder({ onPublished, onError }: { onPublished?: () => void; on
 
   const clearDraft = () => {
     localStorage.removeItem(DRAFT_STORAGE_KEY);
+    localStorage.removeItem(LEGACY_DRAFT_STORAGE_KEY);
     if (draftId) {
       void deleteDraft(draftId);
     }
@@ -203,8 +235,9 @@ export function Builder({ onPublished, onError }: { onPublished?: () => void; on
       closesAt,
     };
     localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft));
+    localStorage.setItem(LEGACY_DRAFT_STORAGE_KEY, JSON.stringify([draft]));
     const saved = await saveDraft(draft);
-    setDraftId(saved.id);
+    setDraftId(saved.id || draft.id);
     setDraftSavedAt(new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }));
   };
 

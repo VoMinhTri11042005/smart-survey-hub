@@ -207,10 +207,24 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       console.error('Error saving draft:', error);
       const fallback = { ...payload, updatedAt: new Date().toISOString() };
-      const key = 'smart-survey-hub-drafts';
-      const existing = JSON.parse(localStorage.getItem(key) || '[]');
-      const next = [fallback, ...existing.filter((item: any) => item.id !== payload.id)];
-      localStorage.setItem(key, JSON.stringify(next));
+      const key = 'smart-survey-hub-builder-draft';
+      const legacyKey = 'smart-survey-hub-drafts';
+
+      const safeArray = (value: string | null) => {
+        if (!value) return [];
+        try {
+          const parsed = JSON.parse(value);
+          return Array.isArray(parsed) ? parsed : [parsed].filter(Boolean);
+        } catch {
+          return [];
+        }
+      };
+
+      const existing = safeArray(localStorage.getItem(key));
+      const legacyExisting = safeArray(localStorage.getItem(legacyKey));
+      const next = [fallback, ...existing.filter((item: any) => item.id !== payload.id), ...legacyExisting.filter((item: any) => item.id !== payload.id)];
+      localStorage.setItem(key, JSON.stringify(fallback));
+      localStorage.setItem(legacyKey, JSON.stringify(next));
       return fallback;
     }
   }, []);
