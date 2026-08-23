@@ -127,9 +127,25 @@
 .rendered-option,
 .rendered-option *,
 .question-content,
-.question-content * {
+.question-content *,
+.ql-editor,
+.ql-editor *,
+.builder-quill,
+.quill-option,
+.quill-title,
+.quill-desc {
   overflow-wrap: anywhere;
   word-break: break-word;
+  min-width: 0;
+}
+
+.ql-editor,
+.ql-editor p,
+.ql-editor li,
+.ql-editor ul,
+.ql-editor ol,
+.ql-editor div {
+  white-space: normal;
 }
 
 .rendered-html p {
