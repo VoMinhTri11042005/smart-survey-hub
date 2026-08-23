@@ -129,12 +129,26 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
   const currentAnswer = currentQuestion ? answers[currentQuestion.id] : undefined;
   const hasAnswerProgress = Object.keys(answers).length > 0 || step > 0;
 
+  const callExit = () => {
+    // Ensure public respondents are always redirected out to the public root
+    if (isPublic) {
+      window.location.replace('/');
+      return;
+    }
+    try {
+      onExit();
+    } catch (e) {
+      // fallback safe redirect
+      window.location.replace('/');
+    }
+  };
+
   const handleExitRequest = () => {
     if (!isCompleted && hasAnswerProgress) {
       setShowExitConfirm(true);
       return;
     }
-    onExit();
+    callExit();
   };
 
   const setAnswerForQuestion = (questionId: string, value: any) => {
@@ -390,7 +404,7 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
               {!isPublic && (
                 <button 
-                  onClick={onExit} 
+                  onClick={callExit} 
                   className="w-full sm:w-auto px-8 py-3.5 bg-primary text-white font-bold rounded-2xl shadow-xl shadow-primary/25 hover:bg-primary/90 transition-all active:scale-95 flex items-center justify-center gap-2"
                 >
                   <Home size={18} />
@@ -430,7 +444,7 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
               <button
                 onClick={() => {
                   setShowExitConfirm(false);
-                  onExit();
+                callExit();
                 }}
                 className="flex-1 rounded-xl bg-primary px-4 py-3 text-sm font-bold text-white hover:bg-primary/90 transition-colors cursor-pointer"
               >
