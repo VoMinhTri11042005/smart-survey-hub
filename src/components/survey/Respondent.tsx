@@ -132,6 +132,14 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
   const callExit = () => {
     // Ensure public respondents are always redirected out to a dedicated public exit page
     if (isPublic) {
+      try {
+        // remove local auth flags to avoid SPA showing admin UI when redirecting
+        localStorage.removeItem('isAuthenticated');
+        localStorage.removeItem('userRole');
+        localStorage.removeItem('userProfile');
+      } catch (e) {
+        /* ignore */
+      }
       // Use a dedicated public-safe path so admin UI isn't shown even if cookies exist
       window.location.replace('/public-exit');
       return;
