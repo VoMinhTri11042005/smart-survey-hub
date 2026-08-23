@@ -8,9 +8,45 @@ function generateId(): string {
   return Math.random().toString(36).substring(2, 10) + Date.now().toString(36);
 }
 
+// In-memory fallback for development when DATABASE_URL is not configured
+const inMemorySurveys: Record<string, any> = {
+  test: {
+    id: 'test',
+    title: 'Bản demo: Khảo sát mẫu',
+    description: 'Khảo sát mẫu để thử nghiệm',
+    questions: [
+      { id: 'q1', type: 'single_choice', text: 'Bạn thích màu nào?', options: ['Đỏ','Xanh','Vàng'], required: true },
+      { id: 'q2', type: 'text', text: 'Lý do?', required: false }
+    ],
+    isQuiz: false,
+    displayMode: 'single',
+    showScore: true,
+    createdAt: new Date().toISOString(),
+    status: 'live'
+  }
+};
+const inMemoryResponses: Record<string, any[]> = {};
+
 // ─── Create Survey ───
 router.post('/surveys', async (req, res) => {
-  if (!process.env.DATABASE_URL) return res.status(500).json({ error: 'Database not configured' });
+  if (!process.env.DATABASE_URL) {
+    const id = req.body.id || generateId();
+    const { title, description, questions, status, isQuiz, displayMode, showScore, closesAt } = req.body;
+    const survey = {
+      id,
+      title: title || 'Untitled survey',
+      description: description || '',
+      questions: questions || [],
+      createdAt: new Date().toISOString(),
+      status: status || 'live',
+      closesAt: closesAt || null,
+      isQuiz: Boolean(isQuiz),
+      displayMode: displayMode || 'single',
+      showScore: showScore !== false
+    };
+    inMemorySurveys[id] = survey;
+    return res.status(201).json(survey);
+  }
   try {
     const id = req.body.id || generateId();
     const { title, description, questions, status, isQuiz, displayMode, showScore, closesAt } = req.body;
@@ -41,7 +77,7 @@ router.post('/surveys', async (req, res) => {
 
 // ─── List Surveys ───
 router.get('/surveys', async (_req, res) => {
-  if (!process.env.DATABASE_URL) return res.json([]);
+  if (!process.env.DATABASE_URL) return res.json(Object.values(inMemorySurveys));
   try {
     const result = await pool.query(`
       SELECT s.*, 
@@ -73,7 +109,11 @@ router.get('/surveys', async (_req, res) => {
 
 // ─── Get Survey by ID ───
 router.get('/surveys/:id', async (req, res) => {
-  if (!process.env.DATABASE_URL) return res.status(404).json({ error: 'Database not configured' });
+  if (!process.env.DATABASE_URL) {
+    const s = inMemorySurveys[req.params.id];
+    if (!s) return res.status(404).json({ error: 'Không tìm thấy khảo sát.' });
+    return res.json(s);
+  }
   try {
     const result = await pool.query(`
       SELECT s.*, 
@@ -123,7 +163,25 @@ router.delete('/surveys/:id', async (req, res) => {
 
 // ─── Submit Response ───
 router.post('/surveys/:id/responses', async (req, res) => {
-  if (!process.env.DATABASE_URL) return res.status(500).json({ error: 'Database not configured' });
+  if (!process.env.DATABASE_URL) {
+    const surveyId = req.params.id;
+    const { respondentId, answers, score, totalQuizQuestions } = req.body;
+    if (!respondentId) return res.status(400).json({ error: 'Thiếu định danh người dùng.' });
+    inMemoryResponses[surveyId] = inMemoryResponses[surveyId] || [];
+    const existing = inMemoryResponses[surveyId].find(r => r.respondentId === respondentId);
+    if (existing) {
+      existing.answers = answers;
+      existing.score = score ?? null;
+      existing.totalQuizQuestions = totalQuizQuestions ?? null;
+      existing.submittedAt = new Date().toISOString();
+      return res.json(existing);
+    } else {
+      const id = generateId();
+      const obj = { id, surveyId, respondentId, answers, score: score ?? null, totalQuizQuestions: totalQuizQuestions ?? null, submittedAt: new Date().toISOString() };
+      inMemoryResponses[surveyId].push(obj);
+      return res.json(obj);
+    }
+  }
   try {
     const surveyCheck = await pool.query('SELECT id FROM surveys WHERE id = $1', [req.params.id]);
     if (surveyCheck.rows.length === 0) {
@@ -163,7 +221,11 @@ router.post('/surveys/:id/responses', async (req, res) => {
 
 // ─── Get My Response ───
 router.get('/surveys/:id/responses/my/:respondentId', async (req, res) => {
-  if (!process.env.DATABASE_URL) return res.json(null);
+  if (!process.env.DATABASE_URL) {
+    const arr = inMemoryResponses[req.params.id] || [];
+    const found = arr.find(r => r.respondentId === req.params.respondentId);
+    return res.json(found || null);
+  }
   try {
     const result = await pool.query(
       'SELECT * FROM responses WHERE survey_id = $1 AND respondent_id = $2',
@@ -190,7 +252,7 @@ router.get('/surveys/:id/responses/my/:respondentId', async (req, res) => {
 
 // ─── Get Responses ───
 router.get('/surveys/:id/responses', async (req, res) => {
-  if (!process.env.DATABASE_URL) return res.json([]);
+  if (!process.env.DATABASE_URL) return res.json(inMemoryResponses[req.params.id] || []);
   try {
     const result = await pool.query('SELECT * FROM responses WHERE survey_id = $1 ORDER BY submitted_at DESC', [req.params.id]);
     const responses = result.rows.map(row => ({

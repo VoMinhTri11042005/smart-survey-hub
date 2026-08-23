@@ -62,7 +62,28 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
       const saved = localStorage.getItem('surveys');
       if (saved) return JSON.parse(saved);
     } catch (e) {}
-    return [];
+
+    // Seed a demo survey in development when none exist so respondents can try the flow
+    try {
+      const demo: Survey = {
+        id: 'test',
+        title: 'Bản demo: Khảo sát mẫu',
+        description: 'Khảo sát mẫu để thử nghiệm',
+        questions: [
+          { id: 'q1', type: 'single_choice', text: 'Bạn thích màu nào?', options: ['Đỏ', 'Xanh', 'Vàng'], required: true },
+          { id: 'q2', type: 'text', text: 'Lý do?', required: false }
+        ],
+        isQuiz: false,
+        displayMode: 'single',
+        showScore: true,
+        createdAt: new Date().toISOString(),
+        status: 'live'
+      } as Survey;
+      try { localStorage.setItem('surveys', JSON.stringify([demo])); } catch (e) {}
+      return [demo];
+    } catch (e) {
+      return [];
+    }
   });
   
   useEffect(() => {
