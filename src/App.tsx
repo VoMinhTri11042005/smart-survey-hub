@@ -135,11 +135,7 @@ function AppContent() {
       <Suspense fallback={<AppFallback />}>
         <>
           <Respondent survey={shareSurvey} isPublic={true} onExit={() => {
-            if (window.history.length > 1) {
-              window.history.back();
-            } else {
-              window.location.href = '/';
-            }
+            window.location.replace('/');
           }} />
           <AnimatePresence>{toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}</AnimatePresence>
         </>
@@ -154,7 +150,18 @@ function AppContent() {
       ) : (userRole === 'user' || currentView === 'respondent') ? (
         <Suspense fallback={<AppFallback />}>
           <>
-            <Respondent survey={currentSurvey} onExit={() => { if (userRole === 'user') { setIsAuthenticated(false); setUserRole(null); } else { setCurrentView('dashboard'); } }} />
+            <Respondent
+              survey={currentSurvey}
+              onExit={() => {
+                if (userRole === 'user') {
+                  setIsAuthenticated(false);
+                  setUserRole(null);
+                  setCurrentView('dashboard');
+                  return;
+                }
+                setCurrentView('dashboard');
+              }}
+            />
             <Chatbot survey={currentSurvey} />
           </>
         </Suspense>
