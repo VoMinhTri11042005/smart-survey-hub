@@ -30,6 +30,7 @@ export interface Survey {
   questions: SurveyQuestion[];
   createdAt: string;
   status: 'draft' | 'live' | 'closed';
+  closesAt?: string | null;
   isQuiz?: boolean;
   showScore?: boolean;
   displayMode?: SurveyDisplayMode;

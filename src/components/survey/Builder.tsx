@@ -24,6 +24,14 @@ const quillModules = {
   ]
 };
 
+const toDateTimeLocalValue = (value: string | null | undefined) => {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const localTime = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+  return localTime.toISOString().slice(0, 16);
+};
+
 export function Builder({ onPublished, onError }: { onPublished?: () => void; onError?: (msg: string) => void }) {
   const { parseDocx, createSurvey, setCurrentSurvey, isLoading, pendingTemplate, clearPendingTemplate, chatWithAI, fetchDrafts, saveDraft, deleteDraft } = useSurvey();
   const DRAFT_STORAGE_KEY = 'smart-survey-hub-builder-draft';
@@ -39,6 +47,7 @@ export function Builder({ onPublished, onError }: { onPublished?: () => void; on
   const [isQuiz, setIsQuiz] = useState(false);
   const [showScore, setShowScore] = useState(true);
   const [displayMode, setDisplayMode] = useState<SurveyDisplayMode>('single');
+  const [closesAt, setClosesAt] = useState<string | null>(null);
   const [draftSavedAt, setDraftSavedAt] = useState<string | null>(null);
   const [draftId, setDraftId] = useState<string | null>(null);
   const [publishedSurvey, setPublishedSurvey] = useState<{ id: string; title: string } | null>(null);
@@ -106,6 +115,7 @@ export function Builder({ onPublished, onError }: { onPublished?: () => void; on
             isQuiz?: boolean;
             showScore?: boolean;
             displayMode?: SurveyDisplayMode;
+            closesAt?: string | null;
           };
 
           if (draft.surveyTitle || draft.surveyDescription || draft.questions?.length) {
@@ -115,6 +125,7 @@ export function Builder({ onPublished, onError }: { onPublished?: () => void; on
             setIsQuiz(Boolean(draft.isQuiz));
             setShowScore(draft.showScore !== false);
             setDisplayMode(draft.displayMode || 'single');
+            setClosesAt(draft.closesAt || null);
             setShowSurvey(true);
             setActiveQuestionId(draft.questions?.[0]?.id || null);
           }
@@ -132,6 +143,7 @@ export function Builder({ onPublished, onError }: { onPublished?: () => void; on
       setIsQuiz(Boolean(latest.isQuiz));
       setShowScore(latest.showScore !== false);
       setDisplayMode(latest.displayMode || 'single');
+      setClosesAt(latest.closesAt || null);
       setShowSurvey(true);
       setActiveQuestionId((latest.questions || [])[0]?.id || null);
       setDraftSavedAt(latest.updatedAt ? new Date(latest.updatedAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : null);
@@ -150,6 +162,7 @@ export function Builder({ onPublished, onError }: { onPublished?: () => void; on
       isQuiz,
       showScore,
       displayMode,
+      closesAt,
     };
 
     try {
@@ -158,7 +171,7 @@ export function Builder({ onPublished, onError }: { onPublished?: () => void; on
     } catch (error) {
       console.error('Failed to save draft', error);
     }
-  }, [showSurvey, surveyTitle, surveyDescription, questions, isQuiz, showScore, displayMode]);
+  }, [showSurvey, surveyTitle, surveyDescription, questions, isQuiz, showScore, displayMode, closesAt]);
 
   const clearDraft = () => {
     localStorage.removeItem(DRAFT_STORAGE_KEY);
@@ -187,6 +200,7 @@ export function Builder({ onPublished, onError }: { onPublished?: () => void; on
       isQuiz,
       showScore,
       displayMode,
+      closesAt,
     };
     localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft));
     const saved = await saveDraft(draft);
@@ -220,6 +234,7 @@ export function Builder({ onPublished, onError }: { onPublished?: () => void; on
         isQuiz,
         showScore,
         displayMode,
+        closesAt: closesAt ? new Date(closesAt).toISOString() : null,
       });
       setCurrentSurvey(survey);
       clearDraft();
@@ -690,6 +705,16 @@ export function Builder({ onPublished, onError }: { onPublished?: () => void; on
                      </div>
                    </div>
                    <span className="hidden md:inline text-text-secondary">•</span>
+                   <label className="flex items-center gap-2 rounded-lg bg-surface-container-low px-2 py-1.5 text-xs font-medium text-text-secondary">
+                     <span>Khóa tới</span>
+                     <input
+                       type="datetime-local"
+                       value={toDateTimeLocalValue(closesAt)}
+                       onChange={(e) => setClosesAt(e.target.value ? new Date(e.target.value).toISOString() : null)}
+                       className="rounded-md border border-border-subtle bg-white px-2 py-1 text-[10px] md:text-xs text-text-primary focus:ring-2 focus:ring-primary/30 outline-none"
+                     />
+                   </label>
+                   <span className="hidden md:inline text-text-secondary">•</span>
                    <button
                      onClick={saveSurveyDraft}
                      className="text-xs md:text-sm font-semibold text-text-secondary hover:text-primary transition-colors cursor-pointer"
@@ -698,7 +723,7 @@ export function Builder({ onPublished, onError }: { onPublished?: () => void; on
                    </button>
                    <span className="text-[10px] md:text-xs text-text-secondary">{draftSavedAt ? `Đã lưu ${draftSavedAt}` : 'Chưa lưu'}</span>
                    <button
-                     onClick={() => { setShowSurvey(false); setQuestions([]); setSurveyTitle(''); setSurveyDescription(''); setActiveQuestionId(null); setIsQuiz(false); setShowScore(true); setDisplayMode('single'); clearDraft(); }}
+                     onClick={() => { setShowSurvey(false); setQuestions([]); setSurveyTitle(''); setSurveyDescription(''); setActiveQuestionId(null); setIsQuiz(false); setShowScore(true); setDisplayMode('single'); setClosesAt(null); clearDraft(); }}
                      className="text-xs md:text-sm font-semibold text-text-secondary hover:text-sentiment-negative transition-colors cursor-pointer"
                    >
                      Tạo lại

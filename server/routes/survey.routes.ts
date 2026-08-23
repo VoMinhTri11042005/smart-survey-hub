@@ -13,16 +13,14 @@ router.post('/surveys', async (req, res) => {
   if (!process.env.DATABASE_URL) return res.status(500).json({ error: 'Database not configured' });
   try {
     const id = req.body.id || generateId();
-    const { title, description, questions, status, isQuiz, displayMode, showScore } = req.body;
+    const { title, description, questions, status, isQuiz, displayMode, showScore, closesAt } = req.body;
     
     const result = await pool.query(
-      `INSERT INTO surveys (id, title, description, questions, is_quiz, display_mode, show_score, status) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
-      [id, title, description, JSON.stringify(questions), Boolean(isQuiz), displayMode || 'single', showScore !== false, status || 'live']
+      `INSERT INTO surveys (id, title, description, questions, is_quiz, display_mode, show_score, closes_at, status) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
+      [id, title, description, JSON.stringify(questions), Boolean(isQuiz), displayMode || 'single', showScore !== false, closesAt ? new Date(closesAt).toISOString() : null, status || 'live']
     );
     
-    // PostgreSQL usually returns camelCase if specified or snake_case
-    // Map it to frontend expectations
     const row = result.rows[0];
     res.json({
       id: row.id,
@@ -31,6 +29,7 @@ router.post('/surveys', async (req, res) => {
       questions: row.questions,
       createdAt: row.created_at,
       status: row.status,
+      closesAt: row.closes_at ? new Date(row.closes_at).toISOString() : null,
       displayMode: row.display_mode || 'single',
       showScore: row.show_score !== false
     });
@@ -59,6 +58,7 @@ router.get('/surveys', async (_req, res) => {
       questions: row.questions,
       createdAt: row.created_at,
       status: row.status,
+      closesAt: row.closes_at ? new Date(row.closes_at).toISOString() : null,
       isQuiz: row.is_quiz || false,
       displayMode: row.display_mode || 'single',
       showScore: row.show_score !== false,
@@ -94,6 +94,7 @@ router.get('/surveys/:id', async (req, res) => {
       questions: row.questions,
       createdAt: row.created_at,
       status: row.status,
+      closesAt: row.closes_at ? new Date(row.closes_at).toISOString() : null,
       isQuiz: row.is_quiz || false,
       displayMode: row.display_mode || 'single',
       showScore: row.show_score !== false,
@@ -225,6 +226,7 @@ router.get('/surveys/drafts', async (_req, res) => {
       isQuiz: Boolean(row.is_quiz),
       showScore: row.show_score !== false,
       displayMode: row.display_mode || 'single',
+      closesAt: row.closes_at ? new Date(row.closes_at).toISOString() : null,
       updatedAt: row.updated_at,
     }));
 
@@ -239,16 +241,16 @@ router.post('/surveys/drafts', async (req, res) => {
   if (!process.env.DATABASE_URL) return res.status(503).json({ error: 'Database not configured' });
 
   try {
-    const { id, title, description, questions, isQuiz, showScore, displayMode } = req.body ?? {};
+    const { id, title, description, questions, isQuiz, showScore, displayMode, closesAt } = req.body ?? {};
     const draftId = id || generateId();
 
     const result = await pool.query(
-      `INSERT INTO survey_drafts (id, user_id, title, description, questions, is_quiz, show_score, display_mode, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP)
+      `INSERT INTO survey_drafts (id, user_id, title, description, questions, is_quiz, show_score, display_mode, closes_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP)
        ON CONFLICT (id)
-       DO UPDATE SET title = EXCLUDED.title, description = EXCLUDED.description, questions = EXCLUDED.questions, is_quiz = EXCLUDED.is_quiz, show_score = EXCLUDED.show_score, display_mode = EXCLUDED.display_mode, updated_at = CURRENT_TIMESTAMP
+       DO UPDATE SET title = EXCLUDED.title, description = EXCLUDED.description, questions = EXCLUDED.questions, is_quiz = EXCLUDED.is_quiz, show_score = EXCLUDED.show_score, display_mode = EXCLUDED.display_mode, closes_at = EXCLUDED.closes_at, updated_at = CURRENT_TIMESTAMP
        RETURNING *`,
-      [draftId, 'admin', title || 'Khảo sát nháp', description || '', JSON.stringify(questions || []), Boolean(isQuiz), showScore !== false, displayMode || 'single']
+      [draftId, 'admin', title || 'Khảo sát nháp', description || '', JSON.stringify(questions || []), Boolean(isQuiz), showScore !== false, displayMode || 'single', closesAt ? new Date(closesAt).toISOString() : null]
     );
 
     const row = result.rows[0];
@@ -260,6 +262,7 @@ router.post('/surveys/drafts', async (req, res) => {
       isQuiz: Boolean(row.is_quiz),
       showScore: row.show_score !== false,
       displayMode: row.display_mode || 'single',
+      closesAt: row.closes_at ? new Date(row.closes_at).toISOString() : null,
       updatedAt: row.updated_at,
     });
   } catch (err) {
@@ -318,11 +321,11 @@ router.post('/backup/import', async (req, res) => {
 
     for (const row of surveys) {
       await pool.query(
-        `INSERT INTO surveys (id, title, description, questions, is_quiz, display_mode, show_score, status, created_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, COALESCE($9, CURRENT_TIMESTAMP))
+        `INSERT INTO surveys (id, title, description, questions, is_quiz, display_mode, show_score, closes_at, status, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, COALESCE($10, CURRENT_TIMESTAMP))
          ON CONFLICT (id)
-         DO UPDATE SET title = EXCLUDED.title, description = EXCLUDED.description, questions = EXCLUDED.questions, is_quiz = EXCLUDED.is_quiz, display_mode = EXCLUDED.display_mode, show_score = EXCLUDED.show_score, status = EXCLUDED.status, created_at = COALESCE(EXCLUDED.created_at, surveys.created_at)`,
-        [row.id, row.title, row.description, JSON.stringify(row.questions || []), Boolean(row.is_quiz), row.display_mode || 'single', row.show_score !== false, row.status || 'live', row.created_at]
+         DO UPDATE SET title = EXCLUDED.title, description = EXCLUDED.description, questions = EXCLUDED.questions, is_quiz = EXCLUDED.is_quiz, display_mode = EXCLUDED.display_mode, show_score = EXCLUDED.show_score, closes_at = EXCLUDED.closes_at, status = EXCLUDED.status, created_at = COALESCE(EXCLUDED.created_at, surveys.created_at)`,
+        [row.id, row.title, row.description, JSON.stringify(row.questions || []), Boolean(row.is_quiz), row.display_mode || 'single', row.show_score !== false, row.closes_at ? new Date(row.closes_at).toISOString() : null, row.status || 'live', row.created_at]
       );
     }
 
@@ -358,11 +361,11 @@ router.post('/backup/import', async (req, res) => {
 
     for (const row of drafts) {
       await pool.query(
-        `INSERT INTO survey_drafts (id, user_id, title, description, questions, is_quiz, show_score, display_mode, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        `INSERT INTO survey_drafts (id, user_id, title, description, questions, is_quiz, show_score, display_mode, closes_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
          ON CONFLICT (id)
-         DO UPDATE SET title = EXCLUDED.title, description = EXCLUDED.description, questions = EXCLUDED.questions, is_quiz = EXCLUDED.is_quiz, show_score = EXCLUDED.show_score, display_mode = EXCLUDED.display_mode, updated_at = EXCLUDED.updated_at`,
-        [row.id, row.user_id || 'admin', row.title || 'Khảo sát nháp', row.description || '', JSON.stringify(row.questions || []), Boolean(row.is_quiz), row.show_score !== false, row.display_mode || 'single', row.updated_at || new Date().toISOString()]
+         DO UPDATE SET title = EXCLUDED.title, description = EXCLUDED.description, questions = EXCLUDED.questions, is_quiz = EXCLUDED.is_quiz, show_score = EXCLUDED.show_score, display_mode = EXCLUDED.display_mode, closes_at = EXCLUDED.closes_at, updated_at = EXCLUDED.updated_at`,
+        [row.id, row.user_id || 'admin', row.title || 'Khảo sát nháp', row.description || '', JSON.stringify(row.questions || []), Boolean(row.is_quiz), row.show_score !== false, row.display_mode || 'single', row.closes_at ? new Date(row.closes_at).toISOString() : null, row.updated_at || new Date().toISOString()]
       );
     }
 

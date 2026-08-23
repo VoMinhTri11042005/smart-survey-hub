@@ -9,6 +9,7 @@ interface SurveyDraft {
   isQuiz?: boolean;
   showScore?: boolean;
   displayMode?: SurveyDisplayMode;
+  closesAt?: string | null;
   updatedAt?: string;
 }
 
@@ -23,7 +24,7 @@ interface SurveyContextType {
 
   fetchSurveys: () => Promise<void>;
   fetchSurveyById: (id: string) => Promise<Survey | null>;
-  createSurvey: (survey: Omit<Survey, 'id' | 'createdAt' | 'status'> & { status?: string; displayMode?: SurveyDisplayMode }) => Promise<Survey>;
+  createSurvey: (survey: Omit<Survey, 'id' | 'createdAt' | 'status'> & { status?: string; closesAt?: string | null; displayMode?: SurveyDisplayMode }) => Promise<Survey>;
   deleteSurvey: (id: string) => Promise<void>;
   setCurrentSurvey: (survey: Survey | null) => void;
   setSearchQuery: (query: string) => void;
@@ -82,7 +83,13 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
       const res = await fetch(`${API_BASE}/surveys`);
       if (res.ok) {
         const data = await res.json();
-        setSurveys(data);
+        const normalized = (data || []).map((survey: any) => ({
+          ...survey,
+          closesAt: survey.closesAt ?? survey.closes_at ?? null,
+          displayMode: survey.displayMode ?? survey.display_mode ?? 'single',
+          showScore: survey.showScore ?? survey.show_score ?? true,
+        }));
+        setSurveys(normalized);
       } else {
         setSurveys([]);
       }
@@ -98,7 +105,13 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
     try {
       const res = await fetch(`${API_BASE}/surveys/${id}`);
       if (res.ok) {
-        return await res.json();
+        const survey = await res.json();
+        return {
+          ...survey,
+          closesAt: survey.closesAt ?? survey.closes_at ?? null,
+          displayMode: survey.displayMode ?? survey.display_mode ?? 'single',
+          showScore: survey.showScore ?? survey.show_score ?? true,
+        };
       }
       return null;
     } catch (error) {
@@ -116,7 +129,7 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const createSurvey = useCallback(async (surveyData: Omit<Survey, 'id' | 'createdAt' | 'status'> & { status?: string; displayMode?: SurveyDisplayMode }): Promise<Survey> => {
+  const createSurvey = useCallback(async (surveyData: Omit<Survey, 'id' | 'createdAt' | 'status'> & { status?: string; closesAt?: string | null; displayMode?: SurveyDisplayMode }): Promise<Survey> => {
     try {
       const res = await fetch(`${API_BASE}/surveys`, {
         method: 'POST',
@@ -124,6 +137,7 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
         body: JSON.stringify({
           ...surveyData,
           status: (surveyData.status as 'draft' | 'live' | 'closed') || 'live',
+          closesAt: surveyData.closesAt || null,
           displayMode: surveyData.displayMode || 'single',
           showScore: surveyData.showScore !== false
         })
@@ -140,6 +154,7 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
         id: Math.random().toString(36).substring(2, 9),
         createdAt: new Date().toISOString(),
         status: (surveyData.status as 'draft' | 'live' | 'closed') || 'live',
+        closesAt: surveyData.closesAt || null,
         displayMode: surveyData.displayMode || 'single',
         showScore: surveyData.showScore !== false
       };
@@ -173,6 +188,7 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
       isQuiz: Boolean(draft.isQuiz),
       showScore: draft.showScore !== false,
       displayMode: draft.displayMode || 'single',
+      closesAt: draft.closesAt || null,
     };
 
     try {

@@ -122,6 +122,16 @@
 }
 
 /* Rendered HTML overrides for Respondent */
+.rendered-html,
+.rendered-html *,
+.rendered-option,
+.rendered-option *,
+.question-content,
+.question-content * {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
 .rendered-html p {
   margin-bottom: 0.5em;
 }

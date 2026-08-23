@@ -172,7 +172,15 @@ export function exportResponsesToCsv(survey: Survey, responses: SurveyResponse[]
   
   const rows = responses.map(r => {
       const d = new Date(r.submittedAt);
-      const dateStr = `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}/${d.getFullYear()} ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+      const dateStr = new Intl.DateTimeFormat('vi-VN', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false,
+      }).format(d);
       
       const cells: (string | number)[] = [
         r.id,
