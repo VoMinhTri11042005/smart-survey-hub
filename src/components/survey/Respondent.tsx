@@ -86,44 +86,8 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
     setDraftSavedAt(new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }));
   }, [answers, isCompleted, respondentId, survey]);
 
-  if (isLoading) {
-    return <div className="min-h-screen bg-surface-background flex items-center justify-center font-sans text-text-secondary">Đang chuẩn bị khảo sát...</div>;
-  }
-
-  const isSurveyClosed = !!survey?.closesAt && new Date(survey.closesAt).getTime() <= Date.now();
-
-  if (isSurveyClosed) {
-    return (
-      <div className="min-h-screen bg-surface-background flex flex-col items-center justify-center gap-4 font-sans px-4 text-center">
-        <div className="w-16 h-16 bg-surface-container-high rounded-2xl flex items-center justify-center">
-          <Timer size={28} className="text-text-secondary" />
-        </div>
-        <h2 className="font-display text-2xl font-bold text-text-primary">Khảo sát đã kết thúc</h2>
-        <p className="text-text-secondary text-sm max-w-md">Thời gian tham gia khảo sát đã hết. Cảm ơn bạn đã quan tâm.</p>
-        <button onClick={onExit} className="mt-4 px-6 py-2.5 bg-primary text-white rounded-xl font-semibold text-sm hover:bg-primary/90 transition-colors cursor-pointer">
-          Quay lại
-        </button>
-      </div>
-    );
-  }
-
-  if (!survey || !survey.questions || survey.questions.length === 0) {
-    return (
-      <div className="min-h-screen bg-surface-background flex flex-col items-center justify-center gap-4 font-sans">
-        <div className="w-16 h-16 bg-surface-container-high rounded-2xl flex items-center justify-center">
-          <Sparkles size={28} className="text-text-secondary" />
-        </div>
-        <h2 className="font-display text-2xl font-bold text-text-primary">Không có khảo sát nào để hiển thị</h2>
-        <p className="text-text-secondary text-sm">Vui lòng quay lại sau hoặc liên hệ quản trị viên.</p>
-        <button onClick={onExit} className="mt-4 px-6 py-2.5 bg-primary text-white rounded-xl font-semibold text-sm hover:bg-primary/90 transition-colors cursor-pointer">
-          Quay lại
-        </button>
-      </div>
-    );
-  }
-
-  const questions = survey.questions;
-  const displayMode = survey.displayMode ?? 'single';
+  const questions = survey?.questions ?? [];
+  const displayMode = survey?.displayMode ?? 'single';
   const showAllQuestions = displayMode === 'all';
   const totalSteps = showAllQuestions ? 1 : questions.length;
   const currentQuestion = showAllQuestions ? null : questions[step];
@@ -204,6 +168,42 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
       window.removeEventListener('popstate', handlePopState);
     };
   }, [survey?.id, isCompleted, callExit]);
+
+  if (isLoading) {
+    return <div className="min-h-screen bg-surface-background flex items-center justify-center font-sans text-text-secondary">Đang chuẩn bị khảo sát...</div>;
+  }
+
+  const isSurveyClosed = !!survey?.closesAt && new Date(survey.closesAt).getTime() <= Date.now();
+
+  if (isSurveyClosed) {
+    return (
+      <div className="min-h-screen bg-surface-background flex flex-col items-center justify-center gap-4 font-sans px-4 text-center">
+        <div className="w-16 h-16 bg-surface-container-high rounded-2xl flex items-center justify-center">
+          <Timer size={28} className="text-text-secondary" />
+        </div>
+        <h2 className="font-display text-2xl font-bold text-text-primary">Khảo sát đã kết thúc</h2>
+        <p className="text-text-secondary text-sm max-w-md">Thời gian tham gia khảo sát đã hết. Cảm ơn bạn đã quan tâm.</p>
+        <button onClick={onExit} className="mt-4 px-6 py-2.5 bg-primary text-white rounded-xl font-semibold text-sm hover:bg-primary/90 transition-colors cursor-pointer">
+          Quay lại
+        </button>
+      </div>
+    );
+  }
+
+  if (!survey || !survey.questions || survey.questions.length === 0) {
+    return (
+      <div className="min-h-screen bg-surface-background flex flex-col items-center justify-center gap-4 font-sans">
+        <div className="w-16 h-16 bg-surface-container-high rounded-2xl flex items-center justify-center">
+          <Sparkles size={28} className="text-text-secondary" />
+        </div>
+        <h2 className="font-display text-2xl font-bold text-text-primary">Không có khảo sát nào để hiển thị</h2>
+        <p className="text-text-secondary text-sm">Vui lòng quay lại sau hoặc liên hệ quản trị viên.</p>
+        <button onClick={onExit} className="mt-4 px-6 py-2.5 bg-primary text-white rounded-xl font-semibold text-sm hover:bg-primary/90 transition-colors cursor-pointer">
+          Quay lại
+        </button>
+      </div>
+    );
+  }
 
   const setAnswerForQuestion = (questionId: string, value: any) => {
     setErrorMsg('');
