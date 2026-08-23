@@ -33,37 +33,46 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
     }
 
     const initRespondent = async () => {
-      let rid = localStorage.getItem('respondentId');
-      if (!rid) {
-        rid = Math.random().toString(36).substring(2, 10) + Date.now().toString(36);
-        localStorage.setItem('respondentId', rid);
-      }
-      setRespondentId(rid);
-
       try {
-        const savedDraft = localStorage.getItem(`survey-draft:${survey.id}:${rid}`);
-        if (savedDraft) {
-          const savedAnswers = JSON.parse(savedDraft);
-          if (savedAnswers && typeof savedAnswers === 'object') {
-            setAnswers(savedAnswers);
-          }
+        let rid = localStorage.getItem('respondentId');
+        if (!rid) {
+          rid = Math.random().toString(36).substring(2, 10) + Date.now().toString(36);
+          localStorage.setItem('respondentId', rid);
         }
-      } catch (error) {
-        console.warn('Failed to load survey draft', error);
-      }
+        setRespondentId(rid);
 
-      const existingResponse = await fetchMyResponse(survey.id, rid);
-      if (existingResponse && existingResponse.answers && Object.keys(existingResponse.answers).length > 0) {
-        setAnswers(existingResponse.answers);
-        if (existingResponse.score !== undefined) setQuizScore(existingResponse.score);
-        if (existingResponse.totalQuizQuestions !== undefined) setQuizTotal(existingResponse.totalQuizQuestions);
-        setIsCompleted(true);
+        try {
+          const savedDraft = localStorage.getItem(`survey-draft:${survey.id}:${rid}`);
+          if (savedDraft) {
+            const savedAnswers = JSON.parse(savedDraft);
+            if (savedAnswers && typeof savedAnswers === 'object') {
+              setAnswers(savedAnswers);
+            }
+          }
+        } catch (error) {
+          console.warn('Failed to load survey draft', error);
+        }
+
+        try {
+          const existingResponse = await fetchMyResponse(survey.id, rid);
+          if (existingResponse && existingResponse.answers && Object.keys(existingResponse.answers).length > 0) {
+            setAnswers(existingResponse.answers);
+            if (existingResponse.score !== undefined) setQuizScore(existingResponse.score);
+            if (existingResponse.totalQuizQuestions !== undefined) setQuizTotal(existingResponse.totalQuizQuestions);
+            setIsCompleted(true);
+          }
+        } catch (e) {
+          console.warn('Failed to fetch existing response', e);
+        }
+      } catch (err) {
+        console.error('Error during initRespondent:', err);
+      } finally {
+        setIsLoading(false);
       }
-      setIsLoading(false);
     };
 
     initRespondent();
-  }, [survey, fetchMyResponse]);
+  }, [survey?.id, fetchMyResponse]);
 
   useEffect(() => {
     if (!survey || !respondentId) return;

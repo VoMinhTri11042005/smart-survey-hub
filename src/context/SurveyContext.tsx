@@ -278,6 +278,10 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
     try {
       const res = await fetch(`${API_BASE}/surveys/${surveyId}/responses/my/${respondentId}`);
       if (res.ok) {
+        const contentType = res.headers.get('content-type');
+        if (contentType && !contentType.includes('application/json')) {
+          return null;
+        }
         return await res.json();
       }
       return null;
@@ -291,6 +295,10 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
     try {
       const res = await fetch(`${API_BASE}/surveys/${surveyId}/responses`);
       if (res.ok) {
+        const contentType = res.headers.get('content-type');
+        if (contentType && !contentType.includes('application/json')) {
+          return [];
+        }
         return await res.json();
       }
       return [];
