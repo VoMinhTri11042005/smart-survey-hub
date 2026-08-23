@@ -18,6 +18,8 @@ const Templates = lazy(() => import('./components/dashboard/Templates').then((m)
 const Teams = lazy(() => import('./components/dashboard/Teams').then((m) => ({ default: m.Teams })));
 const Builder = lazy(() => import('./components/survey/Builder').then((m) => ({ default: m.Builder })));
 const Respondent = lazy(() => import('./components/survey/Respondent').then((m) => ({ default: m.Respondent })));
+const Chatbot = lazy(() => import('./components/survey/Chatbot').then((m) => ({ default: m.Chatbot })));
+
 const Settings = lazy(() => import('./components/dashboard/Settings').then((m) => ({ default: m.Settings })));
 
 const AppFallback = () => (
@@ -147,6 +149,7 @@ function AppContent() {
         <Suspense fallback={<AppFallback />}>
           <>
             <Respondent survey={currentSurvey} onExit={() => { if (userRole === 'user') { setIsAuthenticated(false); setUserRole(null); } else { setCurrentView('dashboard'); } }} />
+            <Chatbot survey={currentSurvey} />
           </>
         </Suspense>
       ) : (
