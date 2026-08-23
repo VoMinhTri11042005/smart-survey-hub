@@ -12,7 +12,7 @@ import teamRoutes from './routes/team.routes';
 import userRoutes from './routes/user.routes';
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 3005; // use 3005 by default to avoid conflicts with local services
 
 import path from 'path';
 import { fileURLToPath } from 'url';
