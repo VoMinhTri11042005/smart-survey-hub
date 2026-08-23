@@ -130,20 +130,32 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
   const hasAnswerProgress = Object.keys(answers).length > 0 || step > 0;
 
   const callExit = () => {
-    // Ensure public respondents are always redirected out to a dedicated public exit page
+    // For public respondents: try to close the tab or navigate away (don't redirect into SPA admin)
     if (isPublic) {
       try {
-        // remove local auth flags to avoid SPA showing admin UI when redirecting
+        // clear local auth flags to avoid app thinking user is admin
         localStorage.removeItem('isAuthenticated');
         localStorage.removeItem('userRole');
         localStorage.removeItem('userProfile');
       } catch (e) {
         /* ignore */
       }
-      // Use a dedicated public-safe path so admin UI isn't shown even if cookies exist
-      window.location.replace('/public-exit');
+
+      try {
+        // Try to close the window (may not be allowed in all browsers)
+        window.close();
+      } catch (e) {
+        // ignore
+      }
+
+      // If still open, navigate to a neutral blank page to ensure user leaves app
+      setTimeout(() => {
+        try { window.location.replace('about:blank'); } catch (e) { window.location.href = 'about:blank'; }
+      }, 200);
       return;
     }
+
+    // Non-public: call the provided onExit handler (admin preview behavior)
     try {
       onExit();
     } catch (e) {
@@ -153,11 +165,8 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
   };
 
   const handleExitRequest = () => {
-    if (!isCompleted && hasAnswerProgress) {
-      setShowExitConfirm(true);
-      return;
-    }
-    callExit();
+    // Always show confirmation so user can choose to continue or close
+    setShowExitConfirm(true);
   };
 
   const setAnswerForQuestion = (questionId: string, value: any) => {

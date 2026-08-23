@@ -22,7 +22,6 @@ const Chatbot = lazy(() => import('./components/survey/Chatbot').then((m) => ({ 
 
 const Settings = lazy(() => import('./components/dashboard/Settings').then((m) => ({ default: m.Settings })));
 
-import { PublicExit } from './components/common/PublicExit';
 
 const AppFallback = () => (
   <div className="flex h-screen items-center justify-center bg-surface-background text-text-primary">
@@ -134,21 +133,15 @@ function AppContent() {
     setNotifications(prev => [{ id: Date.now().toString(), message: msg, time: 'Vừa xong', read: false }, ...prev]);
   };
 
-  // special route: public exit page
-  if (window.location.pathname === '/public-exit') {
-    return (
-      <Suspense fallback={<AppFallback />}>
-        <PublicExit />
-      </Suspense>
-    );
-  }
-
   if (shareSurveyId && shareSurvey) {
     return (
       <Suspense fallback={<AppFallback />}>
         <>
           <Respondent survey={shareSurvey} isPublic={true} onExit={() => {
-            window.location.replace('/public-exit');
+            // fallback: if for some reason callExit couldn't close, ensure we don't go to admin
+            try { localStorage.removeItem('isAuthenticated'); localStorage.removeItem('userRole'); } catch (e) {}
+            try { window.close(); } catch (e) {}
+            setTimeout(() => { try { window.location.replace('about:blank'); } catch (e) { window.location.href = 'about:blank'; } }, 200);
           }} />
           <AnimatePresence>{toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}</AnimatePresence>
         </>
