@@ -138,10 +138,8 @@ function AppContent() {
       <Suspense fallback={<AppFallback />}>
         <>
           <Respondent survey={shareSurvey} isPublic={true} onExit={() => {
-            // fallback: if for some reason callExit couldn't close, ensure we don't go to admin
             try { localStorage.removeItem('isAuthenticated'); localStorage.removeItem('userRole'); } catch (e) {}
             try { window.close(); } catch (e) {}
-            setTimeout(() => { try { window.location.replace('about:blank'); } catch (e) { window.location.href = 'about:blank'; } }, 200);
           }} />
           <AnimatePresence>{toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}</AnimatePresence>
         </>

@@ -130,10 +130,10 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
   const hasAnswerProgress = Object.keys(answers).length > 0 || step > 0;
 
   const callExit = () => {
-    // For public respondents: try to close the tab or navigate away (don't redirect into SPA admin)
+    // For public respondents: close the current tab or window when allowed.
+    // Do not redirect to admin or blank pages.
     if (isPublic) {
       try {
-        // clear local auth flags to avoid app thinking user is admin
         localStorage.removeItem('isAuthenticated');
         localStorage.removeItem('userRole');
         localStorage.removeItem('userProfile');
@@ -142,30 +142,23 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
       }
 
       try {
-        // Try to close the window (may not be allowed in all browsers)
         window.close();
       } catch (e) {
-        // ignore
+        // Browsers may block window.close() on non-popup pages; in that case, do nothing
+        // and keep the user inside the survey instead of redirecting to admin or about:blank.
       }
-
-      // If still open, navigate to a neutral blank page to ensure user leaves app
-      setTimeout(() => {
-        try { window.location.replace('about:blank'); } catch (e) { window.location.href = 'about:blank'; }
-      }, 200);
       return;
     }
 
-    // Non-public: call the provided onExit handler (admin preview behavior)
     try {
       onExit();
     } catch (e) {
-      // fallback safe redirect
+      // fallback safe redirect for admin preview only
       window.location.replace('/');
     }
   };
 
   const handleExitRequest = () => {
-    // Always show confirmation so user can choose to continue or close
     setShowExitConfirm(true);
   };
 
@@ -450,19 +443,19 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
               </div>
             </div>
             <p className="text-sm leading-relaxed text-text-secondary">
-              Bạn đang có câu trả lời được lưu tạm. Nếu thoát bây giờ, bạn vẫn có thể quay lại và tiếp tục sau.
+              Bạn đang có câu trả lời được lưu tạm. Bạn có muốn quay lại khảo sát hoặc thoát khỏi trang này?
             </p>
             <div className="mt-5 flex gap-3">
               <button
                 onClick={() => setShowExitConfirm(false)}
                 className="flex-1 rounded-xl border border-border-subtle bg-white px-4 py-3 text-sm font-bold text-text-primary hover:bg-surface-container-low transition-colors cursor-pointer"
               >
-                Ở lại
+                Quay lại khảo sát
               </button>
               <button
                 onClick={() => {
                   setShowExitConfirm(false);
-                callExit();
+                  callExit();
                 }}
                 className="flex-1 rounded-xl bg-primary px-4 py-3 text-sm font-bold text-white hover:bg-primary/90 transition-colors cursor-pointer"
               >
