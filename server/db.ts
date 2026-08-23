@@ -31,6 +31,8 @@ export const initDB = async () => {
         description TEXT,
         questions JSONB NOT NULL,
         is_quiz BOOLEAN DEFAULT FALSE,
+        display_mode VARCHAR(32) DEFAULT 'single',
+        show_score BOOLEAN DEFAULT TRUE,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         status VARCHAR(50) DEFAULT 'draft'
       );
@@ -53,6 +55,8 @@ export const initDB = async () => {
     // In case table already exists without respondent_id or quiz columns
     try {
       await client.query(`ALTER TABLE surveys ADD COLUMN IF NOT EXISTS is_quiz BOOLEAN DEFAULT FALSE;`);
+      await client.query(`ALTER TABLE surveys ADD COLUMN IF NOT EXISTS display_mode VARCHAR(32) DEFAULT 'single';`);
+      await client.query(`ALTER TABLE surveys ADD COLUMN IF NOT EXISTS show_score BOOLEAN DEFAULT TRUE;`);
       
       await client.query(`ALTER TABLE responses ADD COLUMN IF NOT EXISTS respondent_id VARCHAR(255);`);
       await client.query(`ALTER TABLE responses ADD COLUMN IF NOT EXISTS score INT;`);

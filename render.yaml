@@ -1,9 +1,10 @@
 services:
   - type: web
-    name: smart-survey-backend
+    name: smart-survey-hub
     env: node
     plan: free
-    buildCommand: npm install --legacy-peer-deps --include=dev && npm run build
+    region: oregon
+    buildCommand: npm install && npm run build
     startCommand: npm start
     envVars:
       - key: NODE_ENV
@@ -11,4 +12,8 @@ services:
       - key: PORT
         value: 3001
       - key: GEMINI_API_KEY
-        sync: false # You must set this manually in the Render dashboard
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: VITE_API_URL
+        sync: false

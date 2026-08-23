@@ -7,7 +7,9 @@ services:
     ports:
       - "3001:3001"
     environment:
+      - NODE_ENV=production
       - PORT=3001
-      # Thêm key của bạn vào file .env rồi chạy `docker-compose up -d`
       - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - DATABASE_URL=${DATABASE_URL}
+      - VITE_API_URL=${VITE_API_URL:-http://localhost:3001/api}
     restart: unless-stopped

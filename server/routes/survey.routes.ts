@@ -13,12 +13,12 @@ router.post('/surveys', async (req, res) => {
   if (!process.env.DATABASE_URL) return res.status(500).json({ error: 'Database not configured' });
   try {
     const id = req.body.id || generateId();
-    const { title, description, questions, status, isQuiz } = req.body;
+    const { title, description, questions, status, isQuiz, displayMode, showScore } = req.body;
     
     const result = await pool.query(
-      `INSERT INTO surveys (id, title, description, questions, is_quiz, status) 
-       VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-      [id, title, description, JSON.stringify(questions), Boolean(isQuiz), status || 'live']
+      `INSERT INTO surveys (id, title, description, questions, is_quiz, display_mode, show_score, status) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+      [id, title, description, JSON.stringify(questions), Boolean(isQuiz), displayMode || 'single', showScore !== false, status || 'live']
     );
     
     // PostgreSQL usually returns camelCase if specified or snake_case
@@ -30,7 +30,9 @@ router.post('/surveys', async (req, res) => {
       description: row.description,
       questions: row.questions,
       createdAt: row.created_at,
-      status: row.status
+      status: row.status,
+      displayMode: row.display_mode || 'single',
+      showScore: row.show_score !== false
     });
   } catch (err: any) {
     console.error(err);
@@ -58,6 +60,8 @@ router.get('/surveys', async (_req, res) => {
       createdAt: row.created_at,
       status: row.status,
       isQuiz: row.is_quiz || false,
+      displayMode: row.display_mode || 'single',
+      showScore: row.show_score !== false,
       responseCount: parseInt(row.responseCount, 10)
     }));
     res.json(surveys);
@@ -91,6 +95,8 @@ router.get('/surveys/:id', async (req, res) => {
       createdAt: row.created_at,
       status: row.status,
       isQuiz: row.is_quiz || false,
+      displayMode: row.display_mode || 'single',
+      showScore: row.show_score !== false,
       responseCount: parseInt(row.responseCount, 10)
     });
   } catch (err) {

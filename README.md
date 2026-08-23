@@ -39,6 +39,8 @@ SH/
 npm install
 
 # Tạo file .env.local với API key
+cp .env.example .env.local
+# hoặc manual:
 echo "GEMINI_API_KEY=your_key_here" > .env.local
 
 # Chạy cả frontend + backend
@@ -47,6 +49,53 @@ npm run dev
 # Hoặc chạy riêng
 npm run dev:client   # Frontend: http://localhost:3000
 npm run dev:server   # Backend:  http://localhost:3001
+```
+
+## 🚀 Deploy lên Render
+
+1. Đẩy repo lên GitHub.
+2. Truy cập Render → New + Project → Import Repository.
+3. Chọn repo này.
+4. Chọn service type: Web Service.
+5. Build command:
+   ```bash
+   npm install && npm run build
+   ```
+6. Start command:
+   ```bash
+   npm start
+   ```
+7. Thiết lập env vars trong Render:
+   - `NODE_ENV=production`
+   - `PORT=3001`
+   - `GEMINI_API_KEY=...`
+   - `DATABASE_URL=...` (nếu dùng PostgreSQL)
+8. Render sẽ chạy cả frontend + backend trên cùng 1 service; app sẽ phục vụ static build từ `dist/` và API từ `/api`.
+
+## 🌐 Deploy lên Vercel
+
+1. Tạo project trên Vercel.
+2. Import repo.
+3. Set environment variable:
+   - `VITE_API_URL=https://your-render-service-name.onrender.com/api`
+4. Build command: `npm run build`
+5. Output directory: `dist`
+6. Kết quả: frontend chạy trên Vercel, backend API chạy trên Render.
+
+## 🐳 Deploy bằng Docker
+
+```bash
+# Build image
+docker build -t smart-survey-hub .
+
+# Run container
+docker run -p 3001:3001 --env-file .env.local smart-survey-hub
+```
+
+Hoặc dùng docker-compose:
+
+```bash
+docker-compose up --build -d
 ```
 
 ## 📋 API Endpoints

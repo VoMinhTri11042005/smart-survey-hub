@@ -3,23 +3,32 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useEffect } from 'react';
+import { Suspense, lazy, useState, useEffect } from 'react';
 import { Sidebar } from './components/layout/Sidebar';
 import { TopBar } from './components/layout/TopBar';
-import { Dashboard } from './components/dashboard/Dashboard';
-import { Analytics } from './components/dashboard/Analytics';
-import { Templates } from './components/dashboard/Templates';
-import { Teams } from './components/dashboard/Teams';
-import { Builder } from './components/survey/Builder';
-import { Respondent } from './components/survey/Respondent';
 import { Auth } from './components/common/Auth';
-import { Chatbot } from './components/survey/Chatbot';
-import { Settings } from './components/dashboard/Settings';
 import { View, Role, Survey, UserProfile } from './types';
 import { Toast, ToastType } from './components/common/Toast';
 import { AnimatePresence } from 'motion/react';
 import { SurveyProvider, useSurvey } from './context/SurveyContext';
-import { SURVEY_TEMPLATES } from './data/templates';
+
+const Dashboard = lazy(() => import('./components/dashboard/Dashboard').then((m) => ({ default: m.Dashboard })));
+const Analytics = lazy(() => import('./components/dashboard/Analytics').then((m) => ({ default: m.Analytics })));
+const Templates = lazy(() => import('./components/dashboard/Templates').then((m) => ({ default: m.Templates })));
+const Teams = lazy(() => import('./components/dashboard/Teams').then((m) => ({ default: m.Teams })));
+const Builder = lazy(() => import('./components/survey/Builder').then((m) => ({ default: m.Builder })));
+const Respondent = lazy(() => import('./components/survey/Respondent').then((m) => ({ default: m.Respondent })));
+const Chatbot = lazy(() => import('./components/survey/Chatbot').then((m) => ({ default: m.Chatbot })));
+const Settings = lazy(() => import('./components/dashboard/Settings').then((m) => ({ default: m.Settings })));
+
+const AppFallback = () => (
+  <div className="flex h-screen items-center justify-center bg-surface-background text-text-primary">
+    <div className="flex flex-col items-center gap-3">
+      <div className="h-10 w-10 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+      <span className="text-sm font-medium">Đang tải giao diện...</span>
+    </div>
+  </div>
+);
 
 function AppContent() {
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
@@ -122,11 +131,13 @@ function AppContent() {
 
   if (shareSurveyId && shareSurvey) {
     return (
-      <>
-        <Respondent survey={shareSurvey} isPublic={true} onExit={() => { window.location.href = '/'; }} />
-        <Chatbot survey={shareSurvey} />
-        <AnimatePresence>{toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}</AnimatePresence>
-      </>
+      <Suspense fallback={<AppFallback />}>
+        <>
+          <Respondent survey={shareSurvey} isPublic={true} onExit={() => { window.location.href = '/'; }} />
+          <Chatbot survey={shareSurvey} />
+          <AnimatePresence>{toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}</AnimatePresence>
+        </>
+      </Suspense>
     );
   }
 
@@ -135,10 +146,12 @@ function AppContent() {
       {(!isAuthenticated || !userRole) ? (
         <Auth onLogin={(role) => { setIsAuthenticated(true); setUserRole(role); }} />
       ) : (userRole === 'user' || currentView === 'respondent') ? (
-        <>
-          <Respondent survey={currentSurvey} onExit={() => { if (userRole === 'user') { setIsAuthenticated(false); setUserRole(null); } else { setCurrentView('dashboard'); } }} />
-          <Chatbot survey={currentSurvey} />
-        </>
+        <Suspense fallback={<AppFallback />}>
+          <>
+            <Respondent survey={currentSurvey} onExit={() => { if (userRole === 'user') { setIsAuthenticated(false); setUserRole(null); } else { setCurrentView('dashboard'); } }} />
+            <Chatbot survey={currentSurvey} />
+          </>
+        </Suspense>
       ) : (
         <div className="flex h-screen bg-surface-background text-text-primary font-sans overflow-hidden selection:bg-secondary-fixed selection:text-on-secondary-fixed relative">
           <Sidebar currentView={currentView} onViewChange={setCurrentView} onLogout={() => { setIsAuthenticated(false); setUserRole(null); }} userProfile={userProfile} isOpen={isMobileMenuOpen} onClose={() => setIsMobileMenuOpen(false)} />
@@ -156,12 +169,14 @@ function AppContent() {
               onMenuClick={() => setIsMobileMenuOpen(true)}
             />
             <main className="flex-1 overflow-y-auto relative bg-surface-background">
-              {currentView === 'dashboard' && <Dashboard onViewChange={setCurrentView} userProfile={userProfile} onShowToast={showToast} onAddNotification={addNotification} />}
-              {currentView === 'templates' && <Templates onViewChange={setCurrentView} />}
-              {currentView === 'analytics' && <Analytics />}
-              {currentView === 'teams' && <Teams />}
-              {currentView === 'settings' && <Settings profile={userProfile} onUpdateProfile={setUserProfile} onClose={() => setCurrentView('dashboard')} onShowToast={showToast} onAddNotification={addNotification} />}
-              {currentView === 'builder' && <Builder onPublished={() => { showToast('Khảo sát đã được xuất bản thành công!', 'success'); addNotification('Bạn vừa xuất bản một khảo sát mới'); setCurrentView('dashboard'); }} onError={(msg) => showToast(msg, 'error')} />}
+              <Suspense fallback={<AppFallback />}>
+                {currentView === 'dashboard' && <Dashboard onViewChange={setCurrentView} userProfile={userProfile} onShowToast={showToast} onAddNotification={addNotification} />}
+                {currentView === 'templates' && <Templates onViewChange={setCurrentView} />}
+                {currentView === 'analytics' && <Analytics />}
+                {currentView === 'teams' && <Teams />}
+                {currentView === 'settings' && <Settings profile={userProfile} onUpdateProfile={setUserProfile} onClose={() => setCurrentView('dashboard')} onShowToast={showToast} onAddNotification={addNotification} />}
+                {currentView === 'builder' && <Builder onPublished={() => { showToast('Khảo sát đã được xuất bản thành công!', 'success'); addNotification('Bạn vừa xuất bản một khảo sát mới'); setCurrentView('dashboard'); }} onError={(msg) => showToast(msg, 'error')} />}
+              </Suspense>
             </main>
           </div>
         </div>

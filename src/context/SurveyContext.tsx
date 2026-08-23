@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react';
-import type { Survey, SurveyQuestion, SurveyResponse, SurveyTemplateData, TeamMember, TeamRole } from '../types';
+import type { Survey, SurveyQuestion, SurveyResponse, SurveyTemplateData, TeamMember, TeamRole, SurveyDisplayMode } from '../types';
 
 interface SurveyContextType {
   surveys: Survey[];
@@ -11,7 +11,7 @@ interface SurveyContextType {
 
   fetchSurveys: () => Promise<void>;
   fetchSurveyById: (id: string) => Promise<Survey | null>;
-  createSurvey: (survey: Omit<Survey, 'id' | 'createdAt' | 'status'> & { status?: string }) => Promise<Survey>;
+  createSurvey: (survey: Omit<Survey, 'id' | 'createdAt' | 'status'> & { status?: string; displayMode?: SurveyDisplayMode }) => Promise<Survey>;
   deleteSurvey: (id: string) => Promise<void>;
   setCurrentSurvey: (survey: Survey | null) => void;
   setSearchQuery: (query: string) => void;
@@ -100,14 +100,16 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const createSurvey = useCallback(async (surveyData: Omit<Survey, 'id' | 'createdAt' | 'status'> & { status?: string }): Promise<Survey> => {
+  const createSurvey = useCallback(async (surveyData: Omit<Survey, 'id' | 'createdAt' | 'status'> & { status?: string; displayMode?: SurveyDisplayMode }): Promise<Survey> => {
     try {
       const res = await fetch(`${API_BASE}/surveys`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...surveyData,
-          status: (surveyData.status as 'draft' | 'live' | 'closed') || 'live'
+          status: (surveyData.status as 'draft' | 'live' | 'closed') || 'live',
+          displayMode: surveyData.displayMode || 'single',
+          showScore: surveyData.showScore !== false
         })
       });
       if (!res.ok) throw new Error('Failed to create survey');
@@ -122,7 +124,9 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
         ...surveyData,
         id: Math.random().toString(36).substring(2, 9),
         createdAt: new Date().toISOString(),
-        status: (surveyData.status as 'draft' | 'live' | 'closed') || 'live'
+        status: (surveyData.status as 'draft' | 'live' | 'closed') || 'live',
+        displayMode: surveyData.displayMode || 'single',
+        showScore: surveyData.showScore !== false
       };
       setSurveys(prev => [newSurvey, ...prev]);
       return newSurvey;
