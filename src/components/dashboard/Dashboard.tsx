@@ -16,11 +16,14 @@ export function Dashboard({
   onShowToast?: (msg: string, type: 'success' | 'error' | 'info') => void;
   onAddNotification?: (msg: string) => void;
 }) {
-  const { surveys, fetchSurveys, setCurrentSurvey, deleteSurvey, searchQuery } = useSurvey();
+  const { surveys, drafts, fetchSurveys, fetchDrafts, setCurrentSurvey, deleteSurvey, searchQuery } = useSurvey();
   const [shareModal, setShareModal] = useState<{ id: string; title: string } | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; title: string } | null>(null);
 
-  useEffect(() => { fetchSurveys(); }, [fetchSurveys]);
+  useEffect(() => {
+    void fetchSurveys();
+    void fetchDrafts();
+  }, [fetchSurveys, fetchDrafts]);
 
   const filteredSurveys = useMemo(() => {
     if (!searchQuery.trim()) return surveys;
@@ -31,6 +34,16 @@ export function Dashboard({
       s.status.toLowerCase().includes(q)
     );
   }, [surveys, searchQuery]);
+
+  const draftCards = useMemo(() => drafts.map((draft: any) => ({
+    id: draft.id,
+    title: draft.title || 'Bản nháp chưa có tiêu đề',
+    description: draft.description || 'Chưa có mô tả',
+    questions: draft.questions || [],
+    createdAt: draft.updatedAt || new Date().toISOString(),
+    responseCount: 0,
+    status: 'draft'
+  })), [drafts]);
 
   const totalResponses = surveys.reduce((sum, s: any) => sum + (s.responseCount || 0), 0);
   const liveSurveys = surveys.filter(s => s.status === 'live');
@@ -92,63 +105,100 @@ export function Dashboard({
       </div>
 
       {/* Survey List */}
-      <div className="space-y-4 pt-4">
-        <div className="flex items-center justify-between">
-          <h3 className="font-display text-xl font-bold text-text-primary tracking-tight">
-            {surveys.length > 0 ? 'Khảo sát của bạn' : 'Chưa có khảo sát nào'}
-          </h3>
-          {surveys.length > 0 && (
-            <span className="text-text-secondary text-sm font-medium">{surveys.length} khảo sát</span>
-          )}
-        </div>
-
-        {surveys.length === 0 ? (
-          <div className="bg-surface-container-lowest rounded-2xl border border-border-subtle p-12 flex flex-col items-center text-center">
-            <div className="w-16 h-16 bg-surface-container-high rounded-2xl flex items-center justify-center mb-4">
-              <Sparkles size={28} className="text-text-secondary" />
+      <div className="space-y-6 pt-4">
+        {draftCards.length > 0 && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-display text-xl font-bold text-text-primary tracking-tight">Bản nháp của bạn</h3>
+              <span className="text-text-secondary text-sm font-medium">{draftCards.length} bản nháp</span>
             </div>
-            <h4 className="font-display text-lg font-bold text-text-primary mb-2">Bắt đầu tạo khảo sát đầu tiên</h4>
-            <p className="text-text-secondary text-sm mb-6 max-w-md">Upload file Word câu hỏi hoặc nhập chủ đề để AI tự động tạo khảo sát cho bạn.</p>
-            <button onClick={() => onViewChange?.('builder')} className="px-6 py-2.5 bg-primary text-white rounded-xl font-semibold text-sm hover:bg-primary/90 transition-colors cursor-pointer">
-              Tạo khảo sát mới
-            </button>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredSurveys.map((survey: any) => (
-              <div key={survey.id} className="bg-surface-container-lowest rounded-2xl border border-border-subtle p-5 hover:shadow-lg transition-all group flex flex-col min-w-0">
-                <div className="flex justify-between items-start mb-4">
-                  <div className={`px-2.5 py-1 rounded-md flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide ${survey.status === 'live' ? 'bg-sentiment-positive/10 text-sentiment-positive' : 'bg-surface-container-high text-text-secondary'}`}>
-                    {survey.status === 'live' && <span className="w-1.5 h-1.5 rounded-full bg-sentiment-positive animate-pulse"></span>}
-                    {survey.status === 'live' ? 'Trực tiếp' : survey.status === 'draft' ? 'Nháp' : 'Đã đóng'}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {draftCards.map((draft: any) => (
+                <div key={draft.id} className="bg-surface-container-lowest rounded-2xl border border-border-subtle p-5 hover:shadow-lg transition-all group flex flex-col min-w-0">
+                  <div className="flex justify-between items-start mb-4">
+                    <div className="px-2.5 py-1 rounded-md flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide bg-surface-container-high text-text-secondary">
+                      <span className="w-1.5 h-1.5 rounded-full bg-sentiment-neutral animate-pulse"></span>
+                      Nháp
+                    </div>
                   </div>
-                  <div className="flex items-center gap-1">
-                    <button onClick={(e) => { e.stopPropagation(); setShareModal({ id: survey.id, title: survey.title }); }} className="p-1.5 text-text-secondary hover:text-primary transition-colors cursor-pointer rounded-lg hover:bg-surface-container-low" title="Chia sẻ khảo sát">
-                      <Share2 size={16} />
-                    </button>
-                    <button onClick={(e) => { e.stopPropagation(); setDeleteConfirm({ id: survey.id, title: survey.title }); }} className="p-1.5 text-text-secondary hover:text-sentiment-negative transition-colors cursor-pointer rounded-lg hover:bg-sentiment-negative/10" title="Xóa">
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
-                </div>
-                <div className="cursor-pointer min-w-0" onClick={() => handleSurveyClick(survey)}>
-                  <h4 className="font-display text-lg font-bold text-text-primary group-hover:text-primary transition-colors mb-1 leading-tight line-clamp-2 break-all" title={stripHtml(survey.title)}>{stripHtml(survey.title)}</h4>
-                  <p className="text-text-secondary text-xs mb-4 line-clamp-2 break-all">{stripHtml(survey.description) || 'Không có mô tả'}</p>
-                </div>
-                <div className="flex items-center justify-between mt-auto pt-4 border-t border-border-subtle min-w-0">
-                  <div>
-                    <div className="text-xl font-bold text-text-primary">{survey.responseCount || 0}</div>
-                    <div className="text-[10px] text-text-secondary uppercase font-bold tracking-widest">Phản hồi</div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-xs text-text-secondary">{survey.questions?.length || 0} câu hỏi</div>
-                    <div className="text-xs text-text-secondary">{timeSince(survey.createdAt)}</div>
+                  <button type="button" onClick={() => onViewChange?.('builder')} className="text-left cursor-pointer min-w-0">
+                    <h4 className="font-display text-lg font-bold text-text-primary group-hover:text-primary transition-colors mb-1 leading-tight line-clamp-2 break-all" title={stripHtml(draft.title)}>{stripHtml(draft.title)}</h4>
+                    <p className="text-text-secondary text-xs mb-4 line-clamp-2 break-all">{stripHtml(draft.description) || 'Chưa có mô tả'}</p>
+                  </button>
+                  <div className="flex items-center justify-between mt-auto pt-4 border-t border-border-subtle min-w-0">
+                    <div>
+                      <div className="text-xl font-bold text-text-primary">0</div>
+                      <div className="text-[10px] text-text-secondary uppercase font-bold tracking-widest">Phản hồi</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-xs text-text-secondary">{draft.questions?.length || 0} câu hỏi</div>
+                      <div className="text-xs text-text-secondary">{timeSince(draft.createdAt)}</div>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         )}
+
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="font-display text-xl font-bold text-text-primary tracking-tight">
+              {surveys.length > 0 ? 'Khảo sát của bạn' : 'Chưa có khảo sát nào'}
+            </h3>
+            {surveys.length > 0 && (
+              <span className="text-text-secondary text-sm font-medium">{surveys.length} khảo sát</span>
+            )}
+          </div>
+
+          {surveys.length === 0 ? (
+            <div className="bg-surface-container-lowest rounded-2xl border border-border-subtle p-12 flex flex-col items-center text-center">
+              <div className="w-16 h-16 bg-surface-container-high rounded-2xl flex items-center justify-center mb-4">
+                <Sparkles size={28} className="text-text-secondary" />
+              </div>
+              <h4 className="font-display text-lg font-bold text-text-primary mb-2">Bắt đầu tạo khảo sát đầu tiên</h4>
+              <p className="text-text-secondary text-sm mb-6 max-w-md">Upload file Word câu hỏi hoặc nhập chủ đề để AI tự động tạo khảo sát cho bạn.</p>
+              <button onClick={() => onViewChange?.('builder')} className="px-6 py-2.5 bg-primary text-white rounded-xl font-semibold text-sm hover:bg-primary/90 transition-colors cursor-pointer">
+                Tạo khảo sát mới
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {filteredSurveys.map((survey: any) => (
+                <div key={survey.id} className="bg-surface-container-lowest rounded-2xl border border-border-subtle p-5 hover:shadow-lg transition-all group flex flex-col min-w-0">
+                  <div className="flex justify-between items-start mb-4">
+                    <div className={`px-2.5 py-1 rounded-md flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide ${survey.status === 'live' ? 'bg-sentiment-positive/10 text-sentiment-positive' : 'bg-surface-container-high text-text-secondary'}`}>
+                      {survey.status === 'live' && <span className="w-1.5 h-1.5 rounded-full bg-sentiment-positive animate-pulse"></span>}
+                      {survey.status === 'live' ? 'Trực tiếp' : survey.status === 'draft' ? 'Nháp' : 'Đã đóng'}
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <button onClick={(e) => { e.stopPropagation(); setShareModal({ id: survey.id, title: survey.title }); }} className="p-1.5 text-text-secondary hover:text-primary transition-colors cursor-pointer rounded-lg hover:bg-surface-container-low" title="Chia sẻ khảo sát">
+                        <Share2 size={16} />
+                      </button>
+                      <button onClick={(e) => { e.stopPropagation(); setDeleteConfirm({ id: survey.id, title: survey.title }); }} className="p-1.5 text-text-secondary hover:text-sentiment-negative transition-colors cursor-pointer rounded-lg hover:bg-sentiment-negative/10" title="Xóa">
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="cursor-pointer min-w-0" onClick={() => handleSurveyClick(survey)}>
+                    <h4 className="font-display text-lg font-bold text-text-primary group-hover:text-primary transition-colors mb-1 leading-tight line-clamp-2 break-all" title={stripHtml(survey.title)}>{stripHtml(survey.title)}</h4>
+                    <p className="text-text-secondary text-xs mb-4 line-clamp-2 break-all">{stripHtml(survey.description) || 'Không có mô tả'}</p>
+                  </div>
+                  <div className="flex items-center justify-between mt-auto pt-4 border-t border-border-subtle min-w-0">
+                    <div>
+                      <div className="text-xl font-bold text-text-primary">{survey.responseCount || 0}</div>
+                      <div className="text-[10px] text-text-secondary uppercase font-bold tracking-widest">Phản hồi</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-xs text-text-secondary">{survey.questions?.length || 0} câu hỏi</div>
+                      <div className="text-xs text-text-secondary">{timeSince(survey.createdAt)}</div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Share Modal */}
