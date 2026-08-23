@@ -13,7 +13,8 @@ export function ShareModal({ isOpen, onClose, surveyId, surveyTitle }: ShareModa
   const [copied, setCopied] = useState(false);
   const [showQR, setShowQR] = useState(false);
 
-  const shareLink = `${window.location.origin}/survey/${surveyId}`;
+  const baseAppUrl = ((import.meta as any).env.VITE_PUBLIC_APP_URL || window.location.origin).replace(/\/$/, '');
+  const shareLink = `${baseAppUrl}/survey/${surveyId}`;
 
   useEffect(() => {
     if (!isOpen) {
