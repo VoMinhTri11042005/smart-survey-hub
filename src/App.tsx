@@ -11,6 +11,7 @@ import { View, Role, Survey, UserProfile } from './types';
 import { Toast, ToastType } from './components/common/Toast';
 import { AnimatePresence } from 'motion/react';
 import { SurveyProvider, useSurvey } from './context/SurveyContext';
+import { Sparkles } from 'lucide-react';
 
 const Dashboard = lazy(() => import('./components/dashboard/Dashboard').then((m) => ({ default: m.Dashboard })));
 const Analytics = lazy(() => import('./components/dashboard/Analytics').then((m) => ({ default: m.Analytics })));
@@ -85,9 +86,12 @@ function AppContent() {
         
         const response = await fetch(`${apiBase}/user/admin`);
         if (response.ok) {
-          const data = await response.json();
-          setUserProfile(data);
-          localStorage.setItem('userProfile', JSON.stringify(data));
+          const contentType = response.headers.get('content-type');
+          if (contentType && contentType.includes('application/json')) {
+            const data = await response.json();
+            setUserProfile(data);
+            localStorage.setItem('userProfile', JSON.stringify(data));
+          }
         }
       } catch (error) {
         console.error('Error fetching user profile:', error);
@@ -103,27 +107,56 @@ function AppContent() {
       console.error('Failed to save user profile to localStorage', e);
     }
   }, [userProfile]);
-  const [shareSurveyId, setShareSurveyId] = useState<string | null>(null);
+
+  const [shareSurveyId, setShareSurveyId] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null;
+    const match = window.location.pathname.match(/^\/survey\/(.+)$/);
+    if (match) return decodeURIComponent(match[1]);
+    const params = new URLSearchParams(window.location.search);
+    return params.get('survey');
+  });
   const [shareSurvey, setShareSurvey] = useState<Survey | null>(null);
+  const [isShareLoading, setIsShareLoading] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    const match = window.location.pathname.match(/^\/survey\/(.+)$/);
+    const params = new URLSearchParams(window.location.search);
+    return Boolean(match || params.get('survey'));
+  });
+  const [shareError, setShareError] = useState<string | null>(null);
 
   const { fetchSurveyById, currentSurvey, setCurrentSurvey } = useSurvey();
 
   useEffect(() => {
     const path = window.location.pathname;
-
-    // If the public exit page is requested, do nothing here and let the render logic below show it
     const match = path.match(/^\/survey\/(.+)$/);
-    if (match) setShareSurveyId(match[1]);
     const params = new URLSearchParams(window.location.search);
     const surveyParam = params.get('survey');
-    if (surveyParam) setShareSurveyId(surveyParam);
-  }, []);
+    const id = match ? decodeURIComponent(match[1]) : surveyParam;
+    if (id && id !== shareSurveyId) {
+      setShareSurveyId(id);
+    }
+  }, [shareSurveyId]);
 
   useEffect(() => {
     if (shareSurveyId) {
-      fetchSurveyById(shareSurveyId).then(survey => {
-        if (survey) { setShareSurvey(survey); setCurrentSurvey(survey); }
-      });
+      setIsShareLoading(true);
+      setShareError(null);
+      fetchSurveyById(shareSurveyId)
+        .then(survey => {
+          if (survey) {
+            setShareSurvey(survey);
+            setCurrentSurvey(survey);
+          } else {
+            setShareError('Không tìm thấy khảo sát hoặc khảo sát đã bị đóng.');
+          }
+        })
+        .catch(err => {
+          console.error('Error loading survey:', err);
+          setShareError('Không thể tải khảo sát. Vui lòng thử lại sau.');
+        })
+        .finally(() => {
+          setIsShareLoading(false);
+        });
     }
   }, [shareSurveyId, fetchSurveyById, setCurrentSurvey]);
 
@@ -133,16 +166,42 @@ function AppContent() {
     setNotifications(prev => [{ id: Date.now().toString(), message: msg, time: 'Vừa xong', read: false }, ...prev]);
   };
 
-  if (shareSurveyId && shareSurvey) {
+  if (shareSurveyId) {
+    if (isShareLoading) {
+      return <AppFallback />;
+    }
+
+    if (shareSurvey) {
+      return (
+        <Suspense fallback={<AppFallback />}>
+          <>
+            <Respondent survey={shareSurvey} isPublic={true} onExit={() => {
+              // Public exit is fully handled inside Respondent component (callExit)
+            }} />
+            <AnimatePresence>{toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}</AnimatePresence>
+          </>
+        </Suspense>
+      );
+    }
+
     return (
-      <Suspense fallback={<AppFallback />}>
-        <>
-          <Respondent survey={shareSurvey} isPublic={true} onExit={() => {
-            // Public exit is fully handled inside Respondent component (callExit)
-          }} />
-          <AnimatePresence>{toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}</AnimatePresence>
-        </>
-      </Suspense>
+      <div className="min-h-screen bg-surface-background flex flex-col items-center justify-center gap-4 font-sans px-4 text-center">
+        <div className="w-16 h-16 bg-surface-container-high rounded-2xl flex items-center justify-center">
+          <Sparkles size={28} className="text-text-secondary" />
+        </div>
+        <h2 className="font-display text-2xl font-bold text-text-primary">
+          {shareError || 'Không tìm thấy khảo sát'}
+        </h2>
+        <p className="text-text-secondary text-sm max-w-md">
+          Khảo sát này không tồn tại, đã bị đóng hoặc liên kết không chính xác.
+        </p>
+        <button
+          onClick={() => window.location.replace('/')}
+          className="mt-4 px-6 py-2.5 bg-primary text-white rounded-xl font-semibold text-sm hover:bg-primary/90 transition-colors cursor-pointer"
+        >
+          Về trang chủ
+        </button>
+      </div>
     );
   }
 

@@ -172,30 +172,29 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
     setShowExitConfirm(true);
   };
 
+  const hasAnswerProgressRef = { current: hasAnswerProgress };
+  hasAnswerProgressRef.current = hasAnswerProgress;
+
   // Handle browser back button — prevent accidental exit when there's progress
   useEffect(() => {
     if (!survey || isCompleted) return;
 
-    const pushGuardState = () => {
-      window.history.pushState({ surveyGuard: true }, '');
-    };
+    window.history.pushState({ surveyGuard: true }, '');
 
-    const handlePopState = (e: PopStateEvent) => {
-      if (hasAnswerProgress) {
-        // Re-push state to prevent actual navigation, then show confirm
-        pushGuardState();
+    const handlePopState = () => {
+      if (hasAnswerProgressRef.current) {
+        window.history.pushState({ surveyGuard: true }, '');
         setShowExitConfirm(true);
       } else {
         callExit();
       }
     };
 
-    pushGuardState();
     window.addEventListener('popstate', handlePopState);
     return () => {
       window.removeEventListener('popstate', handlePopState);
     };
-  }, [survey, isCompleted, hasAnswerProgress, callExit]);
+  }, [survey?.id, isCompleted, callExit]);
 
   const setAnswerForQuestion = (questionId: string, value: any) => {
     setErrorMsg('');

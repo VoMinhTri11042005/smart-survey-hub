@@ -82,6 +82,12 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
     try {
       const res = await fetch(`${API_BASE}/surveys`);
       if (res.ok) {
+        const contentType = res.headers.get('content-type');
+        if (contentType && !contentType.includes('application/json')) {
+          console.warn('API returned non-JSON response for surveys:', contentType);
+          setSurveys([]);
+          return;
+        }
         const data = await res.json();
         const normalized = (data || []).map((survey: any) => ({
           ...survey,
@@ -105,7 +111,13 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
     try {
       const res = await fetch(`${API_BASE}/surveys/${id}`);
       if (res.ok) {
+        const contentType = res.headers.get('content-type');
+        if (contentType && !contentType.includes('application/json')) {
+          console.warn('API returned non-JSON response for survey by id:', contentType);
+          return null;
+        }
         const survey = await res.json();
+        if (!survey || !survey.id) return null;
         return {
           ...survey,
           closesAt: survey.closesAt ?? survey.closes_at ?? null,
