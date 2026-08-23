@@ -1,5 +1,5 @@
-import { Timer, Undo2, Sparkles, CircleDot, CheckSquare, CheckCircle2, Home, Edit3 } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { Timer, Undo2, Sparkles, CircleDot, CheckSquare, CheckCircle2, Home, Edit3, LogOut, X, Trash2, AlertTriangle } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
 import { useSurvey } from '../../context/SurveyContext';
 import { stripHtml, cleanHtmlWhitespace } from '../../utils/stringUtils';
 import type { Survey, SurveyQuestion } from '../../types';
@@ -24,6 +24,7 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
   const [quizTotal, setQuizTotal] = useState<number | undefined>(undefined);
   const [draftSavedAt, setDraftSavedAt] = useState<string | null>(null);
   const [showExitConfirm, setShowExitConfirm] = useState(false);
+  const [showCloseHint, setShowCloseHint] = useState(false);
 
   useEffect(() => {
     if (!survey) {
@@ -129,38 +130,72 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
   const currentAnswer = currentQuestion ? answers[currentQuestion.id] : undefined;
   const hasAnswerProgress = Object.keys(answers).length > 0 || step > 0;
 
-  const callExit = () => {
-    // For public respondents: close the current tab or window when allowed.
-    // Do not redirect to admin or blank pages.
+  const callExit = useCallback(() => {
     if (isPublic) {
-      try {
-        localStorage.removeItem('isAuthenticated');
-        localStorage.removeItem('userRole');
-        localStorage.removeItem('userProfile');
-      } catch (e) {
-        /* ignore */
-      }
-
+      // Try closing the tab; if blocked, show a friendly hint instead of leaving user stuck
       try {
         window.close();
-      } catch (e) {
-        // Browsers may block window.close() on non-popup pages; in that case, do nothing
-        // and keep the user inside the survey instead of redirecting to admin or about:blank.
-      }
+      } catch (_) { /* ignore */ }
+      // window.close() is silently ignored on non-popup tabs — show fallback hint
+      setTimeout(() => setShowCloseHint(true), 300);
       return;
     }
 
     try {
       onExit();
-    } catch (e) {
-      // fallback safe redirect for admin preview only
+    } catch (_) {
       window.location.replace('/');
     }
-  };
+  }, [isPublic, onExit]);
+
+  const handleExitAndClearDraft = useCallback(() => {
+    if (survey && respondentId) {
+      localStorage.removeItem(`survey-draft:${survey.id}:${respondentId}`);
+    }
+    setAnswers({});
+    setDraftSavedAt(null);
+    setShowExitConfirm(false);
+    callExit();
+  }, [survey, respondentId, callExit]);
+
+  const handleExitKeepDraft = useCallback(() => {
+    setShowExitConfirm(false);
+    callExit();
+  }, [callExit]);
 
   const handleExitRequest = () => {
+    // Smart confirm: only show dialog if the user has made progress
+    if (!hasAnswerProgress) {
+      callExit();
+      return;
+    }
     setShowExitConfirm(true);
   };
+
+  // Handle browser back button — prevent accidental exit when there's progress
+  useEffect(() => {
+    if (!survey || isCompleted) return;
+
+    const pushGuardState = () => {
+      window.history.pushState({ surveyGuard: true }, '');
+    };
+
+    const handlePopState = (e: PopStateEvent) => {
+      if (hasAnswerProgress) {
+        // Re-push state to prevent actual navigation, then show confirm
+        pushGuardState();
+        setShowExitConfirm(true);
+      } else {
+        callExit();
+      }
+    };
+
+    pushGuardState();
+    window.addEventListener('popstate', handlePopState);
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, [survey, isCompleted, hasAnswerProgress, callExit]);
 
   const setAnswerForQuestion = (questionId: string, value: any) => {
     setErrorMsg('');
@@ -412,8 +447,23 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
               </p>
             )}
 
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-              {!isPublic && (
+            <div className="flex flex-col items-center justify-center gap-4">
+              {isPublic ? (
+                <>
+                  <button 
+                    onClick={callExit} 
+                    className="w-full sm:w-auto px-8 py-3.5 bg-primary text-white font-bold rounded-2xl shadow-xl shadow-primary/25 hover:bg-primary/90 transition-all active:scale-95 flex items-center justify-center gap-2"
+                  >
+                    <X size={18} />
+                    Đóng trang
+                  </button>
+                  {showCloseHint && (
+                    <div className="animate-in fade-in slide-in-from-bottom-2 duration-500 bg-surface-container-high/80 backdrop-blur-sm text-text-secondary text-sm font-medium px-5 py-3 rounded-xl text-center max-w-sm">
+                      Trình duyệt không cho phép tự động đóng tab. Bạn có thể <strong className="text-text-primary">đóng tab này thủ công</strong> bằng cách nhấn nút × trên trình duyệt.
+                    </div>
+                  )}
+                </>
+              ) : (
                 <button 
                   onClick={callExit} 
                   className="w-full sm:w-auto px-8 py-3.5 bg-primary text-white font-bold rounded-2xl shadow-xl shadow-primary/25 hover:bg-primary/90 transition-all active:scale-95 flex items-center justify-center gap-2"
@@ -432,34 +482,50 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
   return (
     <>
       {showExitConfirm && (
-        <div className="fixed inset-0 z-[60] bg-slate-900/35 flex items-end sm:items-center justify-center p-4">
-          <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl border border-border-subtle">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-sentiment-neutral/10 text-sentiment-neutral">
-                <Undo2 size={18} />
+        <div className="fixed inset-0 z-[60] bg-slate-900/40 backdrop-blur-[2px] flex items-end sm:items-center justify-center p-4 animate-in fade-in duration-200" onClick={() => setShowExitConfirm(false)}>
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl border border-border-subtle animate-in slide-in-from-bottom-4 sm:zoom-in-95 duration-300" onClick={(e) => e.stopPropagation()}>
+            {/* Header */}
+            <div className="flex items-start gap-3 mb-4">
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-amber-50 text-amber-500 shrink-0">
+                <AlertTriangle size={20} />
               </div>
-              <div>
+              <div className="min-w-0">
                 <h3 className="font-display text-xl font-bold text-text-primary">Rời khỏi khảo sát?</h3>
+                <p className="text-sm text-text-secondary mt-0.5">
+                  Bạn đã trả lời <strong className="text-text-primary">{answeredQuestionCount}/{questions.length}</strong> câu hỏi
+                </p>
               </div>
             </div>
-            <p className="text-sm leading-relaxed text-text-secondary">
-              Bạn đang có câu trả lời được lưu tạm. Bạn có muốn quay lại khảo sát hoặc thoát khỏi trang này?
-            </p>
-            <div className="mt-5 flex gap-3">
+
+            {/* Draft info */}
+            <div className="bg-surface-container-low rounded-xl p-3.5 mb-5 flex items-start gap-2.5">
+              <Edit3 size={15} className="text-primary mt-0.5 shrink-0" />
+              <p className="text-sm text-text-secondary leading-relaxed">
+                Câu trả lời của bạn đã được <strong className="text-text-primary">lưu tạm tự động</strong>. Khi quay lại, bạn có thể tiếp tục từ nơi đã dừng.
+              </p>
+            </div>
+
+            {/* Action buttons */}
+            <div className="flex flex-col gap-2.5">
               <button
                 onClick={() => setShowExitConfirm(false)}
-                className="flex-1 rounded-xl border border-border-subtle bg-white px-4 py-3 text-sm font-bold text-text-primary hover:bg-surface-container-low transition-colors cursor-pointer"
+                className="w-full rounded-xl bg-primary px-4 py-3 text-sm font-bold text-white hover:bg-primary/90 transition-colors cursor-pointer flex items-center justify-center gap-2"
               >
-                Quay lại khảo sát
+                Tiếp tục khảo sát
               </button>
               <button
-                onClick={() => {
-                  setShowExitConfirm(false);
-                  callExit();
-                }}
-                className="flex-1 rounded-xl bg-primary px-4 py-3 text-sm font-bold text-white hover:bg-primary/90 transition-colors cursor-pointer"
+                onClick={handleExitKeepDraft}
+                className="w-full rounded-xl border border-border-subtle bg-white px-4 py-3 text-sm font-bold text-text-primary hover:bg-surface-container-low transition-colors cursor-pointer flex items-center justify-center gap-2"
               >
-                Thoát
+                <LogOut size={15} />
+                Thoát & giữ bản nháp
+              </button>
+              <button
+                onClick={handleExitAndClearDraft}
+                className="w-full rounded-xl px-4 py-2.5 text-xs font-semibold text-sentiment-negative/70 hover:text-sentiment-negative hover:bg-sentiment-negative/5 transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+              >
+                <Trash2 size={13} />
+                Xóa tất cả câu trả lời & thoát
               </button>
             </div>
           </div>

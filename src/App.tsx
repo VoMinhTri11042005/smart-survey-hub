@@ -138,8 +138,7 @@ function AppContent() {
       <Suspense fallback={<AppFallback />}>
         <>
           <Respondent survey={shareSurvey} isPublic={true} onExit={() => {
-            try { localStorage.removeItem('isAuthenticated'); localStorage.removeItem('userRole'); } catch (e) {}
-            try { window.close(); } catch (e) {}
+            // Public exit is fully handled inside Respondent component (callExit)
           }} />
           <AnimatePresence>{toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}</AnimatePresence>
         </>
