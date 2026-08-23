@@ -130,9 +130,10 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
   const hasAnswerProgress = Object.keys(answers).length > 0 || step > 0;
 
   const callExit = () => {
-    // Ensure public respondents are always redirected out to the public root
+    // Ensure public respondents are always redirected out to a dedicated public exit page
     if (isPublic) {
-      window.location.replace('/');
+      // Use a dedicated public-safe path so admin UI isn't shown even if cookies exist
+      window.location.replace('/public-exit');
       return;
     }
     try {

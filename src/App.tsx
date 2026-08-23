@@ -22,6 +22,8 @@ const Chatbot = lazy(() => import('./components/survey/Chatbot').then((m) => ({ 
 
 const Settings = lazy(() => import('./components/dashboard/Settings').then((m) => ({ default: m.Settings })));
 
+import { PublicExit } from './components/common/PublicExit';
+
 const AppFallback = () => (
   <div className="flex h-screen items-center justify-center bg-surface-background text-text-primary">
     <div className="flex flex-col items-center gap-3">
@@ -109,6 +111,8 @@ function AppContent() {
 
   useEffect(() => {
     const path = window.location.pathname;
+
+    // If the public exit page is requested, do nothing here and let the render logic below show it
     const match = path.match(/^\/survey\/(.+)$/);
     if (match) setShareSurveyId(match[1]);
     const params = new URLSearchParams(window.location.search);
@@ -130,12 +134,21 @@ function AppContent() {
     setNotifications(prev => [{ id: Date.now().toString(), message: msg, time: 'Vừa xong', read: false }, ...prev]);
   };
 
+  // special route: public exit page
+  if (window.location.pathname === '/public-exit') {
+    return (
+      <Suspense fallback={<AppFallback />}>
+        <PublicExit />
+      </Suspense>
+    );
+  }
+
   if (shareSurveyId && shareSurvey) {
     return (
       <Suspense fallback={<AppFallback />}>
         <>
           <Respondent survey={shareSurvey} isPublic={true} onExit={() => {
-            window.location.replace('/');
+            window.location.replace('/public-exit');
           }} />
           <AnimatePresence>{toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}</AnimatePresence>
         </>
