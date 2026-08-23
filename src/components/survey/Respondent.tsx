@@ -70,29 +70,98 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
   }
 
   const questions = survey.questions;
-  const totalSteps = questions.length;
-  const currentQuestion = questions[step];
-  const progress = Math.round(((step + 1) / totalSteps) * 100);
-  const currentAnswer = answers[currentQuestion.id];
+  const displayMode = survey.displayMode ?? 'single';
+  const showAllQuestions = displayMode === 'all';
+  const totalSteps = showAllQuestions ? 1 : questions.length;
+  const currentQuestion = showAllQuestions ? null : questions[step];
+  const progress = showAllQuestions ? 100 : Math.round(((step + 1) / totalSteps) * 100);
+  const currentAnswer = currentQuestion ? answers[currentQuestion.id] : undefined;
+
+  const setAnswerForQuestion = (questionId: string, value: any) => {
+    setErrorMsg('');
+    setAnswers(prev => ({ ...prev, [questionId]: value }));
+  };
+
+  const clearAnswerForQuestion = (questionId: string) => {
+    setErrorMsg('');
+    setAnswers(prev => { const next = { ...prev }; delete next[questionId]; return next; });
+  };
 
   const setAnswer = (value: any) => {
-    setErrorMsg('');
-    setAnswers(prev => ({ ...prev, [currentQuestion.id]: value }));
+    if (!currentQuestion) return;
+    setAnswerForQuestion(currentQuestion.id, value);
   };
 
   const clearAnswer = () => {
-    setErrorMsg('');
-    setAnswers(prev => { const n = { ...prev }; delete n[currentQuestion.id]; return n; });
+    if (!currentQuestion) return;
+    clearAnswerForQuestion(currentQuestion.id);
   };
 
-  const validateCurrentQuestion = () => {
-    if (!currentQuestion.required) return true;
-    if (currentAnswer === undefined || currentAnswer === null || currentAnswer === '') return false;
-    if (Array.isArray(currentAnswer) && currentAnswer.length === 0) return false;
+  const validateQuestion = (question: SurveyQuestion, answer: any) => {
+    if (!question.required) return true;
+    if (answer === undefined || answer === null || answer === '') return false;
+    if (Array.isArray(answer) && answer.length === 0) return false;
     return true;
   };
 
+  const validateCurrentQuestion = () => {
+    if (!currentQuestion) return true;
+    return validateQuestion(currentQuestion, currentAnswer);
+  };
+
+  const validateAllQuestions = () => {
+    const invalid = questions.find(question => !validateQuestion(question, answers[question.id]));
+    if (invalid) {
+      setErrorMsg(`Vui lòng hoàn thành câu hỏi bắt buộc: "${invalid.text.replace(/<[^>]*>/g, '') || 'Câu hỏi chưa có tiêu đề'}"`);
+      return false;
+    }
+    return true;
+  };
+
+  const submitSurvey = async () => {
+    setIsSubmitting(true);
+    try {
+      let score = undefined;
+      let totalQ = undefined;
+
+      if (survey.isQuiz) {
+        score = 0;
+        totalQ = 0;
+        survey.questions.forEach(q => {
+          if ((q.type === 'single_choice' || q.type === 'multiple_choice') && q.correctAnswer) {
+            const qPoints = q.points !== undefined ? q.points : 1;
+            totalQ! += qPoints;
+            const userAnswer = answers[q.id];
+            if (q.type === 'single_choice' && userAnswer === q.correctAnswer) {
+              score! += qPoints;
+            } else if (q.type === 'multiple_choice' && Array.isArray(userAnswer) && Array.isArray(q.correctAnswer)) {
+              if (userAnswer.length === q.correctAnswer.length && userAnswer.every(a => (q.correctAnswer as string[]).includes(a))) {
+                score! += qPoints;
+              }
+            }
+          }
+        });
+        setQuizScore(score);
+        setQuizTotal(totalQ);
+      }
+
+      await submitResponse(survey.id, respondentId, answers, score, totalQ);
+      setIsCompleted(true);
+      if (onComplete) onComplete();
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleNext = async () => {
+    if (showAllQuestions) {
+      if (!validateAllQuestions()) return;
+      await submitSurvey();
+      return;
+    }
+
     if (!validateCurrentQuestion()) {
       setErrorMsg('Vui lòng hoàn thành câu hỏi bắt buộc này để tiếp tục.');
       return;
@@ -101,55 +170,100 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
     if (step < totalSteps - 1) {
       setStep(prev => prev + 1);
     } else {
-      setIsSubmitting(true);
-      try { 
-        let score = undefined;
-        let totalQ = undefined;
-        
-        if (survey.isQuiz) {
-          score = 0;
-          totalQ = 0;
-          survey.questions.forEach(q => {
-            if ((q.type === 'single_choice' || q.type === 'multiple_choice') && q.correctAnswer) {
-              const qPoints = q.points !== undefined ? q.points : 1;
-              totalQ! += qPoints;
-              const userAnswer = answers[q.id];
-              if (q.type === 'single_choice' && userAnswer === q.correctAnswer) {
-                score! += qPoints;
-              } else if (q.type === 'multiple_choice' && Array.isArray(userAnswer) && Array.isArray(q.correctAnswer)) {
-                if (userAnswer.length === q.correctAnswer.length && userAnswer.every(a => (q.correctAnswer as string[]).includes(a))) {
-                  score! += qPoints;
-                }
-              }
-            }
-          });
-          setQuizScore(score);
-          setQuizTotal(totalQ);
-        }
-        
-        await submitResponse(survey.id, respondentId, answers, score, totalQ); 
-        setIsCompleted(true);
-        if (onComplete) onComplete();
-      } catch (e) {
-        console.error(e);
-      } finally {
-        setIsSubmitting(false);
-      }
+      await submitSurvey();
     }
   };
 
-  const handlePrev = () => { 
+  const handlePrev = () => {
     setErrorMsg('');
-    if (step > 0) setStep(prev => prev - 1); 
+    if (showAllQuestions) return;
+    if (step > 0) setStep(prev => prev - 1);
   };
 
-  const toggleMultiple = (option: string) => {
+  const toggleMultiple = (questionId: string, option: string) => {
     setErrorMsg('');
-    const current: string[] = currentAnswer || [];
+    const current: string[] = answers[questionId] || [];
     if (current.includes(option)) {
-      setAnswer(current.filter((o: string) => o !== option));
+      setAnswerForQuestion(questionId, current.filter((o: string) => o !== option));
     } else {
-      setAnswer([...current, option]);
+      setAnswerForQuestion(questionId, [...current, option]);
+    }
+  };
+
+  const renderQuestionInput = (question: SurveyQuestion, answer: any, questionId: string) => {
+    switch (question.type) {
+      case 'star_rating':
+        return (
+          <div className="flex flex-col items-center gap-6 py-8 bg-white border border-border-subtle rounded-2xl shadow-sm">
+            <div className="flex flex-row gap-2">
+              {[1, 2, 3, 4, 5].map((star) => (
+                <button key={star} onClick={() => setAnswerForQuestion(questionId, star)} className="cursor-pointer transition-transform active:scale-90 hover:scale-110 p-1">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="56" height="56" viewBox="0 0 24 24" fill={star <= (answer || 0) ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={star <= (answer || 0) ? 'text-primary' : 'text-surface-container-highest'}>
+                    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                  </svg>
+                </button>
+              ))}
+            </div>
+            <div className="flex justify-between w-full px-8 text-sm font-semibold text-text-secondary italic">
+              <span>Cần cải thiện</span>
+              <span>Tuyệt vời</span>
+            </div>
+          </div>
+        );
+      case 'single_choice':
+        return (
+          <div className="space-y-3">
+            {question.options?.map((option, idx) => (
+              <button key={idx} onClick={() => setAnswerForQuestion(questionId, option)} className={`w-full text-left flex items-center gap-4 p-4 rounded-xl border-2 transition-all cursor-pointer ${answer === option ? 'border-primary bg-primary-fixed shadow-sm' : 'border-border-subtle bg-white hover:border-primary/30 hover:shadow-sm'}`}>
+                <CircleDot size={20} className={`flex-shrink-0 mt-0.5 ${answer === option ? 'text-primary' : 'text-text-secondary'}`} />
+                <span className={`text-base font-medium rendered-option break-words ${answer === option ? 'text-primary' : 'text-text-primary'}`} dangerouslySetInnerHTML={{ __html: cleanHtmlWhitespace(option) }} />
+              </button>
+            ))}
+          </div>
+        );
+      case 'multiple_choice':
+        return (
+          <div className="space-y-3">
+            {question.options?.map((option, idx) => {
+              const selected = (answer || []).includes(option);
+              return (
+                <button key={idx} onClick={() => toggleMultiple(questionId, option)} className={`w-full text-left flex items-center gap-4 p-4 rounded-xl border-2 transition-all cursor-pointer ${selected ? 'border-primary bg-primary-fixed shadow-sm' : 'border-border-subtle bg-white hover:border-primary/30 hover:shadow-sm'}`}>
+                  <CheckSquare size={20} className={`flex-shrink-0 mt-0.5 ${selected ? 'text-primary' : 'text-text-secondary'}`} />
+                  <span className={`text-base font-medium rendered-option break-words ${selected ? 'text-primary' : 'text-text-primary'}`} dangerouslySetInnerHTML={{ __html: cleanHtmlWhitespace(option) }} />
+                </button>
+              );
+            })}
+            <p className="text-xs text-text-secondary font-medium mt-2">Có thể chọn nhiều đáp án</p>
+          </div>
+        );
+      case 'text':
+        return (
+          <textarea
+            value={answer || ''}
+            onChange={(e) => setAnswerForQuestion(questionId, e.target.value)}
+            placeholder="Hãy chia sẻ thêm chi tiết..."
+            rows={5}
+            className="w-full bg-white border border-border-subtle rounded-xl p-5 focus:ring-2 focus:ring-secondary/50 focus:border-secondary outline-none transition-all text-base shadow-sm resize-y"
+          />
+        );
+      case 'nps':
+        return (
+          <div className="py-6">
+            <div className="flex flex-wrap justify-center gap-2 mb-4">
+              {Array.from({ length: 11 }, (_, i) => (
+                <button key={i} onClick={() => { setAnswerForQuestion(questionId, i); setErrorMsg(''); }} className={`w-12 h-12 rounded-xl font-bold text-lg transition-all cursor-pointer ${answer === i ? 'bg-primary text-white shadow-md scale-110' : 'bg-white border border-border-subtle text-text-primary hover:border-primary/30 hover:shadow-sm'}`}>
+                  {i}
+                </button>
+              ))}
+            </div>
+            <div className="flex justify-between px-2 text-sm font-semibold text-text-secondary italic">
+              <span>Hoàn toàn không</span>
+              <span>Chắc chắn có</span>
+            </div>
+          </div>
+        );
+      default:
+        return null;
     }
   };
 
@@ -220,7 +334,6 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
 
   return (
     <div className="min-h-screen bg-surface-background flex flex-col font-sans text-text-primary animate-in fade-in duration-500 selection:bg-secondary-fixed selection:text-on-secondary-fixed">
-      {/* Top Navigation */}
       <nav className="sticky top-0 z-50 bg-surface-background/90 backdrop-blur-md px-4 md:px-6 py-3 md:py-4 flex flex-col gap-2 border-b border-border-subtle/50">
         <div className="flex justify-between items-start md:items-center w-full">
           <div className="font-display text-lg md:text-2xl font-bold text-primary flex-1 pr-4 line-clamp-2 break-all">{stripHtml(survey.title) || 'Khảo sát thông minh'}</div>
@@ -230,7 +343,7 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
         </div>
         <div className="mt-1 md:mt-2">
           <div className="flex justify-between items-end mb-1.5 md:mb-2">
-            <span className="text-xs md:text-sm font-bold text-text-primary">Câu hỏi {step + 1} / {totalSteps}</span>
+            <span className="text-xs md:text-sm font-bold text-text-primary">{showAllQuestions ? `Tổng cộng ${questions.length} câu hỏi` : `Câu hỏi ${step + 1} / ${totalSteps}`}</span>
             <span className="text-[10px] md:text-xs font-bold text-text-secondary">Hoàn thành {progress}%</span>
           </div>
           <div className="h-1.5 md:h-2 w-full bg-surface-container-highest rounded-full overflow-hidden">
@@ -239,10 +352,9 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
         </div>
       </nav>
 
-      {/* Main Content */}
-      <main className="flex-grow flex flex-col items-center px-4 md:px-6 pt-8 md:pt-12 pb-32 md:pb-40 w-full" key={step}>
+      <main className="flex-grow flex flex-col items-center px-4 md:px-6 pt-8 md:pt-12 pb-32 md:pb-40 w-full" key={showAllQuestions ? 'all-questions' : step}>
         <div className="w-full max-w-[720px] space-y-6 md:space-y-8 animate-in slide-in-from-bottom-4 duration-500 fade-in">
-          {step === 0 && (
+          {!showAllQuestions && step === 0 && (
             <div className="bg-white border-t-[10px] border-t-primary rounded-2xl shadow-sm p-6 md:p-10 border border-border-subtle mb-8">
               <h1 
                 className="font-display text-3xl md:text-4xl font-extrabold text-text-primary mb-4 leading-tight rendered-html break-words"
@@ -257,91 +369,31 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
             </div>
           )}
 
-          <header className="space-y-2">
-            <h2 
-              className="font-display text-2xl md:text-3xl font-bold text-text-primary tracking-tight leading-tight break-words"
-              dangerouslySetInnerHTML={{ __html: cleanHtmlWhitespace(currentQuestion.text) }}
-            />
-            {currentQuestion.required && (
-              <p className="text-xs md:text-sm text-sentiment-negative font-medium">* Bắt buộc</p>
-            )}
-          </header>
-
-          {/* Star Rating */}
-          {currentQuestion.type === 'star_rating' && (
-            <div className="flex flex-col items-center gap-6 py-8 bg-white border border-border-subtle rounded-2xl shadow-sm">
-              <div className="flex flex-row gap-2">
-                {[1, 2, 3, 4, 5].map((star) => (
-                  <button key={star} onClick={() => setAnswer(star)} className="cursor-pointer transition-transform active:scale-90 hover:scale-110 p-1">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="56" height="56" viewBox="0 0 24 24" fill={star <= (currentAnswer || 0) ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={star <= (currentAnswer || 0) ? "text-primary" : "text-surface-container-highest"}>
-                      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-                    </svg>
-                  </button>
-                ))}
-              </div>
-              <div className="flex justify-between w-full px-8 text-sm font-semibold text-text-secondary italic">
-                <span>Cần cải thiện</span>
-                <span>Tuyệt vời</span>
-              </div>
-            </div>
+          {showAllQuestions ? (
+            questions.map((question, index) => (
+              <section key={question.id} className="bg-white border border-border-subtle rounded-2xl shadow-sm p-6 md:p-8">
+                <header className="space-y-2 mb-5">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-xs md:text-sm font-bold text-primary bg-primary-fixed px-2.5 py-1 rounded-full">Câu {index + 1}</span>
+                    {question.required && <span className="text-xs md:text-sm text-sentiment-negative font-medium">* Bắt buộc</span>}
+                  </div>
+                  <h2 className="font-display text-2xl md:text-3xl font-bold text-text-primary tracking-tight leading-tight break-words" dangerouslySetInnerHTML={{ __html: cleanHtmlWhitespace(question.text) || `Câu hỏi ${index + 1}` }} />
+                </header>
+                {renderQuestionInput(question, answers[question.id], question.id)}
+              </section>
+            ))
+          ) : (
+            <>
+              <header className="space-y-2">
+                <h2 className="font-display text-2xl md:text-3xl font-bold text-text-primary tracking-tight leading-tight break-words" dangerouslySetInnerHTML={{ __html: cleanHtmlWhitespace(currentQuestion?.text || '') }} />
+                {currentQuestion?.required && (
+                  <p className="text-xs md:text-sm text-sentiment-negative font-medium">* Bắt buộc</p>
+                )}
+              </header>
+              {currentQuestion && renderQuestionInput(currentQuestion, currentAnswer, currentQuestion.id)}
+            </>
           )}
 
-          {/* Single Choice */}
-          {currentQuestion.type === 'single_choice' && currentQuestion.options && (
-            <div className="space-y-3">
-              {currentQuestion.options.map((option, idx) => (
-                <button key={idx} onClick={() => setAnswer(option)} className={`w-full text-left flex items-center gap-4 p-4 rounded-xl border-2 transition-all cursor-pointer ${currentAnswer === option ? 'border-primary bg-primary-fixed shadow-sm' : 'border-border-subtle bg-white hover:border-primary/30 hover:shadow-sm'}`}>
-                  <CircleDot size={20} className={`flex-shrink-0 mt-0.5 ${currentAnswer === option ? 'text-primary' : 'text-text-secondary'}`} />
-                  <span className={`text-base font-medium rendered-option break-words ${currentAnswer === option ? 'text-primary' : 'text-text-primary'}`} dangerouslySetInnerHTML={{ __html: cleanHtmlWhitespace(option) }} />
-                </button>
-              ))}
-            </div>
-          )}
-
-          {/* Multiple Choice */}
-          {currentQuestion.type === 'multiple_choice' && currentQuestion.options && (
-            <div className="space-y-3">
-              {currentQuestion.options.map((option, idx) => {
-                const selected = (currentAnswer || []).includes(option);
-                return (
-                  <button key={idx} onClick={() => toggleMultiple(option)} className={`w-full text-left flex items-center gap-4 p-4 rounded-xl border-2 transition-all cursor-pointer ${selected ? 'border-primary bg-primary-fixed shadow-sm' : 'border-border-subtle bg-white hover:border-primary/30 hover:shadow-sm'}`}>
-                    <CheckSquare size={20} className={`flex-shrink-0 mt-0.5 ${selected ? 'text-primary' : 'text-text-secondary'}`} />
-                    <span className={`text-base font-medium rendered-option break-words ${selected ? 'text-primary' : 'text-text-primary'}`} dangerouslySetInnerHTML={{ __html: cleanHtmlWhitespace(option) }} />
-                  </button>
-                );
-              })}
-              <p className="text-xs text-text-secondary font-medium mt-2">Có thể chọn nhiều đáp án</p>
-            </div>
-          )}
-
-          {/* Text */}
-          {currentQuestion.type === 'text' && (
-            <textarea
-              value={currentAnswer || ''}
-              onChange={(e) => setAnswer(e.target.value)}
-              placeholder="Hãy chia sẻ thêm chi tiết..."
-              rows={5}
-              className="w-full bg-white border border-border-subtle rounded-xl p-5 focus:ring-2 focus:ring-secondary/50 focus:border-secondary outline-none transition-all text-base shadow-sm resize-y"
-            />
-          )}
-
-          {/* NPS */}
-          {currentQuestion.type === 'nps' && (
-            <div className="py-6">
-              <div className="flex flex-wrap justify-center gap-2 mb-4">
-                {Array.from({ length: 11 }, (_, i) => (
-                  <button key={i} onClick={() => { setAnswer(i); setErrorMsg(''); }} className={`w-12 h-12 rounded-xl font-bold text-lg transition-all cursor-pointer ${currentAnswer === i ? 'bg-primary text-white shadow-md scale-110' : 'bg-white border border-border-subtle text-text-primary hover:border-primary/30 hover:shadow-sm'}`}>
-                    {i}
-                  </button>
-                ))}
-              </div>
-              <div className="flex justify-between px-2 text-sm font-semibold text-text-secondary italic">
-                <span>Hoàn toàn không</span>
-                <span>Chắc chắn có</span>
-              </div>
-            </div>
-          )}
-          
           {errorMsg && (
             <div className="mt-4 p-3 bg-sentiment-negative/10 text-sentiment-negative text-sm font-medium rounded-lg flex items-center gap-2 animate-in slide-in-from-bottom-2">
               <span className="w-1.5 h-1.5 rounded-full bg-sentiment-negative"></span>
@@ -351,7 +403,6 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
         </div>
       </main>
 
-      {/* Bottom Action Bar */}
       <div className="fixed bottom-0 w-full bg-white shadow-[0_-4px_24px_rgba(0,0,0,0.06)] px-6 py-5 flex justify-center border-t border-border-subtle/50 z-50">
         <div className="w-full max-w-[720px] flex flex-col gap-3">
           <div className="flex items-center justify-between mb-1">
@@ -362,16 +413,18 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
               </span>
               <span className="text-xs font-bold text-text-secondary">Đang tự động lưu...</span>
             </div>
-            <button onClick={clearAnswer} className="text-primary text-sm font-bold flex items-center gap-1.5 hover:opacity-80 transition-opacity cursor-pointer">
-              <Undo2 size={16} /> Xóa
-            </button>
+            {!showAllQuestions && (
+              <button onClick={clearAnswer} className="text-primary text-sm font-bold flex items-center gap-1.5 hover:opacity-80 transition-opacity cursor-pointer">
+                <Undo2 size={16} /> Xóa
+              </button>
+            )}
           </div>
           <div className="flex gap-4">
-            <button onClick={handlePrev} disabled={step === 0} className={`flex-1 py-4 bg-white border-2 border-border-subtle rounded-xl text-base font-bold text-text-primary transition-colors shadow-sm ${step === 0 ? 'opacity-50 cursor-not-allowed' : 'hover:bg-surface-container-low active:scale-95 cursor-pointer'}`}>
+            <button onClick={handlePrev} disabled={showAllQuestions || step === 0} className={`flex-1 py-4 bg-white border-2 border-border-subtle rounded-xl text-base font-bold text-text-primary transition-colors shadow-sm ${showAllQuestions || step === 0 ? 'opacity-50 cursor-not-allowed' : 'hover:bg-surface-container-low active:scale-95 cursor-pointer'}`}>
               Quay lại
             </button>
             <button disabled={isSubmitting} onClick={handleNext} className={`flex-[2] py-4 bg-primary text-white rounded-xl text-lg font-bold shadow-lg shadow-primary/25 hover:bg-primary/90 transition-all active:scale-95 flex items-center justify-center gap-2 ${isSubmitting ? 'opacity-70 cursor-not-allowed' : 'cursor-pointer'}`}>
-              {isSubmitting ? 'Đang gửi...' : step === totalSteps - 1 ? 'Hoàn thành' : 'Tiếp theo'}
+              {isSubmitting ? 'Đang gửi...' : showAllQuestions ? 'Hoàn thành' : step === totalSteps - 1 ? 'Hoàn thành' : 'Tiếp theo'}
             </button>
           </div>
         </div>

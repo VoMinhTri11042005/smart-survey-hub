@@ -11,6 +11,7 @@ export interface UserProfile {
 // ===== Survey Data Model =====
 
 export type QuestionType = 'single_choice' | 'multiple_choice' | 'star_rating' | 'text' | 'nps';
+export type SurveyDisplayMode = 'single' | 'all';
 
 export interface SurveyQuestion {
   id: string;
@@ -31,6 +32,7 @@ export interface Survey {
   status: 'draft' | 'live' | 'closed';
   isQuiz?: boolean;
   showScore?: boolean;
+  displayMode?: SurveyDisplayMode;
 }
 
 export interface SurveyResponse {

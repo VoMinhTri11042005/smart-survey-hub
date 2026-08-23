@@ -1,12 +1,12 @@
 import React from 'react';
 import { CircleDot, CheckSquare, Star, AlignLeft, Minus, GripVertical, Copy, Trash2, Plus, GitBranch, Sparkles, RefreshCw, Send, CheckCircle2, Check, Info, UploadCloud, ChevronDown, X, FileText } from 'lucide-react';
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { useSurvey } from '../../context/SurveyContext';
 import { ShareModal } from '../common/ShareModal';
 import ReactMarkdown from 'react-markdown';
 import ReactQuill from 'react-quill-new';
 import 'react-quill-new/dist/quill.snow.css';
-import type { SurveyQuestion, QuestionType } from '../../types';
+import type { SurveyQuestion, QuestionType, SurveyDisplayMode } from '../../types';
 
 const questionTypeLabels: Record<QuestionType, { label: string; icon: React.ReactNode }> = {
   single_choice: { label: 'Một lựa chọn', icon: <CircleDot size={16} className="text-primary" /> },
@@ -25,7 +25,8 @@ const quillModules = {
 };
 
 export function Builder({ onPublished, onError }: { onPublished?: () => void; onError?: (msg: string) => void }) {
-  const { parseDocx, createSurvey, setCurrentSurvey, isLoading, pendingTemplate, clearPendingTemplate, chatWithAI } = useSurvey();
+  const { parseDocx, createSurvey, setCurrentSurvey, isLoading, pendingTemplate, clearPendingTemplate, chatWithAI, fetchDrafts, saveDraft, deleteDraft } = useSurvey();
+  const DRAFT_STORAGE_KEY = 'smart-survey-hub-builder-draft';
   
   const [showSurvey, setShowSurvey] = useState(false);
   const [topic, setTopic] = useState('');
@@ -37,6 +38,9 @@ export function Builder({ onPublished, onError }: { onPublished?: () => void; on
   const [isPublishing, setIsPublishing] = useState(false);
   const [isQuiz, setIsQuiz] = useState(false);
   const [showScore, setShowScore] = useState(true);
+  const [displayMode, setDisplayMode] = useState<SurveyDisplayMode>('single');
+  const [draftSavedAt, setDraftSavedAt] = useState<string | null>(null);
+  const [draftId, setDraftId] = useState<string | null>(null);
   const [publishedSurvey, setPublishedSurvey] = useState<{ id: string; title: string } | null>(null);
 
   // AI Chat state
@@ -87,6 +91,109 @@ export function Builder({ onPublished, onError }: { onPublished?: () => void; on
     }
   }, [pendingTemplate, clearPendingTemplate]);
 
+  useEffect(() => {
+    const loadDrafts = async () => {
+      const drafts = await fetchDrafts();
+      if (!drafts || drafts.length === 0) {
+        const saved = localStorage.getItem(DRAFT_STORAGE_KEY);
+        if (!saved) return;
+
+        try {
+          const draft = JSON.parse(saved) as {
+            surveyTitle?: string;
+            surveyDescription?: string;
+            questions?: SurveyQuestion[];
+            isQuiz?: boolean;
+            showScore?: boolean;
+            displayMode?: SurveyDisplayMode;
+          };
+
+          if (draft.surveyTitle || draft.surveyDescription || draft.questions?.length) {
+            setSurveyTitle(draft.surveyTitle || '');
+            setSurveyDescription(draft.surveyDescription || '');
+            setQuestions(draft.questions || []);
+            setIsQuiz(Boolean(draft.isQuiz));
+            setShowScore(draft.showScore !== false);
+            setDisplayMode(draft.displayMode || 'single');
+            setShowSurvey(true);
+            setActiveQuestionId(draft.questions?.[0]?.id || null);
+          }
+        } catch (error) {
+          console.error('Failed to restore saved survey draft', error);
+        }
+        return;
+      }
+
+      const latest = drafts[0];
+      setDraftId(latest.id);
+      setSurveyTitle(latest.title || '');
+      setSurveyDescription(latest.description || '');
+      setQuestions(latest.questions || []);
+      setIsQuiz(Boolean(latest.isQuiz));
+      setShowScore(latest.showScore !== false);
+      setDisplayMode(latest.displayMode || 'single');
+      setShowSurvey(true);
+      setActiveQuestionId((latest.questions || [])[0]?.id || null);
+      setDraftSavedAt(latest.updatedAt ? new Date(latest.updatedAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : null);
+    };
+
+    void loadDrafts();
+  }, [fetchDrafts]);
+
+  useEffect(() => {
+    if (!showSurvey) return;
+
+    const draft = {
+      surveyTitle,
+      surveyDescription,
+      questions,
+      isQuiz,
+      showScore,
+      displayMode,
+    };
+
+    try {
+      localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft));
+      setDraftSavedAt(new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }));
+    } catch (error) {
+      console.error('Failed to save draft', error);
+    }
+  }, [showSurvey, surveyTitle, surveyDescription, questions, isQuiz, showScore, displayMode]);
+
+  const clearDraft = () => {
+    localStorage.removeItem(DRAFT_STORAGE_KEY);
+    if (draftId) {
+      void deleteDraft(draftId);
+    }
+    setDraftId(null);
+    setDraftSavedAt(null);
+  };
+
+  const totalPossibleScore = useMemo(() => {
+    return questions.reduce((sum, question) => {
+      if ((question.type === 'single_choice' || question.type === 'multiple_choice') && question.correctAnswer) {
+        return sum + (question.points !== undefined ? question.points : 1);
+      }
+      return sum;
+    }, 0);
+  }, [questions]);
+
+  const saveSurveyDraft = async () => {
+    const draft = {
+      id: draftId || `draft-${Date.now()}`,
+      title: surveyTitle || 'Khảo sát nháp',
+      description: surveyDescription,
+      questions,
+      isQuiz,
+      showScore,
+      displayMode,
+    };
+    localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft));
+    const saved = await saveDraft(draft);
+    setDraftId(saved.id);
+    setDraftSavedAt(new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }));
+  };
+
   const handleGenerate = async () => {
     try {
       const result = await parseDocx(selectedFile, topic);
@@ -112,8 +219,10 @@ export function Builder({ onPublished, onError }: { onPublished?: () => void; on
         questions,
         isQuiz,
         showScore,
+        displayMode,
       });
       setCurrentSurvey(survey);
+      clearDraft();
       setPublishedSurvey({ id: survey.id, title: survey.title });
       if (onPublished) onPublished();
     } catch (err) {
@@ -531,8 +640,8 @@ export function Builder({ onPublished, onError }: { onPublished?: () => void; on
                </div>
 
                {/* Publish Bar */}
-               <div className="fixed bottom-0 left-0 md:left-64 right-0 md:right-80 bg-white/95 backdrop-blur-md border-t border-border-subtle p-4 flex items-center justify-between z-20">
-                 <div className="flex items-center gap-2 md:gap-4">
+               <div className="fixed bottom-0 left-0 md:left-64 right-0 md:right-80 bg-white/95 backdrop-blur-md border-t border-border-subtle p-4 flex items-center justify-between z-20 gap-3">
+                 <div className="flex flex-wrap items-center gap-2 md:gap-4">
                    <span className="text-xs md:text-sm font-medium text-text-secondary">{questions.length} câu hỏi</span>
                    <span className="hidden md:inline text-text-secondary">•</span>
                    <label className="flex items-center gap-2 cursor-pointer group">
@@ -561,8 +670,35 @@ export function Builder({ onPublished, onError }: { onPublished?: () => void; on
                      </>
                    )}
                    <span className="hidden md:inline text-text-secondary">•</span>
+                   <div className="flex items-center gap-2 rounded-lg bg-surface-container-low px-2 py-1.5">
+                     <span className="text-[10px] md:text-xs font-bold uppercase tracking-wide text-text-secondary">Trình bày</span>
+                     <div className="flex rounded-md border border-border-subtle bg-white p-0.5">
+                       <button
+                         type="button"
+                         onClick={() => setDisplayMode('single')}
+                         className={`px-2 py-1 text-[10px] md:text-xs font-semibold rounded-md transition-colors cursor-pointer ${displayMode === 'single' ? 'bg-primary text-white' : 'text-text-secondary hover:text-primary'}`}
+                       >
+                         1 câu / trang
+                       </button>
+                       <button
+                         type="button"
+                         onClick={() => setDisplayMode('all')}
+                         className={`px-2 py-1 text-[10px] md:text-xs font-semibold rounded-md transition-colors cursor-pointer ${displayMode === 'all' ? 'bg-primary text-white' : 'text-text-secondary hover:text-primary'}`}
+                       >
+                         Nhiều câu / trang
+                       </button>
+                     </div>
+                   </div>
+                   <span className="hidden md:inline text-text-secondary">•</span>
                    <button
-                     onClick={() => { setShowSurvey(false); setQuestions([]); setSurveyTitle(''); setIsQuiz(false); }}
+                     onClick={saveSurveyDraft}
+                     className="text-xs md:text-sm font-semibold text-text-secondary hover:text-primary transition-colors cursor-pointer"
+                   >
+                     Lưu nháp
+                   </button>
+                   <span className="text-[10px] md:text-xs text-text-secondary">{draftSavedAt ? `Đã lưu ${draftSavedAt}` : 'Chưa lưu'}</span>
+                   <button
+                     onClick={() => { setShowSurvey(false); setQuestions([]); setSurveyTitle(''); setSurveyDescription(''); setActiveQuestionId(null); setIsQuiz(false); setShowScore(true); setDisplayMode('single'); clearDraft(); }}
                      className="text-xs md:text-sm font-semibold text-text-secondary hover:text-sentiment-negative transition-colors cursor-pointer"
                    >
                      Tạo lại
@@ -608,6 +744,12 @@ export function Builder({ onPublished, onError }: { onPublished?: () => void; on
                     <div className="text-[10px] text-text-secondary font-bold uppercase tracking-wider">Loại</div>
                   </div>
                 </div>
+                {isQuiz && (
+                  <div className="mt-4 rounded-xl bg-white p-3">
+                    <div className="text-[10px] uppercase font-bold tracking-wider text-text-secondary">Tổng điểm</div>
+                    <div className="mt-1 font-display text-2xl font-bold text-sentiment-positive">{totalPossibleScore}</div>
+                  </div>
+                )}
              </div>
            )}
 
