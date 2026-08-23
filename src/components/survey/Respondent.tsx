@@ -22,6 +22,8 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
   const [errorMsg, setErrorMsg] = useState('');
   const [quizScore, setQuizScore] = useState<number | undefined>(undefined);
   const [quizTotal, setQuizTotal] = useState<number | undefined>(undefined);
+  const [draftSavedAt, setDraftSavedAt] = useState<string | null>(null);
+  const [showExitConfirm, setShowExitConfirm] = useState(false);
 
   useEffect(() => {
     if (!survey) {
@@ -37,6 +39,18 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
       }
       setRespondentId(rid);
 
+      try {
+        const savedDraft = localStorage.getItem(`survey-draft:${survey.id}:${rid}`);
+        if (savedDraft) {
+          const savedAnswers = JSON.parse(savedDraft);
+          if (savedAnswers && typeof savedAnswers === 'object') {
+            setAnswers(savedAnswers);
+          }
+        }
+      } catch (error) {
+        console.warn('Failed to load survey draft', error);
+      }
+
       const existingResponse = await fetchMyResponse(survey.id, rid);
       if (existingResponse && existingResponse.answers && Object.keys(existingResponse.answers).length > 0) {
         setAnswers(existingResponse.answers);
@@ -49,6 +63,18 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
 
     initRespondent();
   }, [survey, fetchMyResponse]);
+
+  useEffect(() => {
+    if (!survey || !respondentId) return;
+    const draftKey = `survey-draft:${survey.id}:${respondentId}`;
+    if (isCompleted) {
+      localStorage.removeItem(draftKey);
+      return;
+    }
+
+    localStorage.setItem(draftKey, JSON.stringify(answers));
+    setDraftSavedAt(new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }));
+  }, [answers, isCompleted, respondentId, survey]);
 
   if (isLoading) {
     return <div className="min-h-screen bg-surface-background flex items-center justify-center font-sans text-text-secondary">Đang chuẩn bị khảo sát...</div>;
@@ -91,8 +117,25 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
   const showAllQuestions = displayMode === 'all';
   const totalSteps = showAllQuestions ? 1 : questions.length;
   const currentQuestion = showAllQuestions ? null : questions[step];
-  const progress = showAllQuestions ? 100 : Math.round(((step + 1) / totalSteps) * 100);
+  const answeredQuestionCount = questions.reduce((count, question) => {
+    const value = answers[question.id];
+    if (value === undefined || value === null || value === '') return count;
+    if (Array.isArray(value) && value.length === 0) return count;
+    return count + 1;
+  }, 0);
+  const progress = showAllQuestions
+    ? Math.round((answeredQuestionCount / Math.max(questions.length, 1)) * 100)
+    : Math.round(((step + 1) / totalSteps) * 100);
   const currentAnswer = currentQuestion ? answers[currentQuestion.id] : undefined;
+  const hasAnswerProgress = Object.keys(answers).length > 0 || step > 0;
+
+  const handleExitRequest = () => {
+    if (!isCompleted && hasAnswerProgress) {
+      setShowExitConfirm(true);
+      return;
+    }
+    onExit();
+  };
 
   const setAnswerForQuestion = (questionId: string, value: any) => {
     setErrorMsg('');
@@ -102,6 +145,13 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
   const clearAnswerForQuestion = (questionId: string) => {
     setErrorMsg('');
     setAnswers(prev => { const next = { ...prev }; delete next[questionId]; return next; });
+  };
+
+  const clearAllDraft = () => {
+    if (!survey || !respondentId) return;
+    setAnswers({});
+    localStorage.removeItem(`survey-draft:${survey.id}:${respondentId}`);
+    setDraftSavedAt(null);
   };
 
   const setAnswer = (value: any) => {
@@ -238,7 +288,7 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
             {question.options?.map((option, idx) => (
               <button key={idx} onClick={() => setAnswerForQuestion(questionId, option)} className={`w-full text-left flex items-center gap-4 p-4 rounded-xl border-2 transition-all cursor-pointer ${answer === option ? 'border-primary bg-primary-fixed shadow-sm' : 'border-border-subtle bg-white hover:border-primary/30 hover:shadow-sm'}`}>
                 <CircleDot size={20} className={`flex-shrink-0 mt-0.5 ${answer === option ? 'text-primary' : 'text-text-secondary'}`} />
-                <span className={`text-base font-medium rendered-option break-words ${answer === option ? 'text-primary' : 'text-text-primary'}`} dangerouslySetInnerHTML={{ __html: cleanHtmlWhitespace(option) }} />
+                <span className={`min-w-0 text-base font-medium rendered-option break-words ${answer === option ? 'text-primary' : 'text-text-primary'}`} dangerouslySetInnerHTML={{ __html: cleanHtmlWhitespace(option) }} />
               </button>
             ))}
           </div>
@@ -251,7 +301,7 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
               return (
                 <button key={idx} onClick={() => toggleMultiple(questionId, option)} className={`w-full text-left flex items-center gap-4 p-4 rounded-xl border-2 transition-all cursor-pointer ${selected ? 'border-primary bg-primary-fixed shadow-sm' : 'border-border-subtle bg-white hover:border-primary/30 hover:shadow-sm'}`}>
                   <CheckSquare size={20} className={`flex-shrink-0 mt-0.5 ${selected ? 'text-primary' : 'text-text-secondary'}`} />
-                  <span className={`text-base font-medium rendered-option break-words ${selected ? 'text-primary' : 'text-text-primary'}`} dangerouslySetInnerHTML={{ __html: cleanHtmlWhitespace(option) }} />
+                  <span className={`min-w-0 text-base font-medium rendered-option break-words ${selected ? 'text-primary' : 'text-text-primary'}`} dangerouslySetInnerHTML={{ __html: cleanHtmlWhitespace(option) }} />
                 </button>
               );
             })}
@@ -355,102 +405,142 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
   }
 
   return (
-    <div className="min-h-screen bg-surface-background flex flex-col font-sans text-text-primary animate-in fade-in duration-500 selection:bg-secondary-fixed selection:text-on-secondary-fixed">
-      <nav className="sticky top-0 z-50 bg-surface-background/90 backdrop-blur-md px-4 md:px-6 py-3 md:py-4 flex flex-col gap-2 border-b border-border-subtle/50">
-        <div className="flex justify-between items-start md:items-center w-full">
-          <div className="font-display text-lg md:text-2xl font-bold text-primary flex-1 pr-4 line-clamp-2 break-all">{stripHtml(survey.title) || 'Khảo sát thông minh'}</div>
-          <div className="flex items-center gap-2 md:gap-3 shrink-0">
-            <button onClick={onExit} className="text-xs md:text-sm font-bold text-text-secondary hover:text-primary transition-colors cursor-pointer px-1 md:px-2">Thoát</button>
-          </div>
-        </div>
-        <div className="mt-1 md:mt-2">
-          <div className="flex justify-between items-end mb-1.5 md:mb-2">
-            <span className="text-xs md:text-sm font-bold text-text-primary">{showAllQuestions ? `Tổng cộng ${questions.length} câu hỏi` : `Câu hỏi ${step + 1} / ${totalSteps}`}</span>
-            <span className="text-[10px] md:text-xs font-bold text-text-secondary">Hoàn thành {progress}%</span>
-          </div>
-          <div className="h-1.5 md:h-2 w-full bg-surface-container-highest rounded-full overflow-hidden">
-            <div className="h-full bg-primary transition-all duration-700 ease-out" style={{ width: `${progress}%` }}></div>
-          </div>
-        </div>
-      </nav>
-
-      <main className="flex-grow flex flex-col items-center px-4 md:px-6 pt-8 md:pt-12 pb-32 md:pb-40 w-full" key={showAllQuestions ? 'all-questions' : step}>
-        <div className="w-full max-w-[720px] space-y-6 md:space-y-8 animate-in slide-in-from-bottom-4 duration-500 fade-in">
-          {!showAllQuestions && step === 0 && (
-            <div className="bg-white border-t-[10px] border-t-primary rounded-2xl shadow-sm p-6 md:p-10 border border-border-subtle mb-8">
-              <h1 
-                className="font-display text-3xl md:text-4xl font-extrabold text-text-primary mb-4 leading-tight rendered-html break-words"
-                dangerouslySetInnerHTML={{ __html: cleanHtmlWhitespace(survey.title) || 'Khảo sát thông minh' }}
-              />
-              {survey.description && (
-                <div 
-                  className="text-base md:text-lg text-text-secondary leading-relaxed rendered-html break-words"
-                  dangerouslySetInnerHTML={{ __html: cleanHtmlWhitespace(survey.description) }}
-                />
-              )}
+    <>
+      {showExitConfirm && (
+        <div className="fixed inset-0 z-[60] bg-slate-900/35 flex items-end sm:items-center justify-center p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl border border-border-subtle">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-sentiment-neutral/10 text-sentiment-neutral">
+                <Undo2 size={18} />
+              </div>
+              <div>
+                <h3 className="font-display text-xl font-bold text-text-primary">Rời khỏi khảo sát?</h3>
+              </div>
             </div>
-          )}
-
-          {showAllQuestions ? (
-            questions.map((question, index) => (
-              <section key={question.id} className="bg-white border border-border-subtle rounded-2xl shadow-sm p-6 md:p-8">
-                <header className="space-y-2 mb-5">
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="text-xs md:text-sm font-bold text-primary bg-primary-fixed px-2.5 py-1 rounded-full">Câu {index + 1}</span>
-                    {question.required && <span className="text-xs md:text-sm text-sentiment-negative font-medium">* Bắt buộc</span>}
-                  </div>
-                  <h2 className="font-display text-2xl md:text-3xl font-bold text-text-primary tracking-tight leading-tight break-words" dangerouslySetInnerHTML={{ __html: cleanHtmlWhitespace(question.text) || `Câu hỏi ${index + 1}` }} />
-                </header>
-                {renderQuestionInput(question, answers[question.id], question.id)}
-              </section>
-            ))
-          ) : (
-            <>
-              <header className="space-y-2">
-                <h2 className="font-display text-2xl md:text-3xl font-bold text-text-primary tracking-tight leading-tight break-words" dangerouslySetInnerHTML={{ __html: cleanHtmlWhitespace(currentQuestion?.text || '') }} />
-                {currentQuestion?.required && (
-                  <p className="text-xs md:text-sm text-sentiment-negative font-medium">* Bắt buộc</p>
-                )}
-              </header>
-              {currentQuestion && renderQuestionInput(currentQuestion, currentAnswer, currentQuestion.id)}
-            </>
-          )}
-
-          {errorMsg && (
-            <div className="mt-4 p-3 bg-sentiment-negative/10 text-sentiment-negative text-sm font-medium rounded-lg flex items-center gap-2 animate-in slide-in-from-bottom-2">
-              <span className="w-1.5 h-1.5 rounded-full bg-sentiment-negative"></span>
-              {errorMsg}
-            </div>
-          )}
-        </div>
-      </main>
-
-      <div className="fixed bottom-0 w-full bg-white shadow-[0_-4px_24px_rgba(0,0,0,0.06)] px-6 py-5 flex justify-center border-t border-border-subtle/50 z-50">
-        <div className="w-full max-w-[720px] flex flex-col gap-3">
-          <div className="flex items-center justify-between mb-1">
-            <div className="flex items-center gap-2">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-sentiment-positive opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-sentiment-positive"></span>
-              </span>
-              <span className="text-xs font-bold text-text-secondary">Đang tự động lưu...</span>
-            </div>
-            {!showAllQuestions && (
-              <button onClick={clearAnswer} className="text-primary text-sm font-bold flex items-center gap-1.5 hover:opacity-80 transition-opacity cursor-pointer">
-                <Undo2 size={16} /> Xóa
+            <p className="text-sm leading-relaxed text-text-secondary">
+              Bạn đang có câu trả lời được lưu tạm. Nếu thoát bây giờ, bạn vẫn có thể quay lại và tiếp tục sau.
+            </p>
+            <div className="mt-5 flex gap-3">
+              <button
+                onClick={() => setShowExitConfirm(false)}
+                className="flex-1 rounded-xl border border-border-subtle bg-white px-4 py-3 text-sm font-bold text-text-primary hover:bg-surface-container-low transition-colors cursor-pointer"
+              >
+                Ở lại
               </button>
+              <button
+                onClick={() => {
+                  setShowExitConfirm(false);
+                  onExit();
+                }}
+                className="flex-1 rounded-xl bg-primary px-4 py-3 text-sm font-bold text-white hover:bg-primary/90 transition-colors cursor-pointer"
+              >
+                Thoát
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="min-h-screen bg-surface-background flex flex-col font-sans text-text-primary animate-in fade-in duration-500 selection:bg-secondary-fixed selection:text-on-secondary-fixed">
+        <nav className="sticky top-0 z-50 bg-surface-background/90 backdrop-blur-md px-4 md:px-6 py-3 md:py-4 flex flex-col gap-2 border-b border-border-subtle/50">
+          <div className="flex justify-between items-start md:items-center w-full gap-3">
+            <div className="font-display text-base sm:text-lg md:text-2xl font-bold text-primary flex-1 pr-2 sm:pr-4 line-clamp-2 break-all">{stripHtml(survey.title) || 'Khảo sát thông minh'}</div>
+            <div className="flex items-center gap-2 md:gap-3 shrink-0">
+              <button onClick={handleExitRequest} className="min-h-10 rounded-lg border border-border-subtle bg-white px-2.5 py-2 text-[11px] sm:text-xs md:text-sm font-bold text-text-secondary hover:text-primary hover:border-primary/30 transition-colors cursor-pointer shadow-sm">Thoát</button>
+            </div>
+          </div>
+          <div className="mt-1 md:mt-2">
+            <div className="flex justify-between items-end mb-1.5 md:mb-2 gap-3">
+              <span className="text-[11px] sm:text-xs md:text-sm font-bold text-text-primary">{showAllQuestions ? `Tổng cộng ${questions.length} câu hỏi` : `Câu hỏi ${step + 1} / ${totalSteps}`}</span>
+              <span className="text-[10px] sm:text-[11px] md:text-xs font-bold text-text-secondary">Hoàn thành {progress}%</span>
+            </div>
+            <div className="h-1.5 md:h-2 w-full bg-surface-container-highest rounded-full overflow-hidden">
+              <div className="h-full bg-primary transition-all duration-700 ease-out" style={{ width: `${progress}%` }}></div>
+            </div>
+          </div>
+        </nav>
+
+        <main className="flex-grow flex flex-col items-center px-3 sm:px-4 md:px-6 pt-5 sm:pt-8 md:pt-12 pb-32 md:pb-40 w-full" key={showAllQuestions ? 'all-questions' : step}>
+          <div className="w-full max-w-[720px] space-y-4 sm:space-y-6 md:space-y-8 animate-in slide-in-from-bottom-4 duration-500 fade-in">
+            {!showAllQuestions && step === 0 && (
+              <div className="bg-white border-t-[8px] sm:border-t-[10px] border-t-primary rounded-2xl shadow-sm p-4 sm:p-6 md:p-10 border border-border-subtle mb-5 sm:mb-8">
+                <h1 
+                  className="font-display text-2xl sm:text-3xl md:text-4xl font-extrabold text-text-primary mb-3 sm:mb-4 leading-[1.1] sm:leading-tight rendered-html break-words"
+                  dangerouslySetInnerHTML={{ __html: cleanHtmlWhitespace(survey.title) || 'Khảo sát thông minh' }}
+                />
+                {survey.description && (
+                  <div 
+                    className="text-sm sm:text-base md:text-lg text-text-secondary leading-relaxed rendered-html break-words"
+                    dangerouslySetInnerHTML={{ __html: cleanHtmlWhitespace(survey.description) }}
+                  />
+                )}
+              </div>
+            )}
+
+            {showAllQuestions ? (
+              questions.map((question, index) => (
+                <section key={question.id} className="bg-white border border-border-subtle rounded-2xl shadow-sm p-4 sm:p-6 md:p-8">
+                  <header className="space-y-2 mb-4 sm:mb-5">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-[11px] sm:text-xs md:text-sm font-bold text-primary bg-primary-fixed px-2.5 py-1 rounded-full">Câu {index + 1}</span>
+                      {question.required && <span className="text-[11px] sm:text-xs md:text-sm text-sentiment-negative font-medium">* Bắt buộc</span>}
+                    </div>
+                    <h2 className="font-display text-xl sm:text-2xl md:text-3xl font-bold text-text-primary tracking-tight leading-[1.2] sm:leading-tight break-words" dangerouslySetInnerHTML={{ __html: cleanHtmlWhitespace(question.text) || `Câu hỏi ${index + 1}` }} />
+                  </header>
+                  {renderQuestionInput(question, answers[question.id], question.id)}
+                </section>
+              ))
+            ) : (
+              <>
+                <header className="space-y-2">
+                  <h2 className="font-display text-xl sm:text-2xl md:text-3xl font-bold text-text-primary tracking-tight leading-[1.2] sm:leading-tight break-words" dangerouslySetInnerHTML={{ __html: cleanHtmlWhitespace(currentQuestion?.text || '') }} />
+                  {currentQuestion?.required && (
+                    <p className="text-[11px] sm:text-xs md:text-sm text-sentiment-negative font-medium">* Bắt buộc</p>
+                  )}
+                </header>
+                {currentQuestion && renderQuestionInput(currentQuestion, currentAnswer, currentQuestion.id)}
+              </>
+            )}
+
+            {errorMsg && (
+              <div className="mt-4 p-3 bg-sentiment-negative/10 text-sentiment-negative text-sm font-medium rounded-lg flex items-center gap-2 animate-in slide-in-from-bottom-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-sentiment-negative"></span>
+                {errorMsg}
+              </div>
             )}
           </div>
-          <div className="flex gap-4">
-            <button onClick={handlePrev} disabled={showAllQuestions || step === 0} className={`flex-1 py-4 bg-white border-2 border-border-subtle rounded-xl text-base font-bold text-text-primary transition-colors shadow-sm ${showAllQuestions || step === 0 ? 'opacity-50 cursor-not-allowed' : 'hover:bg-surface-container-low active:scale-95 cursor-pointer'}`}>
-              Quay lại
-            </button>
-            <button disabled={isSubmitting} onClick={handleNext} className={`flex-[2] py-4 bg-primary text-white rounded-xl text-lg font-bold shadow-lg shadow-primary/25 hover:bg-primary/90 transition-all active:scale-95 flex items-center justify-center gap-2 ${isSubmitting ? 'opacity-70 cursor-not-allowed' : 'cursor-pointer'}`}>
-              {isSubmitting ? 'Đang gửi...' : showAllQuestions ? 'Hoàn thành' : step === totalSteps - 1 ? 'Hoàn thành' : 'Tiếp theo'}
-            </button>
+        </main>
+
+        <div className="fixed bottom-0 w-full bg-white shadow-[0_-4px_24px_rgba(0,0,0,0.06)] px-3 sm:px-6 py-4 sm:py-5 flex justify-center border-t border-border-subtle/50 z-50">
+          <div className="w-full max-w-[720px] flex flex-col gap-3">
+            <div className="flex items-center justify-between gap-2 mb-1">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="relative flex h-2 w-2 shrink-0">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-sentiment-positive opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-sentiment-positive"></span>
+                </span>
+                <span className="text-[10px] sm:text-xs font-bold text-text-secondary truncate">Đang tự động lưu...</span>
+              </div>
+              {!showAllQuestions && (
+                <button onClick={clearAnswer} className="text-primary text-[11px] sm:text-sm font-bold flex items-center gap-1.5 hover:opacity-80 transition-opacity cursor-pointer shrink-0">
+                  <Undo2 size={14} className="sm:h-4 sm:w-4" /> Xóa
+                </button>
+              )}
+              {draftSavedAt && (
+                <span className="hidden sm:inline text-[10px] font-semibold text-text-secondary">Lưu tạm {draftSavedAt}</span>
+              )}
+            </div>
+            <div className="flex gap-3 sm:gap-4">
+              <button onClick={handlePrev} disabled={showAllQuestions || step === 0} className={`flex-1 min-h-[48px] sm:min-h-[52px] bg-white border-2 border-border-subtle rounded-xl text-sm sm:text-base font-bold text-text-primary transition-colors shadow-sm ${showAllQuestions || step === 0 ? 'opacity-50 cursor-not-allowed' : 'hover:bg-surface-container-low active:scale-95 cursor-pointer'}`}>
+                Quay lại
+              </button>
+              <button disabled={isSubmitting} onClick={handleNext} className={`flex-[2] min-h-[48px] sm:min-h-[52px] bg-primary text-white rounded-xl text-base sm:text-lg font-bold shadow-lg shadow-primary/25 hover:bg-primary/90 transition-all active:scale-95 flex items-center justify-center gap-2 ${isSubmitting ? 'opacity-70 cursor-not-allowed' : 'cursor-pointer'}`}>
+                {isSubmitting ? 'Đang gửi...' : showAllQuestions ? 'Hoàn thành' : step === totalSteps - 1 ? 'Hoàn thành' : 'Tiếp theo'}
+              </button>
+            </div>
           </div>
         </div>
       </div>
-    </div>
+    </>
   );
 }

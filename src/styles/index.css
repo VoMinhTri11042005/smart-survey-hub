@@ -121,7 +121,7 @@
   color: #94a3b8;
 }
 
-/* Rendered HTML overrides for Respondent */
+/* Rendered HTML overrides for Respondent + editor */
 .rendered-html,
 .rendered-html *,
 .rendered-option,
@@ -142,7 +142,9 @@
 .ql-container * {
   overflow-wrap: anywhere !important;
   word-break: break-word !important;
-  min-width: 0;
+  word-wrap: break-word !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
 }
 
 .ql-editor,
@@ -158,6 +160,12 @@
 .ql-container ol,
 .ql-container div {
   white-space: normal !important;
+  text-wrap: pretty;
+}
+
+.ql-editor {
+  width: 100% !important;
+  max-width: 100% !important;
 }
 
 .rendered-html p {

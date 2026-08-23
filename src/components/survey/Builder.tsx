@@ -602,7 +602,7 @@ export function Builder({ onPublished, onError }: { onPublished?: () => void; on
                                  ? <CircleDot size={18} className="text-text-secondary flex-shrink-0" />
                                  : <CheckSquare size={18} className="text-text-secondary flex-shrink-0" />
                              )}
-                             <div className="flex-1 quill-option quill-smart-toolbar">
+                             <div className="flex-1 min-w-0 quill-option quill-smart-toolbar">
                                <ReactQuill
                                  theme="snow"
                                  value={opt}

@@ -134,7 +134,13 @@ function AppContent() {
     return (
       <Suspense fallback={<AppFallback />}>
         <>
-          <Respondent survey={shareSurvey} isPublic={true} onExit={() => { window.location.href = '/'; }} />
+          <Respondent survey={shareSurvey} isPublic={true} onExit={() => {
+            if (window.history.length > 1) {
+              window.history.back();
+            } else {
+              window.location.href = '/';
+            }
+          }} />
           <AnimatePresence>{toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}</AnimatePresence>
         </>
       </Suspense>
