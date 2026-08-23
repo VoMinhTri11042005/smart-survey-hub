@@ -1,6 +1,17 @@
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react';
 import type { Survey, SurveyQuestion, SurveyResponse, SurveyTemplateData, TeamMember, TeamRole, SurveyDisplayMode } from '../types';
 
+interface SurveyDraft {
+  id: string;
+  title: string;
+  description: string;
+  questions: SurveyQuestion[];
+  isQuiz?: boolean;
+  showScore?: boolean;
+  displayMode?: SurveyDisplayMode;
+  updatedAt?: string;
+}
+
 interface SurveyContextType {
   surveys: Survey[];
   currentSurvey: Survey | null;
@@ -8,6 +19,7 @@ interface SurveyContextType {
   pendingTemplate: SurveyTemplateData | null;
   teamMembers: TeamMember[];
   searchQuery: string;
+  drafts: SurveyDraft[];
 
   fetchSurveys: () => Promise<void>;
   fetchSurveyById: (id: string) => Promise<Survey | null>;
@@ -15,6 +27,9 @@ interface SurveyContextType {
   deleteSurvey: (id: string) => Promise<void>;
   setCurrentSurvey: (survey: Survey | null) => void;
   setSearchQuery: (query: string) => void;
+  fetchDrafts: () => Promise<SurveyDraft[]>;
+  saveDraft: (draft: Partial<SurveyDraft> & { title?: string; description?: string; questions?: SurveyQuestion[] }) => Promise<SurveyDraft>;
+  deleteDraft: (id: string) => Promise<void>;
 
   submitResponse: (surveyId: string, respondentId: string, answers: Record<string, string | string[] | number>, score?: number, totalQuizQuestions?: number) => Promise<void>;
   fetchResponses: (surveyId: string) => Promise<SurveyResponse[]>;
@@ -60,6 +75,7 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
   const [pendingTemplate, setPendingTemplate] = useState<SurveyTemplateData | null>(null);
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [drafts, setDrafts] = useState<any[]>([]);
 
   const fetchSurveys = useCallback(async () => {
     try {
@@ -118,8 +134,7 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
       return survey;
     } catch (error) {
       console.error('Error creating survey via API:', error);
-      
-      // Fallback to local storage if API is unavailable
+
       const newSurvey: Survey = {
         ...surveyData,
         id: Math.random().toString(36).substring(2, 9),
@@ -129,8 +144,68 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
         showScore: surveyData.showScore !== false
       };
       setSurveys(prev => [newSurvey, ...prev]);
+      try {
+        localStorage.setItem('surveys', JSON.stringify([newSurvey, ...JSON.parse(localStorage.getItem('surveys') || '[]')]));
+      } catch (e) {}
       return newSurvey;
     }
+  }, []);
+
+  const fetchDrafts = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE}/surveys/drafts`);
+      if (!res.ok) return [];
+      const data = await res.json();
+      setDrafts(data);
+      return data;
+    } catch (error) {
+      console.error('Error fetching drafts:', error);
+      return [];
+    }
+  }, []);
+
+  const saveDraft = useCallback(async (draft: Partial<any> & { title?: string; description?: string; questions?: SurveyQuestion[] }) => {
+    const payload = {
+      id: draft.id || `draft-${Date.now()}`,
+      title: draft.title || 'Khảo sát nháp',
+      description: draft.description || '',
+      questions: draft.questions || [],
+      isQuiz: Boolean(draft.isQuiz),
+      showScore: draft.showScore !== false,
+      displayMode: draft.displayMode || 'single',
+    };
+
+    try {
+      const res = await fetch(`${API_BASE}/surveys/drafts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) throw new Error('Failed to save draft');
+      const saved = await res.json();
+      setDrafts(prev => {
+        const next = prev.filter(item => item.id !== saved.id);
+        return [saved, ...next];
+      });
+      return saved;
+    } catch (error) {
+      console.error('Error saving draft:', error);
+      const fallback = { ...payload, updatedAt: new Date().toISOString() };
+      const key = 'smart-survey-hub-drafts';
+      const existing = JSON.parse(localStorage.getItem(key) || '[]');
+      const next = [fallback, ...existing.filter((item: any) => item.id !== payload.id)];
+      localStorage.setItem(key, JSON.stringify(next));
+      return fallback;
+    }
+  }, []);
+
+  const deleteDraft = useCallback(async (id: string) => {
+    try {
+      await fetch(`${API_BASE}/surveys/drafts/${id}`, { method: 'DELETE' });
+    } catch (error) {
+      console.error('Error deleting draft:', error);
+    }
+    setDrafts(prev => prev.filter(d => d.id !== id));
   }, []);
 
   const deleteSurvey = useCallback(async (id: string) => {
@@ -305,6 +380,10 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
       deleteSurvey,
       setCurrentSurvey,
       setSearchQuery,
+      drafts,
+      fetchDrafts,
+      saveDraft,
+      deleteDraft,
       submitResponse,
       fetchResponses,
       fetchMyResponse,

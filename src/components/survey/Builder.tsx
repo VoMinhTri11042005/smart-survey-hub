@@ -25,7 +25,7 @@ const quillModules = {
 };
 
 export function Builder({ onPublished, onError }: { onPublished?: () => void; onError?: (msg: string) => void }) {
-  const { parseDocx, createSurvey, setCurrentSurvey, isLoading, pendingTemplate, clearPendingTemplate, chatWithAI } = useSurvey();
+  const { parseDocx, createSurvey, setCurrentSurvey, isLoading, pendingTemplate, clearPendingTemplate, chatWithAI, fetchDrafts, saveDraft, deleteDraft } = useSurvey();
   const DRAFT_STORAGE_KEY = 'smart-survey-hub-builder-draft';
   
   const [showSurvey, setShowSurvey] = useState(false);
@@ -40,6 +40,7 @@ export function Builder({ onPublished, onError }: { onPublished?: () => void; on
   const [showScore, setShowScore] = useState(true);
   const [displayMode, setDisplayMode] = useState<SurveyDisplayMode>('single');
   const [draftSavedAt, setDraftSavedAt] = useState<string | null>(null);
+  const [draftId, setDraftId] = useState<string | null>(null);
   const [publishedSurvey, setPublishedSurvey] = useState<{ id: string; title: string } | null>(null);
 
   // AI Chat state
@@ -91,33 +92,53 @@ export function Builder({ onPublished, onError }: { onPublished?: () => void; on
   }, [pendingTemplate, clearPendingTemplate]);
 
   useEffect(() => {
-    const saved = localStorage.getItem(DRAFT_STORAGE_KEY);
-    if (!saved) return;
+    const loadDrafts = async () => {
+      const drafts = await fetchDrafts();
+      if (!drafts || drafts.length === 0) {
+        const saved = localStorage.getItem(DRAFT_STORAGE_KEY);
+        if (!saved) return;
 
-    try {
-      const draft = JSON.parse(saved) as {
-        surveyTitle?: string;
-        surveyDescription?: string;
-        questions?: SurveyQuestion[];
-        isQuiz?: boolean;
-        showScore?: boolean;
-        displayMode?: SurveyDisplayMode;
-      };
+        try {
+          const draft = JSON.parse(saved) as {
+            surveyTitle?: string;
+            surveyDescription?: string;
+            questions?: SurveyQuestion[];
+            isQuiz?: boolean;
+            showScore?: boolean;
+            displayMode?: SurveyDisplayMode;
+          };
 
-      if (draft.surveyTitle || draft.surveyDescription || draft.questions?.length) {
-        setSurveyTitle(draft.surveyTitle || '');
-        setSurveyDescription(draft.surveyDescription || '');
-        setQuestions(draft.questions || []);
-        setIsQuiz(Boolean(draft.isQuiz));
-        setShowScore(draft.showScore !== false);
-        setDisplayMode(draft.displayMode || 'single');
-        setShowSurvey(true);
-        setActiveQuestionId(draft.questions?.[0]?.id || null);
+          if (draft.surveyTitle || draft.surveyDescription || draft.questions?.length) {
+            setSurveyTitle(draft.surveyTitle || '');
+            setSurveyDescription(draft.surveyDescription || '');
+            setQuestions(draft.questions || []);
+            setIsQuiz(Boolean(draft.isQuiz));
+            setShowScore(draft.showScore !== false);
+            setDisplayMode(draft.displayMode || 'single');
+            setShowSurvey(true);
+            setActiveQuestionId(draft.questions?.[0]?.id || null);
+          }
+        } catch (error) {
+          console.error('Failed to restore saved survey draft', error);
+        }
+        return;
       }
-    } catch (error) {
-      console.error('Failed to restore saved survey draft', error);
-    }
-  }, []);
+
+      const latest = drafts[0];
+      setDraftId(latest.id);
+      setSurveyTitle(latest.title || '');
+      setSurveyDescription(latest.description || '');
+      setQuestions(latest.questions || []);
+      setIsQuiz(Boolean(latest.isQuiz));
+      setShowScore(latest.showScore !== false);
+      setDisplayMode(latest.displayMode || 'single');
+      setShowSurvey(true);
+      setActiveQuestionId((latest.questions || [])[0]?.id || null);
+      setDraftSavedAt(latest.updatedAt ? new Date(latest.updatedAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : null);
+    };
+
+    void loadDrafts();
+  }, [fetchDrafts]);
 
   useEffect(() => {
     if (!showSurvey) return;
@@ -141,6 +162,10 @@ export function Builder({ onPublished, onError }: { onPublished?: () => void; on
 
   const clearDraft = () => {
     localStorage.removeItem(DRAFT_STORAGE_KEY);
+    if (draftId) {
+      void deleteDraft(draftId);
+    }
+    setDraftId(null);
     setDraftSavedAt(null);
   };
 
@@ -153,16 +178,19 @@ export function Builder({ onPublished, onError }: { onPublished?: () => void; on
     }, 0);
   }, [questions]);
 
-  const saveSurveyDraft = () => {
+  const saveSurveyDraft = async () => {
     const draft = {
-      surveyTitle,
-      surveyDescription,
+      id: draftId || `draft-${Date.now()}`,
+      title: surveyTitle || 'Khảo sát nháp',
+      description: surveyDescription,
       questions,
       isQuiz,
       showScore,
       displayMode,
     };
     localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft));
+    const saved = await saveDraft(draft);
+    setDraftId(saved.id);
     setDraftSavedAt(new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }));
   };
 

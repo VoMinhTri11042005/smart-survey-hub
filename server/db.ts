@@ -89,12 +89,35 @@ export const initDB = async () => {
       );
     `);
 
-    // Insert default admin user if not exists
+    // Drafts storage to prevent losing unsaved survey work
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS survey_drafts (
+        id VARCHAR(255) PRIMARY KEY,
+        user_id VARCHAR(255) NOT NULL DEFAULT 'admin',
+        title TEXT,
+        description TEXT,
+        questions JSONB NOT NULL DEFAULT '[]'::jsonb,
+        is_quiz BOOLEAN DEFAULT FALSE,
+        show_score BOOLEAN DEFAULT TRUE,
+        display_mode VARCHAR(32) DEFAULT 'single',
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    // Install default admin user if not exists
     await client.query(`
       INSERT INTO users (id, name, email, photo_url, tagline)
       VALUES ('admin', 'Alex Chen', 'alex@company.com', 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=80&w=150&auto=format&fit=crop', 'Nhà sáng tạo Cấp 3')
       ON CONFLICT (id) DO NOTHING;
     `);
+
+    // Backward-compatible schema updates
+    try {
+      await client.query(`ALTER TABLE surveys ADD COLUMN IF NOT EXISTS display_mode VARCHAR(32) DEFAULT 'single';`);
+      await client.query(`ALTER TABLE surveys ADD COLUMN IF NOT EXISTS show_score BOOLEAN DEFAULT TRUE;`);
+    } catch (e) {
+      // Ignore if the column already exists or migration is not needed.
+    }
 
     client.release();
     console.log('✅ PostgreSQL Database connected and tables initialized.');
