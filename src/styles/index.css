@@ -128,14 +128,20 @@
 .rendered-option *,
 .question-content,
 .question-content *,
+.builder-quill,
+.builder-quill *,
+.quill-option,
+.quill-option *,
+.quill-title,
+.quill-title *,
+.quill-desc,
+.quill-desc *,
 .ql-editor,
 .ql-editor *,
-.builder-quill,
-.quill-option,
-.quill-title,
-.quill-desc {
-  overflow-wrap: anywhere;
-  word-break: break-word;
+.ql-container,
+.ql-container * {
+  overflow-wrap: anywhere !important;
+  word-break: break-word !important;
   min-width: 0;
 }
 
@@ -144,8 +150,14 @@
 .ql-editor li,
 .ql-editor ul,
 .ql-editor ol,
-.ql-editor div {
-  white-space: normal;
+.ql-editor div,
+.ql-container,
+.ql-container p,
+.ql-container li,
+.ql-container ul,
+.ql-container ol,
+.ql-container div {
+  white-space: normal !important;
 }
 
 .rendered-html p {
