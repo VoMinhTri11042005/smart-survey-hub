@@ -350,7 +350,7 @@ export function Builder({ onPublished, onError }: { onPublished?: () => void; on
 
   const getQuestionLabel = (question: SurveyQuestion, idx: number) => {
     const value = question.label?.trim();
-    return value && value.length > 0 ? value : `Câu ${idx + 1}`;
+    return value && value.length > 0 ? value : '';
   };
 
   const addQuestion = () => {
@@ -586,11 +586,11 @@ export function Builder({ onPublished, onError }: { onPublished?: () => void; on
                              <input
                                value={q.label ?? ''}
                                onChange={(e) => updateQuestion(q.id, { label: e.target.value })}
-                               placeholder={`Nhãn câu (ví dụ: Họ tên, Email)`}
+                               placeholder="Nhãn câu (tùy chọn)"
                                className="w-44 bg-transparent text-xs font-bold outline-none placeholder:text-text-secondary/70"
                              />
                            ) : (
-                             getQuestionLabel(q, idx)
+                             getQuestionLabel(q, idx) || 'Không có nhãn'
                            )} • {questionTypeLabels[q.type]?.label}
                          </span>
                          {q.required && <CheckCircle2 size={16} className="text-sentiment-positive" />}

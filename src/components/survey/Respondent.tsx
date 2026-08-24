@@ -605,7 +605,7 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
                 <section key={question.id} className="bg-white border border-border-subtle rounded-2xl shadow-sm p-4 sm:p-6 md:p-8">
                   <header className="space-y-2 mb-4 sm:mb-5">
                     <div className="flex items-center justify-between gap-3">
-                      <span className="text-[11px] sm:text-xs md:text-sm font-bold text-primary bg-primary-fixed px-2.5 py-1 rounded-full">{question.label && question.label.trim() !== '' ? question.label : `Câu ${index + 1}`}</span>
+                      <span className="text-[11px] sm:text-xs md:text-sm font-bold text-primary bg-primary-fixed px-2.5 py-1 rounded-full">{question.label && question.label.trim() !== '' ? question.label : ''}</span>
                       {question.required && <span className="text-[11px] sm:text-xs md:text-sm text-sentiment-negative font-medium">* Bắt buộc</span>}
                     </div>
                     <h2 className="font-display text-xl sm:text-2xl md:text-3xl font-bold text-text-primary tracking-tight leading-[1.2] sm:leading-tight break-words" dangerouslySetInnerHTML={{ __html: cleanHtmlWhitespace(question.text) || (question.label && question.label.trim() !== '' ? question.label : `Câu hỏi ${index + 1}`) }} />
