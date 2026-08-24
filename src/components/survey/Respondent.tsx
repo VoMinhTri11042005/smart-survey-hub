@@ -442,7 +442,7 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
         </div>
 
         <nav className="relative z-10 px-4 py-4 flex justify-between items-center border-b border-white/10 backdrop-blur-md">
-          <div className="font-display text-xl font-bold text-primary line-clamp-1">{stripHtml(survey.title)}</div>
+          <div className="font-display text-xl font-bold text-primary line-clamp-1" dangerouslySetInnerHTML={{ __html: cleanHtmlWhitespace(survey.title) }} />
         </nav>
 
         <main className="flex-1 flex flex-col items-center justify-center p-6 relative z-10 animate-in zoom-in-95 duration-700">
@@ -567,7 +567,7 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
       <div className="min-h-screen bg-surface-background flex flex-col font-sans text-text-primary animate-in fade-in duration-500 selection:bg-secondary-fixed selection:text-on-secondary-fixed">
         <nav className="sticky top-0 z-50 bg-surface-background/90 backdrop-blur-md px-4 md:px-6 py-3 md:py-4 flex flex-col gap-2 border-b border-border-subtle/50">
           <div className="flex justify-between items-start md:items-center w-full gap-3">
-            <div className="font-display text-base sm:text-lg md:text-2xl font-bold text-primary flex-1 pr-2 sm:pr-4 line-clamp-2 break-all">{stripHtml(survey.title) || 'Khảo sát thông minh'}</div>
+            <div className="font-display text-base sm:text-lg md:text-2xl font-bold text-primary flex-1 pr-2 sm:pr-4 line-clamp-2 break-all" dangerouslySetInnerHTML={{ __html: cleanHtmlWhitespace(survey.title) || 'Khảo sát thông minh' }} />
             <div className="flex items-center gap-2 md:gap-3 shrink-0">
               <button onClick={handleExitRequest} className="min-h-10 rounded-lg border border-border-subtle bg-white px-2.5 py-2 text-[11px] sm:text-xs md:text-sm font-bold text-text-secondary hover:text-primary hover:border-primary/30 transition-colors cursor-pointer shadow-sm">Thoát</button>
             </div>
