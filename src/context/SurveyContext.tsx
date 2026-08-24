@@ -99,6 +99,41 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [drafts, setDrafts] = useState<any[]>([]);
 
+  const readLocalDrafts = useCallback(() => {
+    const keys = ['smart-survey-hub-builder-draft', 'smart-survey-hub-drafts'];
+    const collected: any[] = [];
+
+    for (const key of keys) {
+      try {
+        const raw = localStorage.getItem(key);
+        if (!raw) continue;
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          collected.push(...parsed);
+        } else if (parsed && typeof parsed === 'object') {
+          collected.push(parsed);
+        }
+      } catch (error) {
+        console.warn('Failed to read local draft storage', error);
+      }
+    }
+
+    return collected
+      .filter(Boolean)
+      .filter((item: any) => item && (item.id || item.title || item.description || Array.isArray(item.questions)))
+      .map((item: any) => ({
+        id: item.id || `draft-${Date.now()}`,
+        title: item.title || 'Khảo sát nháp',
+        description: item.description || '',
+        questions: Array.isArray(item.questions) ? item.questions : [],
+        isQuiz: Boolean(item.isQuiz),
+        showScore: item.showScore !== false,
+        displayMode: item.displayMode || 'single',
+        closesAt: item.closesAt || null,
+        updatedAt: item.updatedAt || new Date().toISOString(),
+      }));
+  }, []);
+
   const fetchSurveys = useCallback(async () => {
     try {
       const res = await fetch(`${API_BASE}/surveys`);
@@ -202,15 +237,23 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
   const fetchDrafts = useCallback(async () => {
     try {
       const res = await fetch(`${API_BASE}/surveys/drafts`);
-      if (!res.ok) return [];
+      if (!res.ok) {
+        const localDrafts = readLocalDrafts();
+        setDrafts(localDrafts);
+        return localDrafts;
+      }
       const data = await res.json();
-      setDrafts(data);
-      return data;
+      const localDrafts = readLocalDrafts();
+      const merged = data.length > 0 ? data : localDrafts;
+      setDrafts(merged);
+      return merged;
     } catch (error) {
       console.error('Error fetching drafts:', error);
-      return [];
+      const localDrafts = readLocalDrafts();
+      setDrafts(localDrafts);
+      return localDrafts;
     }
-  }, []);
+  }, [readLocalDrafts]);
 
   const saveDraft = useCallback(async (draft: Partial<any> & { title?: string; description?: string; questions?: SurveyQuestion[] }) => {
     const payload = {
@@ -258,6 +301,8 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
       const next = [fallback, ...existing.filter((item: any) => item.id !== payload.id), ...legacyExisting.filter((item: any) => item.id !== payload.id)];
       localStorage.setItem(key, JSON.stringify(fallback));
       localStorage.setItem(legacyKey, JSON.stringify(next));
+      const merged = [fallback, ...next.filter((item: any) => item.id !== fallback.id)];
+      setDrafts(merged);
       return fallback;
     }
   }, []);
