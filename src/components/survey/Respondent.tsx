@@ -59,7 +59,13 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
         // A device may be allowed to submit more than once.  Give each allowed
         // attempt its own respondent ID so the response API creates a new row
         // instead of loading/updating the first attempt.
-        const attemptNumber = getCurrentDeviceAttempts() + 1;
+        const completedAttempts = getCurrentDeviceAttempts();
+        const maxAttempts = survey.maxAttemptsPerDevice ?? null;
+        // Once the device has reached its limit, reopen its most recent
+        // attempt so the respondent can still view the saved score.
+        const attemptNumber = maxAttempts && maxAttempts > 0 && completedAttempts >= maxAttempts
+          ? maxAttempts
+          : completedAttempts + 1;
         const rid = `${getDeviceId()}-attempt-${attemptNumber}`;
         setRespondentId(rid);
 
@@ -199,7 +205,7 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
   const maxAttemptsPerDevice = survey?.maxAttemptsPerDevice ?? null;
   const currentDeviceAttempts = getCurrentDeviceAttempts();
 
-  if (maxAttemptsPerDevice && maxAttemptsPerDevice > 0 && currentDeviceAttempts >= maxAttemptsPerDevice) {
+  if (maxAttemptsPerDevice && maxAttemptsPerDevice > 0 && currentDeviceAttempts >= maxAttemptsPerDevice && !isCompleted) {
     return (
       <div className="min-h-screen bg-surface-background flex flex-col items-center justify-center gap-4 font-sans px-4 text-center">
         <div className="w-16 h-16 bg-surface-container-high rounded-2xl flex items-center justify-center">
