@@ -56,7 +56,14 @@ export function Builder({ onPublished, onError }: { onPublished?: () => void; on
       }
     }
 
-    return collected.filter(Boolean);
+    const seen = new Set<string>();
+    return collected.filter((draft) => {
+      if (!draft) return false;
+      if (!draft.id) return true;
+      if (seen.has(draft.id)) return false;
+      seen.add(draft.id);
+      return true;
+    });
   };
   
   const [showSurvey, setShowSurvey] = useState(false);
@@ -73,6 +80,7 @@ export function Builder({ onPublished, onError }: { onPublished?: () => void; on
   const [closesAt, setClosesAt] = useState<string | null>(null);
   const [draftSavedAt, setDraftSavedAt] = useState<string | null>(null);
   const [draftId, setDraftId] = useState<string | null>(null);
+  const [isSavingDraft, setIsSavingDraft] = useState(false);
   const [publishedSurvey, setPublishedSurvey] = useState<{ id: string; title: string } | null>(null);
   const [maxAttemptsPerDevice, setMaxAttemptsPerDevice] = useState<number | null>(1);
 
@@ -273,6 +281,9 @@ export function Builder({ onPublished, onError }: { onPublished?: () => void; on
   }, [questions]);
 
   const saveSurveyDraft = async () => {
+    if (isSavingDraft) return;
+
+    setIsSavingDraft(true);
     const draft = {
       id: draftId || `draft-${Date.now()}`,
       title: surveyTitle || 'Khảo sát nháp',
@@ -284,11 +295,16 @@ export function Builder({ onPublished, onError }: { onPublished?: () => void; on
       closesAt,
       maxAttemptsPerDevice,
     };
-    localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft));
-    localStorage.setItem(LEGACY_DRAFT_STORAGE_KEY, JSON.stringify([draft]));
-    const saved = await saveDraft(draft);
-    setDraftId(saved.id || draft.id);
-    setDraftSavedAt(new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }));
+    try {
+      localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft));
+      // The legacy key stored the same draft a second time, causing duplicate cards.
+      localStorage.removeItem(LEGACY_DRAFT_STORAGE_KEY);
+      const saved = await saveDraft(draft);
+      setDraftId(saved.id || draft.id);
+      setDraftSavedAt(new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }));
+    } finally {
+      setIsSavingDraft(false);
+    }
   };
 
   const handleGenerate = async () => {
@@ -833,11 +849,12 @@ export function Builder({ onPublished, onError }: { onPublished?: () => void; on
                      />
                    </label>
                    <span className="hidden md:inline text-text-secondary">•</span>
-                   <button
-                     onClick={saveSurveyDraft}
-                     className="text-xs md:text-sm font-semibold text-text-secondary hover:text-primary transition-colors cursor-pointer"
-                   >
-                     Lưu nháp
+                  <button
+                    onClick={saveSurveyDraft}
+                    disabled={isSavingDraft}
+                    className="text-xs md:text-sm font-semibold text-text-secondary hover:text-primary transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isSavingDraft ? 'Đang lưu...' : 'Lưu nháp'}
                    </button>
                    <span className="text-[10px] md:text-xs text-text-secondary">{draftSavedAt ? `Đã lưu ${draftSavedAt}` : 'Chưa lưu'}</span>
                    <button

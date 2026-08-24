@@ -119,9 +119,16 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
       }
     }
 
+    const seen = new Set<string>();
     return collected
       .filter(Boolean)
       .filter((item: any) => item && (item.id || item.title || item.description || Array.isArray(item.questions)))
+      .filter((item: any) => {
+        if (!item.id) return true;
+        if (seen.has(item.id)) return false;
+        seen.add(item.id);
+        return true;
+      })
       .map((item: any) => ({
         id: item.id || `draft-${Date.now()}`,
         title: item.title || 'Khảo sát nháp',
