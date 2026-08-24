@@ -75,6 +75,53 @@ export function Builder({ onPublished, onError }: { onPublished?: () => void; on
   const [draftId, setDraftId] = useState<string | null>(null);
   const [publishedSurvey, setPublishedSurvey] = useState<{ id: string; title: string } | null>(null);
 
+  // Drag state for question reordering
+  const [dragOverId, setDragOverId] = useState<string | null>(null);
+  const dragOverRef = useRef<string | null>(null);
+
+  const handleDragStart = (e: React.DragEvent, id: string) => {
+    try {
+      e.dataTransfer.setData('text/plain', id);
+      e.dataTransfer.effectAllowed = 'move';
+    } catch (err) {
+      // ignore
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent, id: string) => {
+    e.preventDefault();
+    dragOverRef.current = id;
+    setDragOverId(id);
+  };
+
+  const handleDragLeave = (e: React.DragEvent, id: string) => {
+    e.preventDefault();
+    if (dragOverRef.current === id) {
+      dragOverRef.current = null;
+      setDragOverId(null);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent, targetId: string) => {
+    e.preventDefault();
+    const sourceId = e.dataTransfer.getData('text/plain');
+    if (!sourceId || sourceId === targetId) {
+      setDragOverId(null);
+      return;
+    }
+    setQuestions(prev => {
+      const srcIdx = prev.findIndex(p => p.id === sourceId);
+      const tgtIdx = prev.findIndex(p => p.id === targetId);
+      if (srcIdx === -1 || tgtIdx === -1) return prev;
+      const copy = [...prev];
+      const [item] = copy.splice(srcIdx, 1);
+      copy.splice(tgtIdx, 0, item);
+      return copy;
+    });
+    dragOverRef.current = null;
+    setDragOverId(null);
+  };
+
   // AI Chat state
   const [aiMessages, setAiMessages] = useState<{type: 'user'|'bot', text: string}[]>([]);
   const [aiInput, setAiInput] = useState('');
@@ -308,6 +355,7 @@ export function Builder({ onPublished, onError }: { onPublished?: () => void; on
       text: '',
       options: ['Lựa chọn 1', 'Lựa chọn 2'],
       required: true,
+      label: ''
     };
     setQuestions(prev => [...prev, newQ]);
     setActiveQuestionId(newQ.id);
@@ -513,18 +561,32 @@ export function Builder({ onPublished, onError }: { onPublished?: () => void; on
                  return (
                    <div
                      key={q.id}
+                     draggable
+                     onDragStart={(e) => handleDragStart(e, q.id)}
+                     onDragOver={(e) => handleDragOver(e, q.id)}
+                     onDragLeave={(e) => handleDragLeave(e, q.id)}
+                     onDrop={(e) => handleDrop(e, q.id)}
                      onClick={() => setActiveQuestionId(q.id)}
                      className={`bg-white rounded-2xl p-6 transition-all cursor-pointer ${
                        isActive
                          ? 'border-2 border-primary shadow-lg ring-4 ring-primary/5 scale-[1.01]'
                          : 'border border-border-subtle shadow-sm hover:shadow-md opacity-80 hover:opacity-100'
-                     }`}
+                     } ${dragOverId === q.id ? 'ring-2 ring-dashed ring-primary/40' : ''}`}
                    >
                      {/* Question Header */}
                      <div className="flex justify-between items-center mb-4">
                        <div className="flex items-center gap-3">
                          <span className={`text-xs font-bold px-2.5 py-1 rounded ${isActive ? 'bg-primary-fixed text-primary' : 'bg-surface-container text-text-secondary'}`}>
-                           Q{idx + 1} • {questionTypeLabels[q.type]?.label}
+                           {isActive ? (
+                             <input
+                               value={q.label ?? `Câu ${idx + 1}`}
+                               onChange={(e) => updateQuestion(q.id, { label: e.target.value })}
+                               placeholder={`Câu ${idx + 1}`}
+                               className="w-40 bg-transparent text-xs font-bold outline-none"
+                             />
+                           ) : (
+                             (q.label && q.label.trim() !== '' ? q.label : `Câu ${idx + 1}`)
+                           )} • {questionTypeLabels[q.type]?.label}
                          </span>
                          {q.required && <CheckCircle2 size={16} className="text-sentiment-positive" />}
                        </div>
@@ -658,10 +720,11 @@ export function Builder({ onPublished, onError }: { onPublished?: () => void; on
                              <span className="text-sm font-medium text-text-secondary">Điểm:</span>
                              <input
                                type="number"
+                               step="0.5"
                                min="0"
                                value={q.points !== undefined ? q.points : 1}
-                               onChange={(e) => updateQuestion(q.id, { points: parseInt(e.target.value) || 0 })}
-                               className="w-16 px-2 py-1 bg-surface-background border border-border-subtle rounded-md text-sm text-center focus:ring-2 focus:ring-primary/50 outline-none"
+                               onChange={(e) => updateQuestion(q.id, { points: parseFloat(e.target.value) || 0 })}
+                               className="w-20 px-2 py-1 bg-surface-background border border-border-subtle rounded-md text-sm text-center focus:ring-2 focus:ring-primary/50 outline-none"
                              />
                            </div>
                          )}

@@ -336,13 +336,37 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
         return (
           <div className="flex flex-col items-center gap-6 py-8 bg-white border border-border-subtle rounded-2xl shadow-sm">
             <div className="flex flex-row gap-2">
-              {[1, 2, 3, 4, 5].map((star) => (
-                <button key={star} onClick={() => setAnswerForQuestion(questionId, star)} className="cursor-pointer transition-transform active:scale-90 hover:scale-110 p-1">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="56" height="56" viewBox="0 0 24 24" fill={star <= (answer || 0) ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={star <= (answer || 0) ? 'text-primary' : 'text-surface-container-highest'}>
-                    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-                  </svg>
-                </button>
-              ))}
+              {[1, 2, 3, 4, 5].map((star) => {
+                const fill = (answer || 0);
+                let fillPercent = 0;
+                if (fill >= star) fillPercent = 100;
+                else if (fill >= star - 0.5) fillPercent = 50;
+                else fillPercent = 0;
+                const gradId = `grad-${questionId}-${star}`;
+                return (
+                  <button
+                    key={star}
+                    onClick={(e) => {
+                      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                      const x = e.clientX - rect.left;
+                      const isLeft = x < rect.width / 2;
+                      const value = isLeft ? star - 0.5 : star;
+                      setAnswerForQuestion(questionId, value);
+                    }}
+                    className="cursor-pointer transition-transform active:scale-90 hover:scale-110 p-1"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="56" height="56" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={fillPercent > 0 ? 'text-primary' : 'text-surface-container-highest'}>
+                      <defs>
+                        <linearGradient id={gradId} x1="0%" x2="100%" y1="0%" y2="0%">
+                          <stop offset={`${fillPercent}%`} stopColor="currentColor" />
+                          <stop offset={`${fillPercent}%`} stopColor="transparent" />
+                        </linearGradient>
+                      </defs>
+                      <polygon fill={fillPercent > 0 ? `url(#${gradId})` : 'none'} points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                    </svg>
+                  </button>
+                );
+              })}
             </div>
             <div className="flex justify-between w-full px-8 text-sm font-semibold text-text-secondary italic">
               <span>Cần cải thiện</span>
@@ -581,10 +605,10 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
                 <section key={question.id} className="bg-white border border-border-subtle rounded-2xl shadow-sm p-4 sm:p-6 md:p-8">
                   <header className="space-y-2 mb-4 sm:mb-5">
                     <div className="flex items-center justify-between gap-3">
-                      <span className="text-[11px] sm:text-xs md:text-sm font-bold text-primary bg-primary-fixed px-2.5 py-1 rounded-full">Câu {index + 1}</span>
+                      <span className="text-[11px] sm:text-xs md:text-sm font-bold text-primary bg-primary-fixed px-2.5 py-1 rounded-full">{question.label && question.label.trim() !== '' ? question.label : `Câu ${index + 1}`}</span>
                       {question.required && <span className="text-[11px] sm:text-xs md:text-sm text-sentiment-negative font-medium">* Bắt buộc</span>}
                     </div>
-                    <h2 className="font-display text-xl sm:text-2xl md:text-3xl font-bold text-text-primary tracking-tight leading-[1.2] sm:leading-tight break-words" dangerouslySetInnerHTML={{ __html: cleanHtmlWhitespace(question.text) || `Câu hỏi ${index + 1}` }} />
+                    <h2 className="font-display text-xl sm:text-2xl md:text-3xl font-bold text-text-primary tracking-tight leading-[1.2] sm:leading-tight break-words" dangerouslySetInnerHTML={{ __html: cleanHtmlWhitespace(question.text) || (question.label && question.label.trim() !== '' ? question.label : `Câu hỏi ${index + 1}`) }} />
                   </header>
                   {renderQuestionInput(question, answers[question.id], question.id)}
                 </section>

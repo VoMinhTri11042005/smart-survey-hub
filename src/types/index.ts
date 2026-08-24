@@ -21,6 +21,7 @@ export interface SurveyQuestion {
   required: boolean;
   correctAnswer?: string | string[]; // For quiz mode
   points?: number; // Custom points for quiz mode
+  label?: string; // Optional display label / custom question label
 }
 
 export interface Survey {
