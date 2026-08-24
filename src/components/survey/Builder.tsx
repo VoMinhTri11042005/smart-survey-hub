@@ -348,6 +348,11 @@ export function Builder({ onPublished, onError }: { onPublished?: () => void; on
     setQuestions(newQuestions);
   };
 
+  const getQuestionLabel = (question: SurveyQuestion, idx: number) => {
+    const value = question.label?.trim();
+    return value && value.length > 0 ? value : `Câu ${idx + 1}`;
+  };
+
   const addQuestion = () => {
     const newQ: SurveyQuestion = {
       id: `q${Date.now()}`,
@@ -579,13 +584,13 @@ export function Builder({ onPublished, onError }: { onPublished?: () => void; on
                          <span className={`text-xs font-bold px-2.5 py-1 rounded ${isActive ? 'bg-primary-fixed text-primary' : 'bg-surface-container text-text-secondary'}`}>
                            {isActive ? (
                              <input
-                               value={q.label ?? `Câu ${idx + 1}`}
+                               value={q.label ?? ''}
                                onChange={(e) => updateQuestion(q.id, { label: e.target.value })}
-                               placeholder={`Câu ${idx + 1}`}
-                               className="w-40 bg-transparent text-xs font-bold outline-none"
+                               placeholder={`Nhãn câu (ví dụ: Họ tên, Email)`}
+                               className="w-44 bg-transparent text-xs font-bold outline-none placeholder:text-text-secondary/70"
                              />
                            ) : (
-                             (q.label && q.label.trim() !== '' ? q.label : `Câu ${idx + 1}`)
+                             getQuestionLabel(q, idx)
                            )} • {questionTypeLabels[q.type]?.label}
                          </span>
                          {q.required && <CheckCircle2 size={16} className="text-sentiment-positive" />}
