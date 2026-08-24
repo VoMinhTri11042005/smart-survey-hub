@@ -213,6 +213,8 @@ function AppContent() {
             <Respondent survey={shareSurvey} isPublic={true} onExit={() => {
               // Public exit is fully handled inside Respondent component (callExit)
             }} />
+            {/* Show Chatbot for public/shared surveys as well */}
+            <Chatbot survey={shareSurvey} />
             <AnimatePresence>{toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}</AnimatePresence>
           </>
         </Suspense>
