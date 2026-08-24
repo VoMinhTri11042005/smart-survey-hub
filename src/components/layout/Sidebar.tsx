@@ -8,9 +8,10 @@ interface SidebarProps {
   userProfile?: UserProfile;
   isOpen?: boolean;
   onClose?: () => void;
+  onNewSurvey?: () => void;
 }
 
-export function Sidebar({ currentView, onViewChange, onLogout, userProfile, isOpen, onClose }: SidebarProps) {
+export function Sidebar({ currentView, onViewChange, onLogout, userProfile, isOpen, onClose, onNewSurvey }: SidebarProps) {
   return (
     <>
       {/* Mobile Backdrop */}
@@ -103,7 +104,7 @@ export function Sidebar({ currentView, onViewChange, onLogout, userProfile, isOp
       </nav>
 
       <div className="p-4 space-y-4 mt-auto">
-         <button onClick={() => { onViewChange('builder'); onClose?.(); }} className="w-full flex items-center justify-center gap-2 bg-primary text-white py-2.5 rounded-xl text-sm font-semibold hover:bg-primary/90 transition-colors shadow-sm cursor-pointer">
+         <button onClick={() => { onNewSurvey?.(); onViewChange('builder'); onClose?.(); }} className="w-full flex items-center justify-center gap-2 bg-primary text-white py-2.5 rounded-xl text-sm font-semibold hover:bg-primary/90 transition-colors shadow-sm cursor-pointer">
             <Plus size={18} />
             Khảo sát mới
          </button>

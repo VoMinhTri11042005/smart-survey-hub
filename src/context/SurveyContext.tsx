@@ -25,6 +25,7 @@ interface SurveyContextType {
   fetchSurveys: () => Promise<void>;
   fetchSurveyById: (id: string) => Promise<Survey | null>;
   createSurvey: (survey: Omit<Survey, 'id' | 'createdAt' | 'status'> & { status?: string; closesAt?: string | null; displayMode?: SurveyDisplayMode }) => Promise<Survey>;
+  updateSurvey: (id: string, survey: Omit<Survey, 'id' | 'createdAt' | 'status'> & { status?: string; closesAt?: string | null; displayMode?: SurveyDisplayMode }) => Promise<Survey>;
   deleteSurvey: (id: string) => Promise<void>;
   setCurrentSurvey: (survey: Survey | null) => void;
   setSearchQuery: (query: string) => void;
@@ -245,6 +246,27 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
       } catch (e) {}
       return newSurvey;
     }
+  }, []);
+
+  const updateSurvey = useCallback(async (id: string, surveyData: Omit<Survey, 'id' | 'createdAt' | 'status'> & { status?: string; closesAt?: string | null; displayMode?: SurveyDisplayMode }): Promise<Survey> => {
+    const payload = {
+      ...surveyData,
+      status: (surveyData.status as 'draft' | 'live' | 'closed') || 'live',
+      closesAt: surveyData.closesAt || null,
+      displayMode: surveyData.displayMode || 'single',
+      showScore: surveyData.showScore !== false,
+      maxAttemptsPerDevice: surveyData.maxAttemptsPerDevice ?? null,
+    };
+    const res = await fetch(`${API_BASE}/surveys/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error('Failed to update survey');
+    const survey = await res.json();
+    setSurveys(prev => prev.map(item => item.id === id ? { ...item, ...survey } : item));
+    setCurrentSurvey(prev => prev?.id === id ? survey : prev);
+    return survey;
   }, []);
 
   const fetchDrafts = useCallback(async () => {
@@ -514,6 +536,7 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
       fetchSurveys,
       fetchSurveyById,
       createSurvey,
+      updateSurvey,
       deleteSurvey,
       setCurrentSurvey,
       setSearchQuery,

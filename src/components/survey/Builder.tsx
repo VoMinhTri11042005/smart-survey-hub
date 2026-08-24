@@ -32,8 +32,8 @@ const toDateTimeLocalValue = (value: string | null | undefined) => {
   return localTime.toISOString().slice(0, 16);
 };
 
-export function Builder({ onPublished, onDraftSaved, onError }: { onPublished?: () => void; onDraftSaved?: () => void; onError?: (msg: string) => void }) {
-  const { parseDocx, createSurvey, setCurrentSurvey, isLoading, pendingTemplate, clearPendingTemplate, chatWithAI, fetchDrafts, saveDraft, deleteDraft } = useSurvey();
+export function Builder({ onPublished, onUpdated, onDraftSaved, onError }: { onPublished?: () => void; onUpdated?: () => void; onDraftSaved?: () => void; onError?: (msg: string) => void }) {
+  const { parseDocx, createSurvey, updateSurvey, currentSurvey, setCurrentSurvey, isLoading, pendingTemplate, clearPendingTemplate, chatWithAI, fetchDrafts, saveDraft, deleteDraft } = useSurvey();
   const DRAFT_STORAGE_KEY = 'smart-survey-hub-builder-draft';
   const LEGACY_DRAFT_STORAGE_KEY = 'smart-survey-hub-drafts';
 
@@ -180,7 +180,24 @@ export function Builder({ onPublished, onDraftSaved, onError }: { onPublished?: 
   }, [pendingTemplate, clearPendingTemplate]);
 
   useEffect(() => {
+    if (!currentSurvey) return;
+
+    setSurveyTitle(currentSurvey.title || '');
+    setSurveyDescription(currentSurvey.description || '');
+    setQuestions(currentSurvey.questions || []);
+    setIsQuiz(Boolean(currentSurvey.isQuiz));
+    setShowScore(currentSurvey.showScore !== false);
+    setDisplayMode(currentSurvey.displayMode || 'single');
+    setClosesAt(currentSurvey.closesAt || null);
+    setMaxAttemptsPerDevice(currentSurvey.maxAttemptsPerDevice ?? 1);
+    setShowSurvey(true);
+    setActiveQuestionId(currentSurvey.questions?.[0]?.id || null);
+    setDraftId(null);
+  }, [currentSurvey]);
+
+  useEffect(() => {
     const loadDrafts = async () => {
+      if (currentSurvey) return;
       const drafts = await fetchDrafts();
       if (!drafts || drafts.length === 0) {
         const savedDrafts = readDraftsFromStorage();
@@ -237,7 +254,7 @@ export function Builder({ onPublished, onDraftSaved, onError }: { onPublished?: 
     };
 
     void loadDrafts();
-  }, [fetchDrafts]);
+  }, [fetchDrafts, currentSurvey]);
 
   useEffect(() => {
     if (!showSurvey) return;
@@ -327,7 +344,7 @@ export function Builder({ onPublished, onDraftSaved, onError }: { onPublished?: 
     if (questions.length === 0) return;
     setIsPublishing(true);
     try {
-      const survey = await createSurvey({
+      const surveyData = {
         title: surveyTitle,
         description: surveyDescription,
         questions,
@@ -336,11 +353,15 @@ export function Builder({ onPublished, onDraftSaved, onError }: { onPublished?: 
         displayMode,
         closesAt: closesAt ? new Date(closesAt).toISOString() : null,
         maxAttemptsPerDevice,
-      });
+      };
+      const survey = currentSurvey
+        ? await updateSurvey(currentSurvey.id, { ...surveyData, status: currentSurvey.status })
+        : await createSurvey(surveyData);
       setCurrentSurvey(survey);
       clearDraft();
       setPublishedSurvey({ id: survey.id, title: survey.title });
-      if (onPublished) onPublished();
+      if (currentSurvey) onUpdated?.();
+      else onPublished?.();
     } catch (err) {
       if (onError) onError('Lỗi khi xuất bản khảo sát.');
     } finally {
@@ -870,8 +891,8 @@ export function Builder({ onPublished, onDraftSaved, onError }: { onPublished?: 
                    disabled={isPublishing || questions.length === 0}
                    className="px-4 md:px-8 py-2 md:py-2.5 bg-primary text-white font-bold rounded-xl shadow-md hover:bg-primary/90 active:scale-95 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed text-xs md:text-sm"
                  >
-                   {isPublishing ? <RefreshCw size={18} className="animate-spin" /> : <Send size={18} />}
-                   Xuất bản
+                  {isPublishing ? <RefreshCw size={18} className="animate-spin" /> : <Send size={18} />}
+                  {currentSurvey ? 'Cập nhật' : 'Xuất bản'}
                  </button>
                </div>
              </>

@@ -266,7 +266,7 @@ function AppContent() {
         </Suspense>
       ) : (
         <div className="flex h-screen bg-surface-background text-text-primary font-sans overflow-hidden selection:bg-secondary-fixed selection:text-on-secondary-fixed relative">
-          <Sidebar currentView={currentView} onViewChange={setCurrentView} onLogout={() => { setIsAuthenticated(false); setUserRole(null); }} userProfile={userProfile} isOpen={isMobileMenuOpen} onClose={() => setIsMobileMenuOpen(false)} />
+          <Sidebar currentView={currentView} onViewChange={setCurrentView} onNewSurvey={() => setCurrentSurvey(null)} onLogout={() => { setIsAuthenticated(false); setUserRole(null); }} userProfile={userProfile} isOpen={isMobileMenuOpen} onClose={() => setIsMobileMenuOpen(false)} />
           <div className="flex-1 flex flex-col overflow-hidden relative w-full">
             <TopBar 
               currentView={currentView} 
@@ -287,7 +287,7 @@ function AppContent() {
                 {currentView === 'analytics' && <Analytics />}
                 {currentView === 'teams' && <Teams />}
                 {currentView === 'settings' && <Settings profile={userProfile} onUpdateProfile={setUserProfile} onClose={() => setCurrentView('dashboard')} onShowToast={showToast} onAddNotification={addNotification} />}
-                {currentView === 'builder' && <Builder onPublished={() => { showToast('Khảo sát đã được xuất bản thành công!', 'success'); addNotification('Bạn vừa xuất bản một khảo sát mới'); setCurrentView('dashboard'); }} onDraftSaved={() => { showToast('Đã lưu bản nháp!', 'success'); setCurrentView('dashboard'); }} onError={(msg) => showToast(msg, 'error')} />}
+                {currentView === 'builder' && <Builder onPublished={() => { showToast('Khảo sát đã được xuất bản thành công!', 'success'); addNotification('Bạn vừa xuất bản một khảo sát mới'); setCurrentView('dashboard'); }} onUpdated={() => { showToast('Đã cập nhật khảo sát thành công!', 'success'); addNotification('Bạn vừa cập nhật một khảo sát'); setCurrentView('dashboard'); }} onDraftSaved={() => { showToast('Đã lưu bản nháp!', 'success'); setCurrentView('dashboard'); }} onError={(msg) => showToast(msg, 'error')} />}
               </Suspense>
             </main>
           </div>

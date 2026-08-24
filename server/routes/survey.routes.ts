@@ -151,6 +151,61 @@ router.get('/surveys/:id', async (req, res) => {
   }
 });
 
+// ─── Update Survey ───
+router.put('/surveys/:id', async (req, res) => {
+  const { title, description, questions, status, isQuiz, displayMode, showScore, closesAt, maxAttemptsPerDevice } = req.body;
+
+  if (!process.env.DATABASE_URL) {
+    const existing = inMemorySurveys[req.params.id];
+    if (!existing) return res.status(404).json({ error: 'Không tìm thấy khảo sát.' });
+    const survey = {
+      ...existing,
+      title: title ?? existing.title,
+      description: description ?? existing.description,
+      questions: questions ?? existing.questions,
+      status: status ?? existing.status,
+      isQuiz: isQuiz ?? existing.isQuiz,
+      displayMode: displayMode ?? existing.displayMode,
+      showScore: showScore ?? existing.showScore,
+      closesAt: closesAt ?? existing.closesAt,
+      maxAttemptsPerDevice: maxAttemptsPerDevice ?? existing.maxAttemptsPerDevice,
+    };
+    inMemorySurveys[req.params.id] = survey;
+    return res.json(survey);
+  }
+
+  try {
+    const maxAttempts = Number.isFinite(Number(maxAttemptsPerDevice)) ? Number(maxAttemptsPerDevice) : null;
+    const result = await pool.query(
+      `UPDATE surveys
+       SET title = $2, description = $3, questions = $4, is_quiz = $5, display_mode = $6,
+           show_score = $7, closes_at = $8, max_attempts_per_device = $9, status = $10
+       WHERE id = $1
+       RETURNING *`,
+      [req.params.id, title, description, JSON.stringify(questions), Boolean(isQuiz), displayMode || 'single', showScore !== false, closesAt ? new Date(closesAt).toISOString() : null, maxAttempts, status || 'live']
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Không tìm thấy khảo sát.' });
+
+    const row = result.rows[0];
+    res.json({
+      id: row.id,
+      title: row.title,
+      description: row.description,
+      questions: row.questions,
+      createdAt: row.created_at,
+      status: row.status,
+      closesAt: row.closes_at ? new Date(row.closes_at).toISOString() : null,
+      isQuiz: row.is_quiz || false,
+      displayMode: row.display_mode || 'single',
+      showScore: row.show_score !== false,
+      maxAttemptsPerDevice: row.max_attempts_per_device ?? null,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to update survey' });
+  }
+});
+
 // ─── Delete Survey ───
 router.delete('/surveys/:id', async (req, res) => {
   if (!process.env.DATABASE_URL) return res.status(500).json({ error: 'Database not configured' });

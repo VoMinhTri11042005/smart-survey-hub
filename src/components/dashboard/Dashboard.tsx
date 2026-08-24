@@ -1,4 +1,4 @@
-import { BarChart3, Activity, Sparkles, Trash2, Share2 } from 'lucide-react';
+import { BarChart3, Activity, Sparkles, Trash2, Share2, Edit3 } from 'lucide-react';
 import { useEffect, useState, useMemo } from 'react';
 import { useSurvey } from '../../context/SurveyContext';
 import { ShareModal } from '../common/ShareModal';
@@ -96,7 +96,7 @@ export function Dashboard({
             <p className="text-on-primary-container text-sm leading-relaxed opacity-90">Mô tả mục tiêu nghiên cứu của bạn và để AI xây dựng bản nháp khảo sát hoàn hảo trong vài giây.</p>
           </div>
           <div className="relative z-10 mt-6">
-            <button onClick={() => onViewChange?.('builder')} className="w-full bg-secondary-container text-[#004666] font-semibold text-sm py-2.5 rounded-lg hover:brightness-110 active:scale-95 transition-all shadow-sm cursor-pointer">
+            <button onClick={() => { setCurrentSurvey(null); onViewChange?.('builder'); }} className="w-full bg-secondary-container text-[#004666] font-semibold text-sm py-2.5 rounded-lg hover:brightness-110 active:scale-95 transition-all shadow-sm cursor-pointer">
               Tạo khảo sát mới
             </button>
           </div>
@@ -158,7 +158,7 @@ export function Dashboard({
               </div>
               <h4 className="font-display text-lg font-bold text-text-primary mb-2">Bắt đầu tạo khảo sát đầu tiên</h4>
               <p className="text-text-secondary text-sm mb-6 max-w-md">Upload file Word câu hỏi hoặc nhập chủ đề để AI tự động tạo khảo sát cho bạn.</p>
-              <button onClick={() => onViewChange?.('builder')} className="px-6 py-2.5 bg-primary text-white rounded-xl font-semibold text-sm hover:bg-primary/90 transition-colors cursor-pointer">
+              <button onClick={() => { setCurrentSurvey(null); onViewChange?.('builder'); }} className="px-6 py-2.5 bg-primary text-white rounded-xl font-semibold text-sm hover:bg-primary/90 transition-colors cursor-pointer">
                 Tạo khảo sát mới
               </button>
             </div>
@@ -174,6 +174,9 @@ export function Dashboard({
                     <div className="flex items-center gap-1">
                       <button onClick={(e) => { e.stopPropagation(); setShareModal({ id: survey.id, title: survey.title }); }} className="p-1.5 text-text-secondary hover:text-primary transition-colors cursor-pointer rounded-lg hover:bg-surface-container-low" title="Chia sẻ khảo sát">
                         <Share2 size={16} />
+                      </button>
+                      <button onClick={(e) => { e.stopPropagation(); setCurrentSurvey(survey); onViewChange?.('builder'); }} className="p-1.5 text-text-secondary hover:text-primary transition-colors cursor-pointer rounded-lg hover:bg-surface-container-low" title="Chỉnh sửa khảo sát">
+                        <Edit3 size={16} />
                       </button>
                       <button onClick={(e) => { e.stopPropagation(); setDeleteConfirm({ id: survey.id, title: survey.title }); }} className="p-1.5 text-text-secondary hover:text-sentiment-negative transition-colors cursor-pointer rounded-lg hover:bg-sentiment-negative/10" title="Xóa">
                         <Trash2 size={16} />
