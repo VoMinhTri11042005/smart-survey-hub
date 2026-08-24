@@ -56,11 +56,11 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
 
     const initRespondent = async () => {
       try {
-        let rid = localStorage.getItem('respondentId');
-        if (!rid) {
-          rid = Math.random().toString(36).substring(2, 10) + Date.now().toString(36);
-          localStorage.setItem('respondentId', rid);
-        }
+        // A device may be allowed to submit more than once.  Give each allowed
+        // attempt its own respondent ID so the response API creates a new row
+        // instead of loading/updating the first attempt.
+        const attemptNumber = getCurrentDeviceAttempts() + 1;
+        const rid = `${getDeviceId()}-attempt-${attemptNumber}`;
         setRespondentId(rid);
 
         try {
@@ -94,7 +94,7 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
     };
 
     initRespondent();
-  }, [survey?.id, fetchMyResponse]);
+  }, [survey?.id, fetchMyResponse, getCurrentDeviceAttempts, getDeviceId]);
 
   useEffect(() => {
     if (!survey || !respondentId) return;
