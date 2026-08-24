@@ -35,6 +35,7 @@ interface SurveyContextType {
   submitResponse: (surveyId: string, respondentId: string, answers: Record<string, string | string[] | number>, score?: number, totalQuizQuestions?: number) => Promise<void>;
   fetchResponses: (surveyId: string) => Promise<SurveyResponse[]>;
   fetchMyResponse: (surveyId: string, respondentId: string) => Promise<SurveyResponse | null>;
+  resetResponses: (surveyId: string) => Promise<number>;
 
   parseDocx: (file: File | null, topic: string) => Promise<{ title: string; questions: SurveyQuestion[] }>;
   chatWithAI: (message: string, surveyTitle: string, surveyDescription: string, questions: SurveyQuestion[], currentQuestionIndex?: number) => Promise<string>;
@@ -380,6 +381,13 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const resetResponses = useCallback(async (surveyId: string): Promise<number> => {
+    const res = await fetch(`${API_BASE}/surveys/${surveyId}/responses`, { method: 'DELETE' });
+    if (!res.ok) throw new Error('Failed to reset survey responses');
+    const data = await res.json();
+    return data.deletedCount ?? 0;
+  }, []);
+
   const parseDocx = useCallback(async (file: File | null, topic: string) => {
     setIsLoading(true);
     try {
@@ -509,6 +517,7 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
       submitResponse,
       fetchResponses,
       fetchMyResponse,
+      resetResponses,
       parseDocx,
       chatWithAI,
       loadTemplate,

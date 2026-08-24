@@ -275,6 +275,23 @@ router.get('/surveys/:id/responses', async (req, res) => {
   }
 });
 
+// ─── Reset Survey Responses ───
+router.delete('/surveys/:id/responses', async (req, res) => {
+  if (!process.env.DATABASE_URL) return res.status(500).json({ error: 'Database not configured' });
+  try {
+    const surveyCheck = await pool.query('SELECT id FROM surveys WHERE id = $1', [req.params.id]);
+    if (surveyCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Không tìm thấy khảo sát.' });
+    }
+
+    const result = await pool.query('DELETE FROM responses WHERE survey_id = $1', [req.params.id]);
+    res.json({ success: true, deletedCount: result.rowCount ?? 0 });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to reset survey responses' });
+  }
+});
+
 // ─── Survey Drafts ───
 router.get('/surveys/drafts', async (_req, res) => {
   if (!process.env.DATABASE_URL) return res.json([]);

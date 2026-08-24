@@ -286,7 +286,7 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
   const validateAllQuestions = () => {
     const invalid = questions.find(question => !validateQuestion(question, answers[question.id]));
     if (invalid) {
-      setErrorMsg(`Vui lòng hoàn thành câu hỏi bắt buộc: "${invalid.text.replace(/<[^>]*>/g, '') || 'Câu hỏi chưa có tiêu đề'}"`);
+      setErrorMsg('Vui lòng hoàn thành câu hỏi bắt buộc.');
       return false;
     }
     return true;

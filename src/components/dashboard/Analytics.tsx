@@ -1,4 +1,4 @@
-import { Info, Sparkles, Timer, CheckCircle, TrendingUp, Download, ChevronDown, BarChart3, MessageSquare, RefreshCw } from 'lucide-react';
+import { Info, Sparkles, Timer, CheckCircle, TrendingUp, Download, ChevronDown, BarChart3, MessageSquare, RefreshCw, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useSurvey } from '../../context/SurveyContext';
 import { computeSurveyAnalytics, exportResponsesToCsv } from '../../utils/analytics';
@@ -6,10 +6,12 @@ import { stripHtml, toUnaccented } from '../../utils/stringUtils';
 import type { Survey, SurveyResponse } from '../../types';
 
 export function Analytics() {
-  const { surveys, currentSurvey, setCurrentSurvey, fetchSurveys, fetchResponses } = useSurvey();
+  const { surveys, currentSurvey, setCurrentSurvey, fetchSurveys, fetchResponses, resetResponses } = useSurvey();
   const [selectedSurvey, setSelectedSurvey] = useState<Survey | null>(currentSurvey);
   const [responses, setResponses] = useState<SurveyResponse[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
 
   useEffect(() => { fetchSurveys(); }, [fetchSurveys]);
 
@@ -45,6 +47,22 @@ export function Analytics() {
   const handleSelectSurvey = (survey: Survey) => {
     setSelectedSurvey(survey);
     setCurrentSurvey(survey);
+  };
+
+  const handleResetResponses = async () => {
+    if (!selectedSurvey) return;
+    setIsResetting(true);
+    try {
+      await resetResponses(selectedSurvey.id);
+      setResponses([]);
+      await fetchSurveys();
+      setShowResetConfirm(false);
+    } catch (error) {
+      console.error('Error resetting survey responses:', error);
+      alert('Không thể xóa dữ liệu phản hồi. Vui lòng thử lại.');
+    } finally {
+      setIsResetting(false);
+    }
   };
 
   if (surveys.length === 0) {
@@ -111,6 +129,15 @@ export function Analytics() {
           >
             <Download size={18} />
             Xuất CSV
+          </button>
+          <button
+            onClick={() => setShowResetConfirm(true)}
+            disabled={!analytics || analytics.totalResponses === 0}
+            className="hidden md:flex items-center gap-2 px-4 py-2.5 bg-white border border-sentiment-negative/30 rounded-xl text-sm font-bold text-sentiment-negative hover:bg-sentiment-negative/10 transition-colors shadow-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Xóa toàn bộ phản hồi để thu thập dữ liệu mới"
+          >
+            <Trash2 size={18} />
+            Xóa dữ liệu
           </button>
           <div className="bg-surface-container-lowest px-8 py-5 rounded-2xl shadow-sm border border-border-subtle flex items-center gap-8">
             <div>
@@ -311,6 +338,31 @@ export function Analytics() {
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {showResetConfirm && selectedSurvey && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-surface-background/80 backdrop-blur-sm p-4">
+          <div className="bg-surface-container-lowest border border-border-subtle rounded-2xl p-6 max-w-sm w-full shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+            <h3 className="font-display text-xl font-bold text-text-primary mb-2">Xóa dữ liệu phản hồi?</h3>
+            <p className="text-text-secondary text-sm mb-6">Toàn bộ {analytics?.totalResponses ?? 0} phản hồi của “{stripHtml(selectedSurvey.title)}” sẽ bị xóa vĩnh viễn. Khảo sát vẫn được giữ nguyên để thu thập dữ liệu mới.</p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setShowResetConfirm(false)}
+                disabled={isResetting}
+                className="px-4 py-2 rounded-lg font-semibold text-sm text-text-secondary hover:bg-surface-container-high transition-colors cursor-pointer disabled:opacity-50"
+              >
+                Hủy
+              </button>
+              <button
+                onClick={handleResetResponses}
+                disabled={isResetting}
+                className="px-4 py-2 bg-sentiment-negative text-white rounded-lg font-semibold text-sm hover:bg-sentiment-negative/90 transition-colors shadow-sm cursor-pointer disabled:opacity-50"
+              >
+                {isResetting ? 'Đang xóa...' : 'Xóa dữ liệu'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
