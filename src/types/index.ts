@@ -35,6 +35,7 @@ export interface Survey {
   isQuiz?: boolean;
   showScore?: boolean;
   displayMode?: SurveyDisplayMode;
+  maxAttemptsPerDevice?: number | null;
 }
 
 export interface SurveyResponse {

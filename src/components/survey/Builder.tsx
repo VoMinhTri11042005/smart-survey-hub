@@ -74,6 +74,7 @@ export function Builder({ onPublished, onError }: { onPublished?: () => void; on
   const [draftSavedAt, setDraftSavedAt] = useState<string | null>(null);
   const [draftId, setDraftId] = useState<string | null>(null);
   const [publishedSurvey, setPublishedSurvey] = useState<{ id: string; title: string } | null>(null);
+  const [maxAttemptsPerDevice, setMaxAttemptsPerDevice] = useState<number | null>(1);
 
   // Drag state for question reordering
   const [dragOverId, setDragOverId] = useState<string | null>(null);
@@ -241,6 +242,7 @@ export function Builder({ onPublished, onError }: { onPublished?: () => void; on
       showScore,
       displayMode,
       closesAt,
+      maxAttemptsPerDevice,
     };
 
     try {
@@ -280,6 +282,7 @@ export function Builder({ onPublished, onError }: { onPublished?: () => void; on
       showScore,
       displayMode,
       closesAt,
+      maxAttemptsPerDevice,
     };
     localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft));
     localStorage.setItem(LEGACY_DRAFT_STORAGE_KEY, JSON.stringify([draft]));
@@ -315,6 +318,7 @@ export function Builder({ onPublished, onError }: { onPublished?: () => void; on
         showScore,
         displayMode,
         closesAt: closesAt ? new Date(closesAt).toISOString() : null,
+        maxAttemptsPerDevice,
       });
       setCurrentSurvey(survey);
       clearDraft();
@@ -805,6 +809,19 @@ export function Builder({ onPublished, onError }: { onPublished?: () => void; on
                        </button>
                      </div>
                    </div>
+                   <span className="hidden md:inline text-text-secondary">•</span>
+                   <label className="flex items-center gap-2 rounded-lg bg-surface-container-low px-2 py-1.5 text-[10px] md:text-xs font-medium text-text-secondary">
+                     <span>Mỗi thiết bị</span>
+                     <input
+                       type="number"
+                       min="1"
+                       step="1"
+                       value={maxAttemptsPerDevice ?? 1}
+                       onChange={(e) => setMaxAttemptsPerDevice(Math.max(1, Number(e.target.value) || 1))}
+                       className="w-16 rounded-md border border-border-subtle bg-white px-2 py-1 text-[10px] md:text-xs text-text-primary focus:ring-2 focus:ring-primary/30 outline-none"
+                     />
+                     <span>lần</span>
+                   </label>
                    <span className="hidden md:inline text-text-secondary">•</span>
                    <label className="flex items-center gap-2 rounded-lg bg-surface-container-low px-2 py-1.5 text-xs font-medium text-text-secondary">
                      <span>Khóa tới</span>

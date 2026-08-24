@@ -31,7 +31,7 @@ const inMemoryResponses: Record<string, any[]> = {};
 router.post('/surveys', async (req, res) => {
   if (!process.env.DATABASE_URL) {
     const id = req.body.id || generateId();
-    const { title, description, questions, status, isQuiz, displayMode, showScore, closesAt } = req.body;
+    const { title, description, questions, status, isQuiz, displayMode, showScore, closesAt, maxAttemptsPerDevice } = req.body;
     const survey = {
       id,
       title: title || 'Untitled survey',
@@ -42,19 +42,21 @@ router.post('/surveys', async (req, res) => {
       closesAt: closesAt || null,
       isQuiz: Boolean(isQuiz),
       displayMode: displayMode || 'single',
-      showScore: showScore !== false
+      showScore: showScore !== false,
+      maxAttemptsPerDevice: Number.isFinite(Number(maxAttemptsPerDevice)) ? Number(maxAttemptsPerDevice) : null,
     };
     inMemorySurveys[id] = survey;
     return res.status(201).json(survey);
   }
   try {
     const id = req.body.id || generateId();
-    const { title, description, questions, status, isQuiz, displayMode, showScore, closesAt } = req.body;
+    const { title, description, questions, status, isQuiz, displayMode, showScore, closesAt, maxAttemptsPerDevice } = req.body;
+    const maxAttempts = Number.isFinite(Number(maxAttemptsPerDevice)) ? Number(maxAttemptsPerDevice) : null;
     
     const result = await pool.query(
-      `INSERT INTO surveys (id, title, description, questions, is_quiz, display_mode, show_score, closes_at, status) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
-      [id, title, description, JSON.stringify(questions), Boolean(isQuiz), displayMode || 'single', showScore !== false, closesAt ? new Date(closesAt).toISOString() : null, status || 'live']
+      `INSERT INTO surveys (id, title, description, questions, is_quiz, display_mode, show_score, closes_at, max_attempts_per_device, status) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
+      [id, title, description, JSON.stringify(questions), Boolean(isQuiz), displayMode || 'single', showScore !== false, closesAt ? new Date(closesAt).toISOString() : null, maxAttempts, status || 'live']
     );
     
     const row = result.rows[0];
@@ -67,7 +69,8 @@ router.post('/surveys', async (req, res) => {
       status: row.status,
       closesAt: row.closes_at ? new Date(row.closes_at).toISOString() : null,
       displayMode: row.display_mode || 'single',
-      showScore: row.show_score !== false
+      showScore: row.show_score !== false,
+      maxAttemptsPerDevice: row.max_attempts_per_device ?? null,
     });
   } catch (err: any) {
     console.error(err);
@@ -98,6 +101,7 @@ router.get('/surveys', async (_req, res) => {
       isQuiz: row.is_quiz || false,
       displayMode: row.display_mode || 'single',
       showScore: row.show_score !== false,
+      maxAttemptsPerDevice: row.max_attempts_per_device ?? null,
       responseCount: parseInt(row.responseCount, 10)
     }));
     res.json(surveys);
@@ -138,6 +142,7 @@ router.get('/surveys/:id', async (req, res) => {
       isQuiz: row.is_quiz || false,
       displayMode: row.display_mode || 'single',
       showScore: row.show_score !== false,
+      maxAttemptsPerDevice: row.max_attempts_per_device ?? null,
       responseCount: parseInt(row.responseCount, 10)
     });
   } catch (err) {
@@ -289,6 +294,7 @@ router.get('/surveys/drafts', async (_req, res) => {
       showScore: row.show_score !== false,
       displayMode: row.display_mode || 'single',
       closesAt: row.closes_at ? new Date(row.closes_at).toISOString() : null,
+      maxAttemptsPerDevice: row.max_attempts_per_device ?? null,
       updatedAt: row.updated_at,
     }));
 
@@ -303,16 +309,17 @@ router.post('/surveys/drafts', async (req, res) => {
   if (!process.env.DATABASE_URL) return res.status(503).json({ error: 'Database not configured' });
 
   try {
-    const { id, title, description, questions, isQuiz, showScore, displayMode, closesAt } = req.body ?? {};
+    const { id, title, description, questions, isQuiz, showScore, displayMode, closesAt, maxAttemptsPerDevice } = req.body ?? {};
     const draftId = id || generateId();
+    const maxAttempts = Number.isFinite(Number(maxAttemptsPerDevice)) ? Number(maxAttemptsPerDevice) : null;
 
     const result = await pool.query(
-      `INSERT INTO survey_drafts (id, user_id, title, description, questions, is_quiz, show_score, display_mode, closes_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP)
+      `INSERT INTO survey_drafts (id, user_id, title, description, questions, is_quiz, show_score, display_mode, closes_at, max_attempts_per_device, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, CURRENT_TIMESTAMP)
        ON CONFLICT (id)
-       DO UPDATE SET title = EXCLUDED.title, description = EXCLUDED.description, questions = EXCLUDED.questions, is_quiz = EXCLUDED.is_quiz, show_score = EXCLUDED.show_score, display_mode = EXCLUDED.display_mode, closes_at = EXCLUDED.closes_at, updated_at = CURRENT_TIMESTAMP
+       DO UPDATE SET title = EXCLUDED.title, description = EXCLUDED.description, questions = EXCLUDED.questions, is_quiz = EXCLUDED.is_quiz, show_score = EXCLUDED.show_score, display_mode = EXCLUDED.display_mode, closes_at = EXCLUDED.closes_at, max_attempts_per_device = EXCLUDED.max_attempts_per_device, updated_at = CURRENT_TIMESTAMP
        RETURNING *`,
-      [draftId, 'admin', title || 'Khảo sát nháp', description || '', JSON.stringify(questions || []), Boolean(isQuiz), showScore !== false, displayMode || 'single', closesAt ? new Date(closesAt).toISOString() : null]
+      [draftId, 'admin', title || 'Khảo sát nháp', description || '', JSON.stringify(questions || []), Boolean(isQuiz), showScore !== false, displayMode || 'single', closesAt ? new Date(closesAt).toISOString() : null, maxAttempts]
     );
 
     const row = result.rows[0];
@@ -325,6 +332,7 @@ router.post('/surveys/drafts', async (req, res) => {
       showScore: row.show_score !== false,
       displayMode: row.display_mode || 'single',
       closesAt: row.closes_at ? new Date(row.closes_at).toISOString() : null,
+      maxAttemptsPerDevice: row.max_attempts_per_device ?? null,
       updatedAt: row.updated_at,
     });
   } catch (err) {

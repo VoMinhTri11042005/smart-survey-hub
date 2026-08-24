@@ -130,8 +130,9 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
         showScore: item.showScore !== false,
         displayMode: item.displayMode || 'single',
         closesAt: item.closesAt || null,
-        updatedAt: item.updatedAt || new Date().toISOString(),
-      }));
+      maxAttemptsPerDevice: item.maxAttemptsPerDevice ?? item.max_attempts_per_device ?? null,
+      updatedAt: item.updatedAt || new Date().toISOString(),
+    }));
   }, []);
 
   const fetchSurveys = useCallback(async () => {
@@ -150,6 +151,7 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
           closesAt: survey.closesAt ?? survey.closes_at ?? null,
           displayMode: survey.displayMode ?? survey.display_mode ?? 'single',
           showScore: survey.showScore ?? survey.show_score ?? true,
+          maxAttemptsPerDevice: survey.maxAttemptsPerDevice ?? survey.max_attempts_per_device ?? null,
         }));
         setSurveys(normalized);
       } else {
@@ -179,6 +181,7 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
           closesAt: survey.closesAt ?? survey.closes_at ?? null,
           displayMode: survey.displayMode ?? survey.display_mode ?? 'single',
           showScore: survey.showScore ?? survey.show_score ?? true,
+          maxAttemptsPerDevice: survey.maxAttemptsPerDevice ?? survey.max_attempts_per_device ?? null,
         };
       }
       return null;
@@ -207,7 +210,8 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
           status: (surveyData.status as 'draft' | 'live' | 'closed') || 'live',
           closesAt: surveyData.closesAt || null,
           displayMode: surveyData.displayMode || 'single',
-          showScore: surveyData.showScore !== false
+          showScore: surveyData.showScore !== false,
+          maxAttemptsPerDevice: surveyData.maxAttemptsPerDevice ?? null,
         })
       });
       if (!res.ok) throw new Error('Failed to create survey');
@@ -224,7 +228,8 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
         status: (surveyData.status as 'draft' | 'live' | 'closed') || 'live',
         closesAt: surveyData.closesAt || null,
         displayMode: surveyData.displayMode || 'single',
-        showScore: surveyData.showScore !== false
+        showScore: surveyData.showScore !== false,
+        maxAttemptsPerDevice: surveyData.maxAttemptsPerDevice ?? null,
       };
       setSurveys(prev => [newSurvey, ...prev]);
       try {
@@ -265,6 +270,7 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
       showScore: draft.showScore !== false,
       displayMode: draft.displayMode || 'single',
       closesAt: draft.closesAt || null,
+      maxAttemptsPerDevice: draft.maxAttemptsPerDevice ?? null,
     };
 
     try {

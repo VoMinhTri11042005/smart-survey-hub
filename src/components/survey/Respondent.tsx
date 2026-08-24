@@ -26,6 +26,28 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
   const [showExitConfirm, setShowExitConfirm] = useState(false);
   const [showCloseHint, setShowCloseHint] = useState(false);
 
+  const getDeviceId = useCallback(() => {
+    const key = `survey-device-id:${survey?.id ?? 'anon'}`;
+    const existing = localStorage.getItem(key);
+    if (existing) return existing;
+    const next = `device-${Math.random().toString(36).slice(2, 10)}-${Date.now().toString(36)}`;
+    localStorage.setItem(key, next);
+    return next;
+  }, [survey?.id]);
+
+  const getCurrentDeviceAttempts = useCallback(() => {
+    if (!survey?.id) return 0;
+    const key = `survey-device-attempts:${survey.id}`;
+    try {
+      const raw = localStorage.getItem(key);
+      const map = raw ? JSON.parse(raw) : {};
+      const id = getDeviceId();
+      return Number(map[id] || 0);
+    } catch {
+      return 0;
+    }
+  }, [getDeviceId, survey?.id]);
+
   useEffect(() => {
     if (!survey) {
       setIsLoading(false);
@@ -174,6 +196,23 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
   }
 
   const isSurveyClosed = !!survey?.closesAt && new Date(survey.closesAt).getTime() <= Date.now();
+  const maxAttemptsPerDevice = survey?.maxAttemptsPerDevice ?? null;
+  const currentDeviceAttempts = getCurrentDeviceAttempts();
+
+  if (maxAttemptsPerDevice && maxAttemptsPerDevice > 0 && currentDeviceAttempts >= maxAttemptsPerDevice) {
+    return (
+      <div className="min-h-screen bg-surface-background flex flex-col items-center justify-center gap-4 font-sans px-4 text-center">
+        <div className="w-16 h-16 bg-surface-container-high rounded-2xl flex items-center justify-center">
+          <AlertTriangle size={28} className="text-sentiment-negative" />
+        </div>
+        <h2 className="font-display text-2xl font-bold text-text-primary">Bạn đã hết lượt làm khảo sát trên thiết bị này</h2>
+        <p className="text-text-secondary text-sm max-w-md">Mỗi thiết bị chỉ được làm tối đa {maxAttemptsPerDevice} lần.</p>
+        <button onClick={onExit} className="mt-4 px-6 py-2.5 bg-primary text-white rounded-xl font-semibold text-sm hover:bg-primary/90 transition-colors cursor-pointer">
+          Quay lại
+        </button>
+      </div>
+    );
+  }
 
   if (isSurveyClosed) {
     return (
@@ -286,6 +325,18 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
       }
 
       await submitResponse(survey.id, respondentId, answers, score, totalQ);
+
+      const deviceKey = `survey-device-attempts:${survey.id}`;
+      const deviceId = getDeviceId();
+      try {
+        const raw = localStorage.getItem(deviceKey);
+        const map = raw ? JSON.parse(raw) : {};
+        map[deviceId] = (Number(map[deviceId] || 0) + 1);
+        localStorage.setItem(deviceKey, JSON.stringify(map));
+      } catch (error) {
+        console.warn('Failed to record device attempts', error);
+      }
+
       setIsCompleted(true);
       if (onComplete) onComplete();
     } catch (e) {
@@ -296,6 +347,11 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
   };
 
   const handleNext = async () => {
+    if (maxAttemptsPerDevice && maxAttemptsPerDevice > 0 && currentDeviceAttempts >= maxAttemptsPerDevice) {
+      setErrorMsg(`Bạn chỉ được làm tối đa ${maxAttemptsPerDevice} lần trên thiết bị này.`);
+      return;
+    }
+
     if (showAllQuestions) {
       if (!validateAllQuestions()) return;
       await submitSurvey();
