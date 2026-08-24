@@ -32,7 +32,7 @@ const toDateTimeLocalValue = (value: string | null | undefined) => {
   return localTime.toISOString().slice(0, 16);
 };
 
-export function Builder({ onPublished, onError }: { onPublished?: () => void; onError?: (msg: string) => void }) {
+export function Builder({ onPublished, onDraftSaved, onError }: { onPublished?: () => void; onDraftSaved?: () => void; onError?: (msg: string) => void }) {
   const { parseDocx, createSurvey, setCurrentSurvey, isLoading, pendingTemplate, clearPendingTemplate, chatWithAI, fetchDrafts, saveDraft, deleteDraft } = useSurvey();
   const DRAFT_STORAGE_KEY = 'smart-survey-hub-builder-draft';
   const LEGACY_DRAFT_STORAGE_KEY = 'smart-survey-hub-drafts';
@@ -302,6 +302,7 @@ export function Builder({ onPublished, onError }: { onPublished?: () => void; on
       const saved = await saveDraft(draft);
       setDraftId(saved.id || draft.id);
       setDraftSavedAt(new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }));
+      onDraftSaved?.();
     } finally {
       setIsSavingDraft(false);
     }

@@ -287,7 +287,7 @@ function AppContent() {
                 {currentView === 'analytics' && <Analytics />}
                 {currentView === 'teams' && <Teams />}
                 {currentView === 'settings' && <Settings profile={userProfile} onUpdateProfile={setUserProfile} onClose={() => setCurrentView('dashboard')} onShowToast={showToast} onAddNotification={addNotification} />}
-                {currentView === 'builder' && <Builder onPublished={() => { showToast('Khảo sát đã được xuất bản thành công!', 'success'); addNotification('Bạn vừa xuất bản một khảo sát mới'); setCurrentView('dashboard'); }} onError={(msg) => showToast(msg, 'error')} />}
+                {currentView === 'builder' && <Builder onPublished={() => { showToast('Khảo sát đã được xuất bản thành công!', 'success'); addNotification('Bạn vừa xuất bản một khảo sát mới'); setCurrentView('dashboard'); }} onDraftSaved={() => { showToast('Đã lưu bản nháp!', 'success'); setCurrentView('dashboard'); }} onError={(msg) => showToast(msg, 'error')} />}
               </Suspense>
             </main>
           </div>
