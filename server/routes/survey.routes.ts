@@ -291,8 +291,10 @@ router.post('/surveys/:id/responses', async (req, res) => {
       surveyId: row.survey_id,
       respondentId: row.respondent_id,
       answers: row.answers,
-      score: row.score,
-      totalQuizQuestions: row.total_quiz_questions,
+      // node-pg trả cột NUMERIC dạng chuỗi (vd "1.50") để không mất độ chính xác;
+      // parseFloat lại thành số để frontend tính toán (quizScore / quizTotal) đúng.
+      score: row.score !== null ? parseFloat(row.score) : null,
+      totalQuizQuestions: row.total_quiz_questions !== null ? parseFloat(row.total_quiz_questions) : null,
       submittedAt: row.submitted_at
     });
   } catch (err: any) {
@@ -322,8 +324,8 @@ router.get('/surveys/:id/responses/my/:respondentId', async (req, res) => {
       surveyId: row.survey_id,
       respondentId: row.respondent_id,
       answers: row.answers,
-      score: row.score,
-      totalQuizQuestions: row.total_quiz_questions,
+      score: row.score !== null ? parseFloat(row.score) : null,
+      totalQuizQuestions: row.total_quiz_questions !== null ? parseFloat(row.total_quiz_questions) : null,
       submittedAt: row.submitted_at
     });
   } catch (err) {
@@ -341,8 +343,8 @@ router.get('/surveys/:id/responses', async (req, res) => {
       id: row.id,
       surveyId: row.survey_id,
       answers: row.answers,
-      score: row.score,
-      totalQuizQuestions: row.total_quiz_questions,
+      score: row.score !== null ? parseFloat(row.score) : null,
+      totalQuizQuestions: row.total_quiz_questions !== null ? parseFloat(row.total_quiz_questions) : null,
       submittedAt: row.submitted_at
     }));
     res.json(responses);

@@ -47,8 +47,8 @@ export const initDB = async () => {
         survey_id VARCHAR(255) REFERENCES surveys(id) ON DELETE CASCADE,
         respondent_id VARCHAR(255),
         answers JSONB NOT NULL,
-        score INT,
-        total_quiz_questions INT,
+        score NUMERIC(10,2),
+        total_quiz_questions NUMERIC(10,2),
         submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         UNIQUE (survey_id, respondent_id)
       );
@@ -63,8 +63,15 @@ export const initDB = async () => {
       await client.query(`ALTER TABLE surveys ADD COLUMN IF NOT EXISTS max_attempts_per_device INTEGER;`);
 
       await client.query(`ALTER TABLE responses ADD COLUMN IF NOT EXISTS respondent_id VARCHAR(255);`);
-      await client.query(`ALTER TABLE responses ADD COLUMN IF NOT EXISTS score INT;`);
-      await client.query(`ALTER TABLE responses ADD COLUMN IF NOT EXISTS total_quiz_questions INT;`);
+      await client.query(`ALTER TABLE responses ADD COLUMN IF NOT EXISTS score NUMERIC(10,2);`);
+      await client.query(`ALTER TABLE responses ADD COLUMN IF NOT EXISTS total_quiz_questions NUMERIC(10,2);`);
+
+      // Nếu bảng responses đã tồn tại từ trước với cột score/total_quiz_questions
+      // kiểu INT (không nhận số thập phân), đổi sang NUMERIC để chấp nhận điểm
+      // lẻ (ví dụ câu hỏi được gán 1.5 điểm) — trước đây gây lỗi:
+      // "invalid input syntax for type integer" mỗi khi nộp quiz có điểm lẻ.
+      await client.query(`ALTER TABLE responses ALTER COLUMN score TYPE NUMERIC(10,2) USING score::numeric;`);
+      await client.query(`ALTER TABLE responses ALTER COLUMN total_quiz_questions TYPE NUMERIC(10,2) USING total_quiz_questions::numeric;`);
 
       // Xoá các bản ghi trùng (survey_id, respondent_id) còn sót lại từ trước khi
       // constraint UNIQUE được thêm vào. Nếu không xoá, lệnh ADD CONSTRAINT bên
