@@ -61,13 +61,30 @@ export const initDB = async () => {
       await client.query(`ALTER TABLE surveys ADD COLUMN IF NOT EXISTS show_score BOOLEAN DEFAULT TRUE;`);
       await client.query(`ALTER TABLE surveys ADD COLUMN IF NOT EXISTS closes_at TIMESTAMP;`);
       await client.query(`ALTER TABLE surveys ADD COLUMN IF NOT EXISTS max_attempts_per_device INTEGER;`);
-      
+
       await client.query(`ALTER TABLE responses ADD COLUMN IF NOT EXISTS respondent_id VARCHAR(255);`);
       await client.query(`ALTER TABLE responses ADD COLUMN IF NOT EXISTS score INT;`);
       await client.query(`ALTER TABLE responses ADD COLUMN IF NOT EXISTS total_quiz_questions INT;`);
+
+      // Xoá các bản ghi trùng (survey_id, respondent_id) còn sót lại từ trước khi
+      // constraint UNIQUE được thêm vào. Nếu không xoá, lệnh ADD CONSTRAINT bên
+      // dưới sẽ luôn thất bại âm thầm (bị catch nuốt lỗi), khiến ON CONFLICT
+      // trong route submit response báo lỗi 500 mỗi lần người dùng nộp bài.
+      await client.query(`
+        DELETE FROM responses a USING responses b
+        WHERE a.survey_id = b.survey_id
+          AND a.respondent_id = b.respondent_id
+          AND a.respondent_id IS NOT NULL
+          AND a.ctid < b.ctid;
+      `);
+
       await client.query(`ALTER TABLE responses ADD CONSTRAINT responses_survey_id_respondent_id_key UNIQUE (survey_id, respondent_id);`);
-    } catch (e) {
-      // Ignore if constraint already exists
+    } catch (e: any) {
+      // Chỉ bỏ qua nếu constraint đã tồn tại sẵn (42710) hoặc lỗi tương tự (42P07).
+      // Mọi lỗi khác sẽ được log ra để dễ debug trên Render logs.
+      if (e?.code !== '42710' && e?.code !== '42P07') {
+        console.error('⚠️ Failed to ensure responses unique constraint:', e?.message || e);
+      }
     }
 
     // Create teams table

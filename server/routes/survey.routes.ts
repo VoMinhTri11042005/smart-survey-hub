@@ -253,17 +253,39 @@ router.post('/surveys/:id/responses', async (req, res) => {
       return res.status(400).json({ error: 'Thiếu định danh người dùng.' });
     }
 
-    const id = generateId();
-    const result = await pool.query(
-      `INSERT INTO responses (id, survey_id, respondent_id, answers, score, total_quiz_questions) 
-       VALUES ($1, $2, $3, $4, $5, $6)
-       ON CONFLICT (survey_id, respondent_id) 
-       DO UPDATE SET answers = EXCLUDED.answers, score = EXCLUDED.score, total_quiz_questions = EXCLUDED.total_quiz_questions, submitted_at = CURRENT_TIMESTAMP
-       RETURNING *`,
-      [id, req.params.id, respondentId, JSON.stringify(answers), score ?? null, totalQuizQuestions ?? null]
+    // Upsert thủ công (check tồn tại rồi UPDATE hoặc INSERT) thay vì dùng
+    // `ON CONFLICT (survey_id, respondent_id)`. ON CONFLICT bắt buộc phải có
+    // sẵn UNIQUE constraint đúng trên 2 cột đó — nếu vì lý do gì đó (dữ liệu cũ
+    // bị trùng khiến migration ADD CONSTRAINT thất bại...) mà constraint không
+    // tồn tại, ON CONFLICT sẽ ném lỗi Postgres (mã 42P10) và mọi lượt nộp khảo
+    // sát đều trả về 500. Làm thủ công như dưới đây hoạt động ổn định dù
+    // constraint có tồn tại hay không.
+    const existing = await pool.query(
+      'SELECT id FROM responses WHERE survey_id = $1 AND respondent_id = $2',
+      [req.params.id, respondentId]
     );
-    
-    const row = result.rows[0];
+
+    let row;
+    if (existing.rows.length > 0) {
+      const result = await pool.query(
+        `UPDATE responses
+         SET answers = $3, score = $4, total_quiz_questions = $5, submitted_at = CURRENT_TIMESTAMP
+         WHERE survey_id = $1 AND respondent_id = $2
+         RETURNING *`,
+        [req.params.id, respondentId, JSON.stringify(answers), score ?? null, totalQuizQuestions ?? null]
+      );
+      row = result.rows[0];
+    } else {
+      const id = generateId();
+      const result = await pool.query(
+        `INSERT INTO responses (id, survey_id, respondent_id, answers, score, total_quiz_questions)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         RETURNING *`,
+        [id, req.params.id, respondentId, JSON.stringify(answers), score ?? null, totalQuizQuestions ?? null]
+      );
+      row = result.rows[0];
+    }
+
     res.json({
       id: row.id,
       surveyId: row.survey_id,
@@ -273,8 +295,8 @@ router.post('/surveys/:id/responses', async (req, res) => {
       totalQuizQuestions: row.total_quiz_questions,
       submittedAt: row.submitted_at
     });
-  } catch (err) {
-    console.error(err);
+  } catch (err: any) {
+    console.error('Failed to submit response:', err?.message || err, err?.detail || '');
     res.status(500).json({ error: 'Failed to submit response' });
   }
 });
