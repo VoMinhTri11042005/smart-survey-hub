@@ -221,45 +221,100 @@ router.delete('/surveys/:id', async (req, res) => {
   }
 });
 
+// Helper to compute quiz score securely on server
+function computeServerQuizScore(questions: any[], answers: Record<string, any>) {
+  let score = 0;
+  let totalPossible = 0;
+  for (const q of questions || []) {
+    if (q.type === 'single_choice') {
+      const hasCorrect = typeof q.correctAnswer === 'string' && q.correctAnswer.trim().length > 0;
+      if (hasCorrect) {
+        const pts = typeof q.points === 'number' && q.points > 0 ? q.points : 1;
+        totalPossible += pts;
+        const userAns = answers?.[q.id];
+        if (typeof userAns === 'string' && userAns === q.correctAnswer) {
+          score += pts;
+        }
+      }
+    } else if (q.type === 'multiple_choice') {
+      const hasCorrect = Array.isArray(q.correctAnswer) && q.correctAnswer.length > 0;
+      if (hasCorrect) {
+        const pts = typeof q.points === 'number' && q.points > 0 ? q.points : 1;
+        totalPossible += pts;
+        const userAns = answers?.[q.id];
+        if (Array.isArray(userAns) && userAns.length === q.correctAnswer.length) {
+          const sortedUser = [...userAns].sort();
+          const sortedCorrect = [...q.correctAnswer].sort();
+          if (sortedUser.every((val, idx) => val === sortedCorrect[idx])) {
+            score += pts;
+          }
+        }
+      }
+    }
+  }
+  return { score, totalPossible };
+}
+
 // ─── Submit Response ───
 router.post('/surveys/:id/responses', async (req, res) => {
   if (!process.env.DATABASE_URL) {
     const surveyId = req.params.id;
     const { respondentId, answers, score, totalQuizQuestions } = req.body;
     if (!respondentId) return res.status(400).json({ error: 'Thiếu định danh người dùng.' });
+
+    const survey = inMemorySurveys[surveyId];
+    let finalScore: number | null = null;
+    let finalTotal: number | null = null;
+
+    if (survey?.isQuiz) {
+      const computed = computeServerQuizScore(survey.questions, answers || {});
+      finalScore = computed.score;
+      finalTotal = computed.totalPossible;
+    } else if (score !== undefined && score !== null && Number.isFinite(Number(score))) {
+      finalScore = Number(score);
+      finalTotal = totalQuizQuestions !== undefined && totalQuizQuestions !== null && Number.isFinite(Number(totalQuizQuestions)) ? Number(totalQuizQuestions) : null;
+    }
+
     inMemoryResponses[surveyId] = inMemoryResponses[surveyId] || [];
     const existing = inMemoryResponses[surveyId].find(r => r.respondentId === respondentId);
     if (existing) {
       existing.answers = answers;
-      existing.score = score ?? null;
-      existing.totalQuizQuestions = totalQuizQuestions ?? null;
+      existing.score = finalScore;
+      existing.totalQuizQuestions = finalTotal;
       existing.submittedAt = new Date().toISOString();
       return res.json(existing);
     } else {
       const id = generateId();
-      const obj = { id, surveyId, respondentId, answers, score: score ?? null, totalQuizQuestions: totalQuizQuestions ?? null, submittedAt: new Date().toISOString() };
+      const obj = { id, surveyId, respondentId, answers, score: finalScore, totalQuizQuestions: finalTotal, submittedAt: new Date().toISOString() };
       inMemoryResponses[surveyId].push(obj);
       return res.json(obj);
     }
   }
   try {
-    const surveyCheck = await pool.query('SELECT id FROM surveys WHERE id = $1', [req.params.id]);
-    if (surveyCheck.rows.length === 0) {
+    const surveyResult = await pool.query('SELECT * FROM surveys WHERE id = $1', [req.params.id]);
+    if (surveyResult.rows.length === 0) {
       return res.status(404).json({ error: 'Không tìm thấy khảo sát.' });
     }
+    const survey = surveyResult.rows[0];
 
     const { respondentId, answers, score, totalQuizQuestions } = req.body;
     if (!respondentId) {
       return res.status(400).json({ error: 'Thiếu định danh người dùng.' });
     }
 
-    // Upsert thủ công (check tồn tại rồi UPDATE hoặc INSERT) thay vì dùng
-    // `ON CONFLICT (survey_id, respondent_id)`. ON CONFLICT bắt buộc phải có
-    // sẵn UNIQUE constraint đúng trên 2 cột đó — nếu vì lý do gì đó (dữ liệu cũ
-    // bị trùng khiến migration ADD CONSTRAINT thất bại...) mà constraint không
-    // tồn tại, ON CONFLICT sẽ ném lỗi Postgres (mã 42P10) và mọi lượt nộp khảo
-    // sát đều trả về 500. Làm thủ công như dưới đây hoạt động ổn định dù
-    // constraint có tồn tại hay không.
+    let finalScore: number | null = null;
+    let finalTotal: number | null = null;
+
+    if (survey.is_quiz) {
+      const questions = typeof survey.questions === 'string' ? JSON.parse(survey.questions) : survey.questions;
+      const computed = computeServerQuizScore(questions, answers || {});
+      finalScore = computed.score;
+      finalTotal = computed.totalPossible;
+    } else if (score !== undefined && score !== null && Number.isFinite(Number(score))) {
+      finalScore = Number(score);
+      finalTotal = totalQuizQuestions !== undefined && totalQuizQuestions !== null && Number.isFinite(Number(totalQuizQuestions)) ? Number(totalQuizQuestions) : null;
+    }
+
     const existing = await pool.query(
       'SELECT id FROM responses WHERE survey_id = $1 AND respondent_id = $2',
       [req.params.id, respondentId]
@@ -272,7 +327,7 @@ router.post('/surveys/:id/responses', async (req, res) => {
          SET answers = $3, score = $4, total_quiz_questions = $5, submitted_at = CURRENT_TIMESTAMP
          WHERE survey_id = $1 AND respondent_id = $2
          RETURNING *`,
-        [req.params.id, respondentId, JSON.stringify(answers), score ?? null, totalQuizQuestions ?? null]
+        [req.params.id, respondentId, JSON.stringify(answers || {}), finalScore, finalTotal]
       );
       row = result.rows[0];
     } else {
@@ -281,7 +336,7 @@ router.post('/surveys/:id/responses', async (req, res) => {
         `INSERT INTO responses (id, survey_id, respondent_id, answers, score, total_quiz_questions)
          VALUES ($1, $2, $3, $4, $5, $6)
          RETURNING *`,
-        [id, req.params.id, respondentId, JSON.stringify(answers), score ?? null, totalQuizQuestions ?? null]
+        [id, req.params.id, respondentId, JSON.stringify(answers || {}), finalScore, finalTotal]
       );
       row = result.rows[0];
     }
@@ -291,8 +346,6 @@ router.post('/surveys/:id/responses', async (req, res) => {
       surveyId: row.survey_id,
       respondentId: row.respondent_id,
       answers: row.answers,
-      // node-pg trả cột NUMERIC dạng chuỗi (vd "1.50") để không mất độ chính xác;
-      // parseFloat lại thành số để frontend tính toán (quizScore / quizTotal) đúng.
       score: row.score !== null ? parseFloat(row.score) : null,
       totalQuizQuestions: row.total_quiz_questions !== null ? parseFloat(row.total_quiz_questions) : null,
       submittedAt: row.submitted_at

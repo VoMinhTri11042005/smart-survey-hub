@@ -271,6 +271,7 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError }: { onP
     };
 
     try {
+
       localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft));
       setDraftSavedAt(new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }));
     } catch (error) {
@@ -290,8 +291,18 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError }: { onP
 
   const totalPossibleScore = useMemo(() => {
     return questions.reduce((sum, question) => {
-      if ((question.type === 'single_choice' || question.type === 'multiple_choice') && question.correctAnswer) {
-        return sum + (question.points !== undefined ? question.points : 1);
+      if (question.type === 'single_choice') {
+        const hasCorrect = typeof question.correctAnswer === 'string' && question.correctAnswer.trim().length > 0;
+        if (hasCorrect) {
+          const pts = typeof question.points === 'number' && question.points > 0 ? question.points : 1;
+          return sum + pts;
+        }
+      } else if (question.type === 'multiple_choice') {
+        const hasCorrect = Array.isArray(question.correctAnswer) && question.correctAnswer.length > 0;
+        if (hasCorrect) {
+          const pts = typeof question.points === 'number' && question.points > 0 ? question.points : 1;
+          return sum + pts;
+        }
       }
       return sum;
     }, 0);

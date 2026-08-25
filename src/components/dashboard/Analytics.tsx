@@ -245,7 +245,7 @@ export function Analytics() {
                         <div className="h-16 bg-surface-container rounded-md flex items-end justify-center overflow-hidden">
                           <div
                             className="w-full bg-primary rounded-t-md transition-all duration-700"
-                            style={{ height: `${analytics.totalResponses > 0 ? (sr.distribution[star] / analytics.totalResponses) * 100 : 0}%`, minHeight: sr.distribution[star] > 0 ? '4px' : '0' }}
+                            style={{ height: `${(sr.totalAnswered ?? analytics.totalResponses) > 0 ? (sr.distribution[star] / (sr.totalAnswered || analytics.totalResponses)) * 100 : 0}%`, minHeight: sr.distribution[star] > 0 ? '4px' : '0' }}
                           />
                         </div>
                         <span className="text-[10px] text-text-secondary font-bold mt-1 block">{star}★</span>

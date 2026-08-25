@@ -306,22 +306,35 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
 
     setIsSubmitting(true);
     try {
-      let score = undefined;
-      let totalQ = undefined;
+      let score: number | undefined = undefined;
+      let totalQ: number | undefined = undefined;
 
-      if (survey.isQuiz) {
+      if (survey?.isQuiz) {
         score = 0;
         totalQ = 0;
         survey.questions.forEach(q => {
-          if ((q.type === 'single_choice' || q.type === 'multiple_choice') && q.correctAnswer) {
-            const qPoints = q.points !== undefined ? q.points : 1;
-            totalQ! += qPoints;
-            const userAnswer = answers[q.id];
-            if (q.type === 'single_choice' && userAnswer === q.correctAnswer) {
-              score! += qPoints;
-            } else if (q.type === 'multiple_choice' && Array.isArray(userAnswer) && Array.isArray(q.correctAnswer)) {
-              if (userAnswer.length === q.correctAnswer.length && userAnswer.every(a => (q.correctAnswer as string[]).includes(a))) {
+          if (q.type === 'single_choice') {
+            const hasCorrect = typeof q.correctAnswer === 'string' && q.correctAnswer.trim().length > 0;
+            if (hasCorrect) {
+              const qPoints = typeof q.points === 'number' && q.points > 0 ? q.points : 1;
+              totalQ! += qPoints;
+              const userAnswer = answers[q.id];
+              if (typeof userAnswer === 'string' && userAnswer === q.correctAnswer) {
                 score! += qPoints;
+              }
+            }
+          } else if (q.type === 'multiple_choice') {
+            const hasCorrect = Array.isArray(q.correctAnswer) && q.correctAnswer.length > 0;
+            if (hasCorrect) {
+              const qPoints = typeof q.points === 'number' && q.points > 0 ? q.points : 1;
+              totalQ! += qPoints;
+              const userAnswer = answers[q.id];
+              if (Array.isArray(userAnswer) && userAnswer.length === q.correctAnswer.length) {
+                const sortedUser = [...userAnswer].sort();
+                const sortedCorrect = [...q.correctAnswer].sort();
+                if (sortedUser.every((val, idx) => val === sortedCorrect[idx])) {
+                  score! += qPoints;
+                }
               }
             }
           }
