@@ -10,6 +10,7 @@ interface SurveyDraft {
   showScore?: boolean;
   displayMode?: SurveyDisplayMode;
   closesAt?: string | null;
+  timeLimitMinutes?: number | null;
   updatedAt?: string;
 }
 
@@ -139,7 +140,8 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
         showScore: item.showScore !== false,
         displayMode: item.displayMode || 'single',
         closesAt: item.closesAt || null,
-      maxAttemptsPerDevice: item.maxAttemptsPerDevice ?? item.max_attempts_per_device ?? null,
+        maxAttemptsPerDevice: item.maxAttemptsPerDevice ?? item.max_attempts_per_device ?? null,
+        timeLimitMinutes: item.timeLimitMinutes ?? item.time_limit_minutes ?? null,
       updatedAt: item.updatedAt || new Date().toISOString(),
     }));
   }, []);
@@ -161,6 +163,7 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
           displayMode: survey.displayMode ?? survey.display_mode ?? 'single',
           showScore: survey.showScore ?? survey.show_score ?? true,
           maxAttemptsPerDevice: survey.maxAttemptsPerDevice ?? survey.max_attempts_per_device ?? null,
+          timeLimitMinutes: survey.timeLimitMinutes ?? survey.time_limit_minutes ?? null,
         }));
         setSurveys(normalized);
       } else {
@@ -191,6 +194,7 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
           displayMode: survey.displayMode ?? survey.display_mode ?? 'single',
           showScore: survey.showScore ?? survey.show_score ?? true,
           maxAttemptsPerDevice: survey.maxAttemptsPerDevice ?? survey.max_attempts_per_device ?? null,
+          timeLimitMinutes: survey.timeLimitMinutes ?? survey.time_limit_minutes ?? null,
         };
       }
       return null;
@@ -221,6 +225,7 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
           displayMode: surveyData.displayMode || 'single',
           showScore: surveyData.showScore !== false,
           maxAttemptsPerDevice: surveyData.maxAttemptsPerDevice ?? null,
+          timeLimitMinutes: surveyData.timeLimitMinutes ?? null,
         })
       });
       if (!res.ok) throw new Error('Failed to create survey');
@@ -239,6 +244,7 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
         displayMode: surveyData.displayMode || 'single',
         showScore: surveyData.showScore !== false,
         maxAttemptsPerDevice: surveyData.maxAttemptsPerDevice ?? null,
+        timeLimitMinutes: surveyData.timeLimitMinutes ?? null,
       };
       setSurveys(prev => [newSurvey, ...prev]);
       try {
@@ -256,6 +262,7 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
       displayMode: surveyData.displayMode || 'single',
       showScore: surveyData.showScore !== false,
       maxAttemptsPerDevice: surveyData.maxAttemptsPerDevice ?? null,
+      timeLimitMinutes: surveyData.timeLimitMinutes ?? null,
     };
     const res = await fetch(`${API_BASE}/surveys/${id}`, {
       method: 'PUT',
@@ -301,6 +308,7 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
       displayMode: draft.displayMode || 'single',
       closesAt: draft.closesAt || null,
       maxAttemptsPerDevice: draft.maxAttemptsPerDevice ?? null,
+      timeLimitMinutes: draft.timeLimitMinutes ?? null,
     };
 
     try {

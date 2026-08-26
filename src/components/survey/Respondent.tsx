@@ -25,6 +25,7 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
   const [draftSavedAt, setDraftSavedAt] = useState<string | null>(null);
   const [showExitConfirm, setShowExitConfirm] = useState(false);
   const [showCloseHint, setShowCloseHint] = useState(false);
+  const [remainingSeconds, setRemainingSeconds] = useState<number | null>(null);
 
   const getDeviceId = useCallback(() => {
     const key = `survey-device-id:${survey?.id ?? 'anon'}`;
@@ -113,6 +114,34 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
     localStorage.setItem(draftKey, JSON.stringify(answers));
     setDraftSavedAt(new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }));
   }, [answers, isCompleted, respondentId, survey]);
+
+  useEffect(() => {
+    if (!survey || !respondentId || !survey.timeLimitMinutes || survey.timeLimitMinutes <= 0 || isCompleted) {
+      setRemainingSeconds(null);
+      return;
+    }
+
+    const timerKey = `survey-timer-start:${survey.id}:${respondentId}`;
+    let startedAt = Number(localStorage.getItem(timerKey));
+    if (!startedAt) {
+      startedAt = Date.now();
+      localStorage.setItem(timerKey, String(startedAt));
+    }
+
+    let hasExpired = false;
+    const updateRemaining = () => {
+      const seconds = Math.max(0, Math.ceil((startedAt + survey.timeLimitMinutes! * 60_000 - Date.now()) / 1000));
+      setRemainingSeconds(seconds);
+      if (seconds === 0 && !hasExpired) {
+        hasExpired = true;
+        void submitSurvey();
+      }
+    };
+
+    updateRemaining();
+    const intervalId = window.setInterval(updateRemaining, 1000);
+    return () => window.clearInterval(intervalId);
+  }, [survey?.id, survey?.timeLimitMinutes, respondentId, isCompleted]);
 
   const questions = survey?.questions ?? [];
   const displayMode = survey?.displayMode ?? 'single';
@@ -299,6 +328,7 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
   };
 
   const submitSurvey = async () => {
+    if (isSubmitting || isCompleted) return;
     if (survey?.closesAt && new Date(survey.closesAt).getTime() <= Date.now()) {
       setErrorMsg('Khảo sát đã hết thời gian cho phép gửi phản hồi.');
       return;
@@ -388,6 +418,10 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
       await submitSurvey();
     }
   };
+
+  const formattedRemainingTime = remainingSeconds === null
+    ? ''
+    : `${String(Math.floor(remainingSeconds / 60)).padStart(2, '0')}:${String(remainingSeconds % 60).padStart(2, '0')}`;
 
   const handlePrev = () => {
     setErrorMsg('');
@@ -644,6 +678,12 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
           <div className="flex justify-between items-start md:items-center w-full gap-3">
             <div className="font-display text-base sm:text-lg md:text-2xl font-bold text-primary flex-1 pr-2 sm:pr-4 line-clamp-2 break-all" dangerouslySetInnerHTML={{ __html: cleanHtmlWhitespace(survey.title) || 'Khảo sát thông minh' }} />
             <div className="flex items-center gap-2 md:gap-3 shrink-0">
+              {remainingSeconds !== null && (
+                <div className={`flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-xs sm:text-sm font-bold ${remainingSeconds <= 60 ? 'bg-sentiment-negative/10 text-sentiment-negative' : 'bg-primary-fixed text-primary'}`}>
+                  <Timer size={15} />
+                  <span>{formattedRemainingTime}</span>
+                </div>
+              )}
               <button onClick={handleExitRequest} className="min-h-10 rounded-lg border border-border-subtle bg-white px-2.5 py-2 text-[11px] sm:text-xs md:text-sm font-bold text-text-secondary hover:text-primary hover:border-primary/30 transition-colors cursor-pointer shadow-sm">Thoát</button>
             </div>
           </div>

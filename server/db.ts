@@ -35,6 +35,7 @@ export const initDB = async () => {
         show_score BOOLEAN DEFAULT TRUE,
         closes_at TIMESTAMP,
         max_attempts_per_device INTEGER,
+        time_limit_minutes INTEGER,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         status VARCHAR(50) DEFAULT 'draft'
       );
@@ -61,6 +62,7 @@ export const initDB = async () => {
       await client.query(`ALTER TABLE surveys ADD COLUMN IF NOT EXISTS show_score BOOLEAN DEFAULT TRUE;`);
       await client.query(`ALTER TABLE surveys ADD COLUMN IF NOT EXISTS closes_at TIMESTAMP;`);
       await client.query(`ALTER TABLE surveys ADD COLUMN IF NOT EXISTS max_attempts_per_device INTEGER;`);
+      await client.query(`ALTER TABLE surveys ADD COLUMN IF NOT EXISTS time_limit_minutes INTEGER;`);
 
       await client.query(`ALTER TABLE responses ADD COLUMN IF NOT EXISTS respondent_id VARCHAR(255);`);
       await client.query(`ALTER TABLE responses ADD COLUMN IF NOT EXISTS score NUMERIC(10,2);`);
@@ -146,8 +148,10 @@ export const initDB = async () => {
       await client.query(`ALTER TABLE surveys ADD COLUMN IF NOT EXISTS show_score BOOLEAN DEFAULT TRUE;`);
       await client.query(`ALTER TABLE surveys ADD COLUMN IF NOT EXISTS closes_at TIMESTAMP;`);
       await client.query(`ALTER TABLE surveys ADD COLUMN IF NOT EXISTS max_attempts_per_device INTEGER;`);
+      await client.query(`ALTER TABLE surveys ADD COLUMN IF NOT EXISTS time_limit_minutes INTEGER;`);
       await client.query(`ALTER TABLE survey_drafts ADD COLUMN IF NOT EXISTS closes_at TIMESTAMP;`);
       await client.query(`ALTER TABLE survey_drafts ADD COLUMN IF NOT EXISTS max_attempts_per_device INTEGER;`);
+      await client.query(`ALTER TABLE survey_drafts ADD COLUMN IF NOT EXISTS time_limit_minutes INTEGER;`);
     } catch (e) {
       // Ignore if the column already exists or migration is not needed.
     }

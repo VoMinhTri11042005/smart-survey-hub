@@ -83,6 +83,7 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError }: { onP
   const [isSavingDraft, setIsSavingDraft] = useState(false);
   const [publishedSurvey, setPublishedSurvey] = useState<{ id: string; title: string } | null>(null);
   const [maxAttemptsPerDevice, setMaxAttemptsPerDevice] = useState<number | null>(1);
+  const [timeLimitMinutes, setTimeLimitMinutes] = useState<number | null>(null);
 
   // Drag state for question reordering
   const [dragOverId, setDragOverId] = useState<string | null>(null);
@@ -190,6 +191,7 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError }: { onP
     setDisplayMode(currentSurvey.displayMode || 'single');
     setClosesAt(currentSurvey.closesAt || null);
     setMaxAttemptsPerDevice(currentSurvey.maxAttemptsPerDevice ?? 1);
+    setTimeLimitMinutes(currentSurvey.timeLimitMinutes ?? null);
     setShowSurvey(true);
     setActiveQuestionId(currentSurvey.questions?.[0]?.id || null);
     setDraftId(null);
@@ -213,6 +215,7 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError }: { onP
             showScore?: boolean;
             displayMode?: SurveyDisplayMode;
             closesAt?: string | null;
+            timeLimitMinutes?: number | null;
             title?: string;
             description?: string;
             id?: string;
@@ -230,6 +233,7 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError }: { onP
             setShowScore(draft.showScore !== false);
             setDisplayMode(draft.displayMode || 'single');
             setClosesAt(draft.closesAt || null);
+            setTimeLimitMinutes(draft.timeLimitMinutes ?? null);
             setShowSurvey(true);
             setActiveQuestionId(extractedQuestions[0]?.id || null);
           }
@@ -248,6 +252,7 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError }: { onP
       setShowScore(latest.showScore !== false);
       setDisplayMode(latest.displayMode || 'single');
       setClosesAt(latest.closesAt || null);
+      setTimeLimitMinutes(latest.timeLimitMinutes ?? null);
       setShowSurvey(true);
       setActiveQuestionId((latest.questions || [])[0]?.id || null);
       setDraftSavedAt(latest.updatedAt ? new Date(latest.updatedAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : null);
@@ -268,6 +273,7 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError }: { onP
       displayMode,
       closesAt,
       maxAttemptsPerDevice,
+      timeLimitMinutes,
     };
 
     try {
@@ -277,7 +283,7 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError }: { onP
     } catch (error) {
       console.error('Failed to save draft', error);
     }
-  }, [showSurvey, surveyTitle, surveyDescription, questions, isQuiz, showScore, displayMode, closesAt]);
+  }, [showSurvey, surveyTitle, surveyDescription, questions, isQuiz, showScore, displayMode, closesAt, maxAttemptsPerDevice, timeLimitMinutes]);
 
   const clearDraft = () => {
     localStorage.removeItem(DRAFT_STORAGE_KEY);
@@ -322,6 +328,7 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError }: { onP
       displayMode,
       closesAt,
       maxAttemptsPerDevice,
+      timeLimitMinutes,
     };
     try {
       localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft));
@@ -364,6 +371,7 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError }: { onP
         displayMode,
         closesAt: closesAt ? new Date(closesAt).toISOString() : null,
         maxAttemptsPerDevice,
+        timeLimitMinutes,
       };
       const survey = currentSurvey
         ? await updateSurvey(currentSurvey.id, { ...surveyData, status: currentSurvey.status })
@@ -872,6 +880,20 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError }: { onP
                      <span>lần</span>
                    </label>
                    <span className="hidden md:inline text-text-secondary">•</span>
+                   <label className="flex items-center gap-2 rounded-lg bg-surface-container-low px-2 py-1.5 text-[10px] md:text-xs font-medium text-text-secondary">
+                     <span>Thời gian làm</span>
+                     <input
+                       type="number"
+                       min="1"
+                       step="1"
+                       value={timeLimitMinutes ?? ''}
+                       onChange={(e) => setTimeLimitMinutes(e.target.value ? Math.max(1, Number(e.target.value)) : null)}
+                       placeholder="Không giới hạn"
+                       className="w-24 rounded-md border border-border-subtle bg-white px-2 py-1 text-[10px] md:text-xs text-text-primary focus:ring-2 focus:ring-primary/30 outline-none"
+                     />
+                     <span>phút</span>
+                   </label>
+                   <span className="hidden md:inline text-text-secondary">•</span>
                    <label className="flex items-center gap-2 rounded-lg bg-surface-container-low px-2 py-1.5 text-xs font-medium text-text-secondary">
                      <span>Khóa tới</span>
                      <input
@@ -891,7 +913,7 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError }: { onP
                    </button>
                    <span className="text-[10px] md:text-xs text-text-secondary">{draftSavedAt ? `Đã lưu ${draftSavedAt}` : 'Chưa lưu'}</span>
                    <button
-                     onClick={() => { setShowSurvey(false); setQuestions([]); setSurveyTitle(''); setSurveyDescription(''); setActiveQuestionId(null); setIsQuiz(false); setShowScore(true); setDisplayMode('single'); setClosesAt(null); clearDraft(); }}
+                     onClick={() => { setShowSurvey(false); setQuestions([]); setSurveyTitle(''); setSurveyDescription(''); setActiveQuestionId(null); setIsQuiz(false); setShowScore(true); setDisplayMode('single'); setClosesAt(null); setTimeLimitMinutes(null); clearDraft(); }}
                      className="text-xs md:text-sm font-semibold text-text-secondary hover:text-sentiment-negative transition-colors cursor-pointer"
                    >
                      Tạo lại
