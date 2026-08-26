@@ -26,6 +26,7 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
   const [showExitConfirm, setShowExitConfirm] = useState(false);
   const [showCloseHint, setShowCloseHint] = useState(false);
   const [remainingSeconds, setRemainingSeconds] = useState<number | null>(null);
+  const [hasStartedTimedSurvey, setHasStartedTimedSurvey] = useState(false);
 
   const getDeviceId = useCallback(() => {
     const key = `survey-device-id:${survey?.id ?? 'anon'}`;
@@ -69,6 +70,10 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
           : completedAttempts + 1;
         const rid = `${getDeviceId()}-attempt-${attemptNumber}`;
         setRespondentId(rid);
+        setHasStartedTimedSurvey(
+          !survey.timeLimitMinutes || survey.timeLimitMinutes <= 0 ||
+          Boolean(localStorage.getItem(`survey-timer-start:${survey.id}:${rid}`))
+        );
 
         try {
           const savedDraft = localStorage.getItem(`survey-draft:${survey.id}:${rid}`);
@@ -116,7 +121,7 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
   }, [answers, isCompleted, respondentId, survey]);
 
   useEffect(() => {
-    if (!survey || !respondentId || !survey.timeLimitMinutes || survey.timeLimitMinutes <= 0 || isCompleted) {
+    if (!survey || !respondentId || !survey.timeLimitMinutes || survey.timeLimitMinutes <= 0 || !hasStartedTimedSurvey || isCompleted) {
       setRemainingSeconds(null);
       return;
     }
@@ -141,7 +146,7 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
     updateRemaining();
     const intervalId = window.setInterval(updateRemaining, 1000);
     return () => window.clearInterval(intervalId);
-  }, [survey?.id, survey?.timeLimitMinutes, respondentId, isCompleted]);
+  }, [survey?.id, survey?.timeLimitMinutes, respondentId, hasStartedTimedSurvey, isCompleted]);
 
   const questions = survey?.questions ?? [];
   const displayMode = survey?.displayMode ?? 'single';
@@ -200,6 +205,12 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
       return;
     }
     setShowExitConfirm(true);
+  };
+
+  const startTimedSurvey = () => {
+    if (!survey || !respondentId) return;
+    localStorage.setItem(`survey-timer-start:${survey.id}:${respondentId}`, String(Date.now()));
+    setHasStartedTimedSurvey(true);
   };
 
   const hasAnswerProgressRef = { current: hasAnswerProgress };
@@ -275,6 +286,24 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
         <button onClick={onExit} className="mt-4 px-6 py-2.5 bg-primary text-white rounded-xl font-semibold text-sm hover:bg-primary/90 transition-colors cursor-pointer">
           Quay lại
         </button>
+      </div>
+    );
+  }
+
+  if (survey.timeLimitMinutes && survey.timeLimitMinutes > 0 && !hasStartedTimedSurvey && !isCompleted) {
+    return (
+      <div className="min-h-screen bg-surface-background flex flex-col items-center justify-center gap-6 font-sans px-4 text-center">
+        <div className="w-16 h-16 bg-primary-fixed rounded-2xl flex items-center justify-center">
+          <Timer size={30} className="text-primary" />
+        </div>
+        <div>
+          <h1 className="font-display text-2xl font-bold text-text-primary mb-2">Sẵn sàng làm bài?</h1>
+          <p className="text-text-secondary text-sm max-w-md">Bài làm có thời gian {survey.timeLimitMinutes} phút. Đồng hồ sẽ bắt đầu khi bạn bấm nút bên dưới và bài sẽ tự nộp khi hết giờ.</p>
+        </div>
+        <button onClick={startTimedSurvey} className="px-7 py-3 bg-primary text-white rounded-xl font-bold text-base hover:bg-primary/90 transition-colors shadow-lg shadow-primary/25 cursor-pointer">
+          Bắt đầu làm bài
+        </button>
+        <button onClick={onExit} className="text-sm font-semibold text-text-secondary hover:text-primary transition-colors cursor-pointer">Quay lại</button>
       </div>
     );
   }
