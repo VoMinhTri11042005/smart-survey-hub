@@ -356,7 +356,7 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
     return true;
   };
 
-  const submitSurvey = async () => {
+  async function submitSurvey() {
     if (isSubmitting || isCompleted) return;
     if (survey?.closesAt && new Date(survey.closesAt).getTime() <= Date.now()) {
       setErrorMsg('Khảo sát đã hết thời gian cho phép gửi phản hồi.');
@@ -422,7 +422,7 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
     } finally {
       setIsSubmitting(false);
     }
-  };
+  }
 
   const handleNext = async () => {
     if (maxAttemptsPerDevice && maxAttemptsPerDevice > 0 && currentDeviceAttempts >= maxAttemptsPerDevice) {
