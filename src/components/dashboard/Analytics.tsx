@@ -1,5 +1,5 @@
-import { Info, Sparkles, Timer, CheckCircle, TrendingUp, Download, ChevronDown, BarChart3, MessageSquare, RefreshCw, Trash2 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { Info, Sparkles, Timer, CheckCircle, TrendingUp, Download, ChevronDown, BarChart3, MessageSquare, RefreshCw, Trash2, Search, Users, ClipboardCheck, Clock3, ListChecks } from 'lucide-react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useSurvey } from '../../context/SurveyContext';
 import { computeSurveyAnalytics, exportResponsesToCsv } from '../../utils/analytics';
 import { stripHtml, toUnaccented } from '../../utils/stringUtils';
@@ -12,6 +12,7 @@ export function Analytics() {
   const [isLoading, setIsLoading] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [analysisSearch, setAnalysisSearch] = useState('');
 
   useEffect(() => { fetchSurveys(); }, [fetchSurveys]);
 
@@ -30,6 +31,22 @@ export function Analytics() {
   }, [selectedSurvey, fetchResponses]);
 
   const analytics = selectedSurvey ? computeSurveyAnalytics(selectedSurvey, responses) : null;
+  const normalizedSearch = analysisSearch.trim().toLocaleLowerCase('vi-VN');
+  const matchesSearch = (...values: unknown[]) => !normalizedSearch || values.some(value => String(value ?? '').toLocaleLowerCase('vi-VN').includes(normalizedSearch));
+  const questionMetrics = (selectedSurvey?.questions || []).map(question => {
+    const answered = responses.filter(response => {
+      const answer = response.answers[question.id];
+      return answer !== undefined && answer !== null && answer !== '' && !(Array.isArray(answer) && answer.length === 0);
+    }).length;
+    return { question, answered, missing: responses.length - answered, rate: responses.length ? Math.round((answered / responses.length) * 100) : 0 };
+  });
+  const filteredChoiceDistributions = analytics?.choiceDistributions.filter(item => matchesSearch(stripHtml(item.questionText), ...item.options.map(option => option.label))) || [];
+  const filteredRatings = analytics?.starRatings.filter(item => matchesSearch(stripHtml(item.questionText))) || [];
+  const filteredTextResponses = analytics?.textResponses.filter(item => matchesSearch(stripHtml(item.questionText), ...item.responses)) || [];
+  const filteredRecentResponses = analytics?.recentResponses.filter(response => matchesSearch(response.id, new Date(response.submittedAt).toLocaleString('vi-VN'), ...Object.values(response.answers))) || [];
+  const filteredQuestionMetrics = questionMetrics.filter(item => matchesSearch(stripHtml(item.question.text), item.question.label, item.question.type));
+  const responseDays = new Set(responses.map(response => new Date(response.submittedAt).toLocaleDateString('vi-VN'))).size;
+  const latestResponse = analytics?.recentResponses[0];
 
   const handleExport = () => {
     if (!selectedSurvey || responses.length === 0) return;
@@ -115,6 +132,15 @@ export function Analytics() {
         </div>
 
         <div className="flex items-center gap-4">
+          <label className="hidden xl:flex items-center gap-2 rounded-xl border border-border-subtle bg-white px-3 py-2.5 text-text-secondary shadow-sm">
+            <Search size={17} />
+            <input
+              value={analysisSearch}
+              onChange={(e) => setAnalysisSearch(e.target.value)}
+              placeholder="Tìm câu hỏi, đáp án, phản hồi..."
+              className="w-56 bg-transparent text-sm outline-none placeholder:text-text-secondary"
+            />
+          </label>
           <button
             onClick={() => selectedSurvey && fetchResponses(selectedSurvey.id).then(setResponses)}
             className="p-2.5 bg-white border border-border-subtle rounded-xl hover:bg-surface-container-low transition-colors cursor-pointer"
@@ -164,6 +190,34 @@ export function Analytics() {
           <p className="text-text-secondary text-sm text-center max-w-md">Chia sẻ link khảo sát để bắt đầu thu thập dữ liệu phân tích.</p>
         </div>
       ) : analytics && (
+        <>
+          <label className="xl:hidden flex items-center gap-2 rounded-xl border border-border-subtle bg-white px-3 py-2.5 text-text-secondary shadow-sm">
+            <Search size={17} />
+            <input value={analysisSearch} onChange={(e) => setAnalysisSearch(e.target.value)} placeholder="Tìm câu hỏi, đáp án, phản hồi..." className="w-full bg-transparent text-sm outline-none placeholder:text-text-secondary" />
+          </label>
+
+          <section className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
+            <InsightCard icon={<Users size={19} />} label="Người trả lời" value={analytics.totalResponses} detail="Tổng phản hồi" tone="text-secondary-container bg-secondary-fixed/30" />
+            <InsightCard icon={<ListChecks size={19} />} label="Câu hỏi" value={selectedSurvey?.questions.length ?? 0} detail={`${selectedSurvey?.questions.filter(q => q.required).length ?? 0} câu bắt buộc`} tone="text-primary bg-primary-fixed" />
+            <InsightCard icon={<ClipboardCheck size={19} />} label="Hoàn thành" value={`${analytics.completionRate}%`} detail={`${Math.round((analytics.completionRate / 100) * analytics.totalResponses)} bài đầy đủ`} tone="text-sentiment-positive bg-sentiment-positive/10" />
+            <InsightCard icon={<Clock3 size={19} />} label="Ngày có phản hồi" value={responseDays} detail={latestResponse ? `Mới nhất: ${new Date(latestResponse.submittedAt).toLocaleDateString('vi-VN')}` : 'Chưa có dữ liệu'} tone="text-primary bg-primary-fixed" />
+            <InsightCard icon={<MessageSquare size={19} />} label="Câu trả lời mở" value={analytics.textResponses.reduce((sum, item) => sum + item.responses.length, 0)} detail={`${analytics.textResponses.length} câu tự do`} tone="text-on-secondary-fixed bg-secondary-fixed" />
+            <InsightCard icon={<TrendingUp size={19} />} label="Tỷ lệ trả lời" value={`${questionMetrics.length ? Math.round(questionMetrics.reduce((sum, item) => sum + item.rate, 0) / questionMetrics.length) : 0}%`} detail="Trung bình toàn bộ câu hỏi" tone="text-sentiment-neutral bg-sentiment-neutral/10" />
+          </section>
+
+          <section className="bg-surface-container-lowest rounded-3xl border border-border-subtle shadow-sm overflow-hidden">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-6 py-5 border-b border-border-subtle">
+              <div><h3 className="font-display text-lg font-bold text-text-primary">Chất lượng dữ liệu theo câu hỏi</h3><p className="text-xs text-text-secondary mt-1">Hiển thị toàn bộ {selectedSurvey?.questions.length ?? 0} câu hỏi và mức độ được trả lời.</p></div>
+              <span className="text-xs font-bold text-primary bg-primary-fixed px-3 py-1.5 rounded-full">{filteredQuestionMetrics.length} mục</span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[720px] text-left">
+                <thead className="bg-surface-container-low text-[11px] uppercase tracking-wider text-text-secondary"><tr><th className="px-6 py-3 font-bold">Câu hỏi</th><th className="px-4 py-3 font-bold">Loại</th><th className="px-4 py-3 font-bold">Bắt buộc</th><th className="px-4 py-3 font-bold">Đã trả lời</th><th className="px-6 py-3 font-bold">Độ phủ dữ liệu</th></tr></thead>
+                <tbody>{filteredQuestionMetrics.map(({ question, answered, missing, rate }, index) => <tr key={question.id} className="border-t border-border-subtle text-sm"><td className="px-6 py-4"><span className="mr-2 text-text-secondary font-mono text-xs">{index + 1}.</span><span className="font-semibold text-text-primary">{stripHtml(question.text) || question.label || 'Chưa đặt nội dung'}</span></td><td className="px-4 py-4 text-text-secondary">{question.type.replace('_', ' ')}</td><td className="px-4 py-4">{question.required ? <span className="text-sentiment-negative font-bold">Có</span> : <span className="text-text-secondary">Không</span>}</td><td className="px-4 py-4 font-semibold">{answered} <span className="text-text-secondary font-normal">/ {analytics.totalResponses}</span></td><td className="px-6 py-4 min-w-48"><div className="flex items-center gap-3"><div className="h-2 flex-1 bg-surface-container rounded-full overflow-hidden"><div className="h-full bg-primary rounded-full" style={{ width: `${rate}%` }} /></div><span className="w-16 text-right font-bold text-primary">{rate}%</span><span className="text-xs text-text-secondary">thiếu {missing}</span></div></td></tr>)}</tbody>
+              </table>
+            </div>
+          </section>
+
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* NPS */}
           {analytics.nps && (
@@ -207,14 +261,14 @@ export function Analytics() {
           )}
 
           {/* Choice Distributions */}
-          {analytics.choiceDistributions.length > 0 && (
+          {filteredChoiceDistributions.length > 0 && (
             <div className={`${analytics.nps ? 'lg:col-span-8' : 'lg:col-span-12'} bg-surface-container-lowest p-6 rounded-3xl border border-border-subtle shadow-sm flex flex-col`}>
               <span className="text-sm font-semibold text-text-primary mb-6">Phân bố câu trả lời</span>
               <div className="flex-1 flex flex-col justify-center space-y-6">
-                {analytics.choiceDistributions.slice(0, 4).map(dist => (
+                {filteredChoiceDistributions.map(dist => (
                   <div key={dist.questionId} className="space-y-3">
                     <p className="text-xs font-semibold text-text-secondary">{stripHtml(dist.questionText)}</p>
-                    {dist.options.slice(0, 4).map((opt, i) => (
+                    {dist.options.map((opt, i) => (
                       <ProgressBar
                         key={opt.label}
                         label={stripHtml(opt.label)}
@@ -230,9 +284,9 @@ export function Analytics() {
           )}
 
           {/* Star Ratings */}
-          {analytics.starRatings.length > 0 && (
+          {filteredRatings.length > 0 && (
             <div className="lg:col-span-5 grid grid-cols-1 gap-4">
-              {analytics.starRatings.map(sr => (
+              {filteredRatings.map(sr => (
                 <div key={sr.questionId} className="bg-surface-container-lowest p-6 rounded-3xl border border-border-subtle shadow-sm">
                   <p className="text-xs font-semibold text-text-secondary mb-2 line-clamp-2">{stripHtml(sr.questionText)}</p>
                   <div className="flex items-end gap-2">
@@ -258,7 +312,7 @@ export function Analytics() {
           )}
 
           {/* KPIs */}
-          <div className={`${analytics.starRatings.length > 0 ? 'lg:col-span-7' : 'lg:col-span-12'} grid grid-cols-2 gap-6`}>
+          <div className={`${filteredRatings.length > 0 ? 'lg:col-span-7' : 'lg:col-span-12'} grid grid-cols-2 gap-6`}>
             <div className="bg-surface-container-lowest p-6 rounded-3xl border border-border-subtle shadow-sm flex flex-col justify-between">
               <Timer className="text-primary mb-4" size={24} />
               <div>
@@ -300,7 +354,7 @@ export function Analytics() {
           </div>
 
           {/* Text Responses & AI Insight */}
-          {analytics.textResponses.length > 0 && (
+          {filteredTextResponses.length > 0 && (
             <div className="lg:col-span-7 bg-primary text-white p-8 rounded-3xl shadow-lg relative overflow-hidden">
               <div className="absolute -right-20 -bottom-20 w-96 h-96 bg-primary-container/40 rounded-full blur-3xl"></div>
               <div className="relative z-10">
@@ -309,7 +363,7 @@ export function Analytics() {
                   <h3 className="font-display text-2xl font-bold">Phản hồi mở</h3>
                 </div>
                 <div className="space-y-3 max-h-64 overflow-y-auto custom-scrollbar">
-                  {analytics.textResponses.flatMap(tr => tr.responses.map((r, i) => (
+                  {filteredTextResponses.flatMap(tr => tr.responses.map((r, i) => (
                     <div key={`${tr.questionText}-${i}`} className="p-4 bg-white/10 rounded-xl border border-white/10 text-sm leading-relaxed">
                       "{r}"
                     </div>
@@ -320,11 +374,12 @@ export function Analytics() {
           )}
 
           {/* Recent Responses */}
-          {analytics.recentResponses.length > 0 && (
-            <div className={`${analytics.textResponses.length > 0 ? 'lg:col-span-5' : 'lg:col-span-12'} bg-surface-container-lowest p-6 rounded-3xl border border-border-subtle shadow-sm`}>
-              <h3 className="text-sm font-semibold text-text-primary mb-4">Phản hồi gần đây</h3>
+          {filteredRecentResponses.length > 0 && (
+            <div className={`${filteredTextResponses.length > 0 ? 'lg:col-span-5' : 'lg:col-span-12'} bg-surface-container-lowest p-6 rounded-3xl border border-border-subtle shadow-sm`}>
+              <h3 className="text-sm font-semibold text-text-primary mb-1">Tất cả phản hồi</h3>
+              <p className="text-xs text-text-secondary mb-4">Hiển thị {filteredRecentResponses.length} phản hồi theo thời gian gửi mới nhất.</p>
               <div className="space-y-3">
-                {analytics.recentResponses.slice(0, 5).map(r => (
+                {filteredRecentResponses.map(r => (
                   <div key={r.id} className="flex items-center justify-between p-3 bg-surface-container-low rounded-xl">
                     <span className="text-xs font-mono text-text-secondary">#{r.id.slice(0, 6)}</span>
                     <span className="text-xs text-text-secondary">{new Date(r.submittedAt).toLocaleString('vi-VN')}</span>
@@ -339,6 +394,7 @@ export function Analytics() {
             </div>
           )}
         </div>
+        </>
       )}
 
       {showResetConfirm && selectedSurvey && (
@@ -379,6 +435,17 @@ function ProgressBar({ label, count, percent, color }: { label: string; count: s
       <div className="h-4 w-full bg-surface-container rounded-md overflow-hidden">
         <div className={`h-full ${color} rounded-r-md transition-all duration-1000 ease-out`} style={{ width: `${percent}%` }} />
       </div>
+    </div>
+  );
+}
+
+function InsightCard({ icon, label, value, detail, tone }: { icon: ReactNode; label: string; value: string | number; detail: string; tone: string }) {
+  return (
+    <div className="bg-surface-container-lowest rounded-2xl border border-border-subtle p-4 shadow-sm">
+      <div className={`w-9 h-9 rounded-xl flex items-center justify-center mb-4 ${tone}`}>{icon}</div>
+      <p className="text-[10px] uppercase tracking-wider font-bold text-text-secondary mb-1">{label}</p>
+      <p className="font-display text-2xl font-bold text-text-primary leading-none">{value}</p>
+      <p className="text-[11px] text-text-secondary mt-2 truncate" title={detail}>{detail}</p>
     </div>
   );
 }

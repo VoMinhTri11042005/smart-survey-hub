@@ -191,7 +191,7 @@ export function computeSurveyAnalytics(survey: Survey, responses: SurveyResponse
       .map(r => r.answers[q.id])
       .filter((v): v is string => typeof v === 'string' && v.trim().length > 0);
     if (texts.length > 0) {
-      textResponses.push({ questionText: q.text, responses: texts.slice(-10) });
+      textResponses.push({ questionText: q.text, responses: texts });
     }
   }
 
@@ -203,8 +203,7 @@ export function computeSurveyAnalytics(survey: Survey, responses: SurveyResponse
     starRatings,
     textResponses,
     recentResponses: [...responses]
-      .sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime())
-      .slice(0, 10),
+      .sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime()),
     averageScore: quizCount > 0 ? Number((totalScore / quizCount).toFixed(1)) : undefined,
     quizTotalQuestions: quizTotalQuestions && quizTotalQuestions > 0 ? quizTotalQuestions : undefined,
   };
