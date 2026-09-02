@@ -340,6 +340,7 @@ export function Analytics() {
                 </div>
               </div>
             )}
+
             <div className="col-span-2 bg-secondary-fixed p-6 rounded-3xl border border-secondary-fixed-dim shadow-sm flex items-center justify-between">
               <div className="flex items-center gap-4">
                 <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center text-primary shadow-sm">
@@ -378,7 +379,7 @@ export function Analytics() {
             <div className={`${filteredTextResponses.length > 0 ? 'lg:col-span-5' : 'lg:col-span-12'} bg-surface-container-lowest p-6 rounded-3xl border border-border-subtle shadow-sm`}>
               <h3 className="text-sm font-semibold text-text-primary mb-1">Tất cả phản hồi</h3>
               <p className="text-xs text-text-secondary mb-4">Hiển thị {filteredRecentResponses.length} phản hồi theo thời gian gửi mới nhất.</p>
-              <div className="space-y-3">
+              <div className="space-y-3 max-h-64 overflow-y-auto custom-scrollbar pr-1">
                 {filteredRecentResponses.map(r => (
                   <div key={r.id} className="flex items-center justify-between p-3 bg-surface-container-low rounded-xl">
                     <span className="text-xs font-mono text-text-secondary">#{r.id.slice(0, 6)}</span>

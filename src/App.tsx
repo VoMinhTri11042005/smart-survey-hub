@@ -35,18 +35,27 @@ const AppFallback = () => (
 
 function AppContent() {
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
-    return localStorage.getItem('isAuthenticated') === 'true';
+    // Clear any previous persistent login from localStorage so exiting the browser requires logging in again
+    try {
+      localStorage.removeItem('isAuthenticated');
+      localStorage.removeItem('userRole');
+    } catch (_) {}
+    return sessionStorage.getItem('isAuthenticated') === 'true';
   });
   const [userRole, setUserRole] = useState<Role | null>(() => {
-    return (localStorage.getItem('userRole') as Role) || null;
+    return (sessionStorage.getItem('userRole') as Role) || null;
   });
 
   useEffect(() => {
-    localStorage.setItem('isAuthenticated', isAuthenticated.toString());
-    if (userRole) {
-      localStorage.setItem('userRole', userRole);
+    if (isAuthenticated) {
+      sessionStorage.setItem('isAuthenticated', 'true');
     } else {
-      localStorage.removeItem('userRole');
+      sessionStorage.removeItem('isAuthenticated');
+    }
+    if (userRole) {
+      sessionStorage.setItem('userRole', userRole);
+    } else {
+      sessionStorage.removeItem('userRole');
     }
   }, [isAuthenticated, userRole]);
   const [currentView, setCurrentView] = useState<View>(() => {
@@ -147,7 +156,6 @@ function AppContent() {
             setShareSurvey(survey);
             setCurrentSurvey(survey);
           } else {
-            // Fallback: in dev without DB/API, provide a demo survey so respondents can try the flow
             const demo = {
               id: shareSurveyId,
               title: 'Bản demo: Khảo sát mẫu',
@@ -164,13 +172,10 @@ function AppContent() {
             } as any;
             setShareSurvey(demo);
             setCurrentSurvey(demo);
-            // Do not consider this an error in dev
-            // setShareError('Không tìm thấy khảo sát hoặc khảo sát đã bị đóng.');
           }
         })
         .catch(err => {
           console.error('Error loading survey:', err);
-          // If fetch fails (no API), fall back to demo survey for local testing
           const demo = {
             id: shareSurveyId,
             title: 'Bản demo: Khảo sát mẫu',
@@ -187,7 +192,6 @@ function AppContent() {
           } as any;
           setShareSurvey(demo);
           setCurrentSurvey(demo);
-          // setShareError('Không thể tải khảo sát. Vui lòng thử lại sau.');
         })
         .finally(() => {
           setIsShareLoading(false);
@@ -199,6 +203,18 @@ function AppContent() {
 
   const addNotification = (msg: string) => {
     setNotifications(prev => [{ id: Date.now().toString(), message: msg, time: 'Vừa xong', read: false }, ...prev]);
+  };
+
+  const handleLogout = () => {
+    setIsAuthenticated(false);
+    setUserRole(null);
+    setCurrentView('dashboard');
+    try {
+      sessionStorage.removeItem('isAuthenticated');
+      sessionStorage.removeItem('userRole');
+      localStorage.removeItem('isAuthenticated');
+      localStorage.removeItem('userRole');
+    } catch (_) {}
   };
 
   if (shareSurveyId) {
@@ -253,9 +269,7 @@ function AppContent() {
               survey={currentSurvey}
               onExit={() => {
                 if (userRole === 'user') {
-                  setIsAuthenticated(false);
-                  setUserRole(null);
-                  setCurrentView('dashboard');
+                  handleLogout();
                   return;
                 }
                 setCurrentView('dashboard');
@@ -266,7 +280,7 @@ function AppContent() {
         </Suspense>
       ) : (
         <div className="flex h-screen bg-surface-background text-text-primary font-sans overflow-hidden selection:bg-secondary-fixed selection:text-on-secondary-fixed relative">
-          <Sidebar currentView={currentView} onViewChange={setCurrentView} onNewSurvey={() => setCurrentSurvey(null)} onLogout={() => { setIsAuthenticated(false); setUserRole(null); }} userProfile={userProfile} isOpen={isMobileMenuOpen} onClose={() => setIsMobileMenuOpen(false)} />
+          <Sidebar currentView={currentView} onViewChange={setCurrentView} onNewSurvey={() => setCurrentSurvey(null)} onLogout={handleLogout} userProfile={userProfile} isOpen={isMobileMenuOpen} onClose={() => setIsMobileMenuOpen(false)} />
           <div className="flex-1 flex flex-col overflow-hidden relative w-full">
             <TopBar 
               currentView={currentView} 
