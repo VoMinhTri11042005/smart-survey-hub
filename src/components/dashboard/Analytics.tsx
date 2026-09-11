@@ -315,18 +315,21 @@ export function Analytics() {
                       <span>Bỏ qua <strong className="text-sentiment-negative">{missing}</strong></span>
                     </div>
                     {choice && (
-                      <div className="space-y-3">
-                        {choice.options.map(option => (
-                          <div key={option.label} className="space-y-1">
-                            <div className="flex justify-between gap-3 text-xs">
-                              <span className="truncate text-text-primary">{stripHtml(option.label)}</span>
-                              <span className="shrink-0 font-bold text-primary">{option.count} · {option.percent}%</span>
+                      <div className="grid grid-cols-1 sm:grid-cols-[150px_1fr] gap-5 items-center">
+                        <DonutChart options={choice.options} />
+                        <div className="space-y-3">
+                          {choice.options.map(option => (
+                            <div key={option.label} className="space-y-1">
+                              <div className="flex justify-between gap-3 text-xs">
+                                <span className="truncate text-text-primary">{stripHtml(option.label)}</span>
+                                <span className="shrink-0 font-bold text-primary">{option.count} · {option.percent}%</span>
+                              </div>
+                              <div className="h-2.5 rounded-full bg-surface-container overflow-hidden">
+                                <div className="h-full rounded-full bg-primary transition-all duration-700" style={{ width: `${(option.count / maxChoice) * 100}%` }} />
+                              </div>
                             </div>
-                            <div className="h-2.5 rounded-full bg-surface-container overflow-hidden">
-                              <div className="h-full rounded-full bg-primary transition-all duration-700" style={{ width: `${(option.count / maxChoice) * 100}%` }} />
-                            </div>
-                          </div>
-                        ))}
+                          ))}
+                        </div>
                         {question.type === 'multiple_choice' && <p className="text-[11px] text-text-secondary pt-1">Có thể chọn nhiều đáp án; tổng tỷ lệ có thể vượt 100%.</p>}
                       </div>
                     )}
@@ -568,6 +571,38 @@ function ProgressBar({ label, count, percent, color }: { label: string; count: s
       <div className="h-4 w-full bg-surface-container rounded-md overflow-hidden">
         <div className={`h-full ${color} rounded-r-md transition-all duration-1000 ease-out`} style={{ width: `${percent}%` }} />
       </div>
+    </div>
+  );
+}
+
+function DonutChart({ options }: { options: { label: string; count: number; percent: number }[] }) {
+  const totalSelections = options.reduce((sum, option) => sum + option.count, 0);
+  const colors = ['#3730a3', '#006591', '#89ceff', '#c3c0ff', '#94a3b8', '#10b981', '#f59e0b', '#ef4444'];
+  let offset = 0;
+  const segments = options
+    .filter(option => option.count > 0)
+    .map((option, index) => {
+      const start = offset;
+      const end = offset + (option.count / Math.max(totalSelections, 1)) * 100;
+      offset = end;
+      return `${colors[index % colors.length]} ${start}% ${end}%`;
+    });
+
+  return (
+    <div className="flex flex-col items-center gap-2">
+      <div
+        className="relative h-32 w-32 rounded-full"
+        style={{ background: segments.length > 0 ? `conic-gradient(${segments.join(', ')})` : '#e4e1eb' }}
+        aria-label="Biểu đồ tròn phân bố lựa chọn"
+      >
+        <div className="absolute inset-5 rounded-full bg-white flex flex-col items-center justify-center">
+          <span className="font-display text-xl font-bold text-primary">{totalSelections}</span>
+          <span className="text-[10px] text-text-secondary">lượt chọn</span>
+        </div>
+      </div>
+      <span className="text-[10px] text-text-secondary text-center">
+        {options.length} lựa chọn
+      </span>
     </div>
   );
 }
