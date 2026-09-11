@@ -1,4 +1,4 @@
-import { Info, Sparkles, Timer, CheckCircle, TrendingUp, Download, ChevronDown, BarChart3, MessageSquare, RefreshCw, Trash2, Search, Users, ClipboardCheck, Clock3, ListChecks } from 'lucide-react';
+import { Info, Sparkles, Timer, CheckCircle, TrendingUp, Download, ChevronDown, BarChart3, MessageSquare, RefreshCw, Trash2, Search, Users, ClipboardCheck, Clock3, ListChecks, Filter } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { useSurvey } from '../../context/SurveyContext';
 import { computeSurveyAnalytics, exportResponsesToCsv } from '../../utils/analytics';
@@ -13,6 +13,7 @@ export function Analytics() {
   const [isResetting, setIsResetting] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [analysisSearch, setAnalysisSearch] = useState('');
+  const [questionFilter, setQuestionFilter] = useState<'all' | 'choice' | 'rating' | 'nps' | 'text'>('all');
 
   useEffect(() => { fetchSurveys(); }, [fetchSurveys]);
 
@@ -47,6 +48,18 @@ export function Analytics() {
   const filteredQuestionMetrics = questionMetrics.filter(item => matchesSearch(stripHtml(item.question.text), item.question.label, item.question.type));
   const responseDays = new Set(responses.map(response => new Date(response.submittedAt).toLocaleDateString('vi-VN'))).size;
   const latestResponse = analytics?.recentResponses[0];
+  const responseTimeline = responses.reduce<Record<string, number>>((timeline, response) => {
+    const day = new Date(response.submittedAt).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' });
+    timeline[day] = (timeline[day] || 0) + 1;
+    return timeline;
+  }, {});
+  const timelineEntries = Object.entries(responseTimeline).slice(-14);
+  const maxTimelineResponses = Math.max(...timelineEntries.map(([, count]) => count), 1);
+  const visibleQuestionMetrics = filteredQuestionMetrics.filter(({ question }) => {
+    if (questionFilter === 'all') return true;
+    if (questionFilter === 'choice') return question.type === 'single_choice' || question.type === 'multiple_choice';
+    return question.type === questionFilter;
+  });
 
   const handleExport = () => {
     if (!selectedSurvey || responses.length === 0) return;
@@ -215,6 +228,125 @@ export function Analytics() {
                 <thead className="bg-surface-container-low text-[11px] uppercase tracking-wider text-text-secondary"><tr><th className="px-6 py-3 font-bold">Câu hỏi</th><th className="px-4 py-3 font-bold">Loại</th><th className="px-4 py-3 font-bold">Bắt buộc</th><th className="px-4 py-3 font-bold">Đã trả lời</th><th className="px-6 py-3 font-bold">Độ phủ dữ liệu</th></tr></thead>
                 <tbody>{filteredQuestionMetrics.map(({ question, answered, missing, rate }, index) => <tr key={question.id} className="border-t border-border-subtle text-sm"><td className="px-6 py-4"><span className="mr-2 text-text-secondary font-mono text-xs">{index + 1}.</span><span className="font-semibold text-text-primary">{stripHtml(question.text) || question.label || 'Chưa đặt nội dung'}</span></td><td className="px-4 py-4 text-text-secondary">{question.type.replace('_', ' ')}</td><td className="px-4 py-4">{question.required ? <span className="text-sentiment-negative font-bold">Có</span> : <span className="text-text-secondary">Không</span>}</td><td className="px-4 py-4 font-semibold">{answered} <span className="text-text-secondary font-normal">/ {analytics.totalResponses}</span></td><td className="px-6 py-4 min-w-48"><div className="flex items-center gap-3"><div className="h-2 flex-1 bg-surface-container rounded-full overflow-hidden"><div className="h-full bg-primary rounded-full" style={{ width: `${rate}%` }} /></div><span className="w-16 text-right font-bold text-primary">{rate}%</span><span className="text-xs text-text-secondary">thiếu {missing}</span></div></td></tr>)}</tbody>
               </table>
+            </div>
+          </section>
+
+          <section className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+            <div className="xl:col-span-2 bg-surface-container-lowest rounded-3xl border border-border-subtle shadow-sm p-6">
+              <div className="flex items-center justify-between gap-4 mb-6">
+                <div>
+                  <h3 className="font-display text-lg font-bold text-text-primary">Xu hướng phản hồi</h3>
+                  <p className="text-xs text-text-secondary mt-1">14 ngày gần nhất có dữ liệu, đọc trực tiếp từ thời gian gửi hiện có.</p>
+                </div>
+                <TrendingUp size={20} className="text-primary" />
+              </div>
+              {timelineEntries.length > 0 ? (
+                <div className="h-48 flex items-end gap-2 sm:gap-3">
+                  {timelineEntries.map(([day, count]) => (
+                    <div key={day} className="flex-1 min-w-0 h-full flex flex-col items-center justify-end gap-2">
+                      <span className="text-[11px] font-bold text-primary">{count}</span>
+                      <div className="w-full max-w-10 rounded-t-lg bg-primary/15 flex items-end h-32">
+                        <div className="w-full rounded-t-lg bg-primary transition-all duration-700" style={{ height: `${Math.max((count / maxTimelineResponses) * 100, 6)}%` }} />
+                      </div>
+                      <span className="text-[10px] text-text-secondary truncate max-w-full">{day}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="h-48 flex items-center justify-center text-sm text-text-secondary">Chưa có dữ liệu theo thời gian.</div>
+              )}
+            </div>
+            <div className="bg-primary text-white rounded-3xl shadow-lg p-6">
+              <div className="flex items-center gap-2 mb-5">
+                <Filter size={18} />
+                <h3 className="font-display text-lg font-bold">Bộ lọc câu hỏi</h3>
+              </div>
+              <p className="text-sm text-white/75 mb-5">Chọn nhóm câu hỏi để tập trung vào biểu đồ và chỉ số quan trọng.</p>
+              <div className="grid grid-cols-2 gap-2">
+                {([
+                  ['all', 'Tất cả'],
+                  ['choice', 'Lựa chọn'],
+                  ['rating', 'Sao'],
+                  ['nps', 'NPS'],
+                  ['text', 'Văn bản'],
+                ] as const).map(([value, label]) => (
+                  <button
+                    key={value}
+                    onClick={() => setQuestionFilter(value)}
+                    className={`rounded-xl px-3 py-2.5 text-sm font-bold transition-colors cursor-pointer ${questionFilter === value ? 'bg-white text-primary' : 'bg-white/10 text-white hover:bg-white/20'}`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <div className="mt-6 pt-5 border-t border-white/20 text-sm text-white/80">
+                Đang hiển thị <strong className="text-white">{visibleQuestionMetrics.length}</strong> / {questionMetrics.length} câu hỏi
+              </div>
+            </div>
+          </section>
+
+          <section className="space-y-4">
+            <div className="flex items-end justify-between gap-4">
+              <div>
+                <h3 className="font-display text-xl font-bold text-text-primary">Phân tích từng câu hỏi</h3>
+                <p className="text-sm text-text-secondary mt-1">Mỗi câu dùng cách trực quan hóa phù hợp với loại dữ liệu.</p>
+              </div>
+              <span className="text-xs font-bold text-primary bg-primary-fixed px-3 py-1.5 rounded-full">{visibleQuestionMetrics.length} biểu đồ</span>
+            </div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+              {visibleQuestionMetrics.map(({ question, answered, missing, rate }, index) => {
+                const choice = analytics.choiceDistributions.find(item => item.questionId === question.id);
+                const rating = analytics.starRatings.find(item => item.questionId === question.id);
+                const npsQuestion = question.type === 'nps' ? analytics.nps : null;
+                const text = analytics.textResponses.find(item => stripHtml(item.questionText) === stripHtml(question.text));
+                const chartValues = choice?.options || [];
+                const maxChoice = Math.max(...chartValues.map(item => item.count), 1);
+                return (
+                  <article key={question.id} className="bg-surface-container-lowest rounded-3xl border border-border-subtle shadow-sm p-5 min-w-0">
+                    <div className="flex items-start justify-between gap-4 mb-4">
+                      <div className="min-w-0">
+                        <p className="text-[11px] uppercase tracking-wider text-text-secondary font-bold">Câu {index + 1} · {question.type.replace('_', ' ')}</p>
+                        <h4 className="font-display font-bold text-text-primary mt-1 line-clamp-2">{stripHtml(question.text) || question.label || 'Chưa đặt nội dung'}</h4>
+                      </div>
+                      <span className="shrink-0 text-xs font-bold text-primary bg-primary-fixed px-2.5 py-1 rounded-full">{rate}%</span>
+                    </div>
+                    <div className="flex gap-4 text-xs text-text-secondary mb-5">
+                      <span>Đã trả lời <strong className="text-text-primary">{answered}</strong>/{responses.length}</span>
+                      <span>Bỏ qua <strong className="text-sentiment-negative">{missing}</strong></span>
+                    </div>
+                    {choice && (
+                      <div className="space-y-3">
+                        {choice.options.map(option => (
+                          <div key={option.label} className="space-y-1">
+                            <div className="flex justify-between gap-3 text-xs">
+                              <span className="truncate text-text-primary">{stripHtml(option.label)}</span>
+                              <span className="shrink-0 font-bold text-primary">{option.count} · {option.percent}%</span>
+                            </div>
+                            <div className="h-2.5 rounded-full bg-surface-container overflow-hidden">
+                              <div className="h-full rounded-full bg-primary transition-all duration-700" style={{ width: `${(option.count / maxChoice) * 100}%` }} />
+                            </div>
+                          </div>
+                        ))}
+                        {question.type === 'multiple_choice' && <p className="text-[11px] text-text-secondary pt-1">Có thể chọn nhiều đáp án; tổng tỷ lệ có thể vượt 100%.</p>}
+                      </div>
+                    )}
+                    {rating && (
+                      <div>
+                        <div className="flex items-end gap-2 mb-4"><span className="font-display text-4xl font-bold text-primary">{rating.average}</span><span className="text-sm text-text-secondary mb-1">/ 5 sao</span></div>
+                        <div className="flex items-end gap-2 h-24">
+                          {[1, 2, 3, 4, 5].map(star => <div key={star} className="flex-1 h-full flex flex-col justify-end items-center gap-1"><div className="w-full rounded-t-md bg-primary" style={{ height: `${Math.max(((rating.distribution[star] || 0) / Math.max(rating.totalAnswered, 1)) * 100, rating.distribution[star] ? 5 : 0)}%` }} /><span className="text-[10px] text-text-secondary">{star}★</span></div>)}
+                        </div>
+                      </div>
+                    )}
+                    {npsQuestion && (
+                      <div className="flex items-center justify-between rounded-2xl bg-primary-fixed/60 p-4"><div><p className="text-xs text-text-secondary">Điểm NPS</p><p className="font-display text-4xl font-bold text-primary">{npsQuestion.score}</p></div><div className="text-right text-xs text-text-secondary"><p>Ủng hộ {npsQuestion.promoterPercent}%</p><p>Thụ động {npsQuestion.passivePercent}%</p><p>Phản đối {npsQuestion.detractorPercent}%</p></div></div>
+                    )}
+                    {question.type === 'text' && (
+                      <div className="rounded-2xl bg-primary/5 p-4"><p className="text-2xl font-bold text-primary">{text?.responses.length || 0}</p><p className="text-xs text-text-secondary mt-1">câu trả lời mở có nội dung</p><div className="mt-3 space-y-2 max-h-24 overflow-y-auto custom-scrollbar">{(text?.responses || []).slice(0, 3).map((response, responseIndex) => <p key={responseIndex} className="text-xs text-text-secondary line-clamp-2">“{response}”</p>)}</div></div>
+                    )}
+                  </article>
+                );
+              })}
             </div>
           </section>
 
