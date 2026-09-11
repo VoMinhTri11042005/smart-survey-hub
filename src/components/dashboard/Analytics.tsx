@@ -5,6 +5,8 @@ import { computeSurveyAnalytics, exportResponsesToCsv } from '../../utils/analyt
 import { stripHtml, toUnaccented } from '../../utils/stringUtils';
 import type { Survey, SurveyResponse } from '../../types';
 
+const QUESTION_CHART_COLORS = ['#3730a3', '#006591', '#89ceff', '#c3c0ff', '#94a3b8', '#10b981', '#f59e0b', '#ef4444'];
+
 export function Analytics() {
   const { surveys, currentSurvey, setCurrentSurvey, fetchSurveys, fetchResponses, resetResponses } = useSurvey();
   const [selectedSurvey, setSelectedSurvey] = useState<Survey | null>(currentSurvey);
@@ -318,14 +320,20 @@ export function Analytics() {
                       <div className="grid grid-cols-1 sm:grid-cols-[150px_1fr] gap-5 items-center">
                         <DonutChart options={choice.options} />
                         <div className="space-y-3">
-                          {choice.options.map(option => (
+                          {choice.options.map((option, optionIndex) => (
                             <div key={option.label} className="space-y-1">
                               <div className="flex justify-between gap-3 text-xs">
                                 <span className="truncate text-text-primary">{stripHtml(option.label)}</span>
                                 <span className="shrink-0 font-bold text-primary">{option.count} · {option.percent}%</span>
                               </div>
                               <div className="h-2.5 rounded-full bg-surface-container overflow-hidden">
-                                <div className="h-full rounded-full bg-primary transition-all duration-700" style={{ width: `${(option.count / maxChoice) * 100}%` }} />
+                                <div
+                                  className="h-full rounded-full transition-all duration-700"
+                                  style={{
+                                    width: `${(option.count / maxChoice) * 100}%`,
+                                    backgroundColor: QUESTION_CHART_COLORS[optionIndex % QUESTION_CHART_COLORS.length],
+                                  }}
+                                />
                               </div>
                             </div>
                           ))}
@@ -577,16 +585,16 @@ function ProgressBar({ label, count, percent, color }: { label: string; count: s
 
 function DonutChart({ options }: { options: { label: string; count: number; percent: number }[] }) {
   const totalSelections = options.reduce((sum, option) => sum + option.count, 0);
-  const colors = ['#3730a3', '#006591', '#89ceff', '#c3c0ff', '#94a3b8', '#10b981', '#f59e0b', '#ef4444'];
   let offset = 0;
   const segments = options
-    .filter(option => option.count > 0)
     .map((option, index) => {
+      if (option.count <= 0) return null;
       const start = offset;
       const end = offset + (option.count / Math.max(totalSelections, 1)) * 100;
       offset = end;
-      return `${colors[index % colors.length]} ${start}% ${end}%`;
-    });
+      return `${QUESTION_CHART_COLORS[index % QUESTION_CHART_COLORS.length]} ${start}% ${end}%`;
+    })
+    .filter((segment): segment is string => segment !== null);
 
   return (
     <div className="flex flex-col items-center gap-2">
