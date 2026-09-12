@@ -1,7 +1,8 @@
-import { Info, Sparkles, Timer, CheckCircle, TrendingUp, Download, ChevronDown, BarChart3, MessageSquare, RefreshCw, Trash2, Search, Users, ClipboardCheck, Clock3, ListChecks, Filter } from 'lucide-react';
+import { Info, Sparkles, Timer, CheckCircle, TrendingUp, Download, ChevronDown, BarChart3, MessageSquare, RefreshCw, Trash2, Search, Users, ClipboardCheck, Clock3, ListChecks, Filter, FileSpreadsheet } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { useSurvey } from '../../context/SurveyContext';
 import { computeSurveyAnalytics, exportResponsesToCsv } from '../../utils/analytics';
+import { exportSurveyAnalysisToExcel } from '../../utils/excelExport';
 import { stripHtml, toUnaccented } from '../../utils/stringUtils';
 import type { Survey, SurveyResponse } from '../../types';
 
@@ -74,6 +75,16 @@ export function Analytics() {
     link.download = `${safeTitle}_responses.csv`;
     link.click();
     URL.revokeObjectURL(url);
+  };
+
+  const handleExcelExport = async () => {
+    if (!selectedSurvey || responses.length === 0) return;
+    try {
+      await exportSurveyAnalysisToExcel(selectedSurvey, responses);
+    } catch (error) {
+      console.error('Excel export failed:', error);
+      alert('Không thể tạo file Excel. Vui lòng thử lại.');
+    }
   };
 
   const handleSelectSurvey = (survey: Survey) => {
@@ -172,6 +183,14 @@ export function Analytics() {
             Xuất CSV
           </button>
           <button
+            onClick={handleExcelExport}
+            disabled={!analytics || analytics.totalResponses === 0}
+            className="hidden md:flex items-center gap-2 px-4 py-2.5 bg-primary text-white rounded-xl text-sm font-bold hover:bg-primary/90 transition-colors shadow-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <FileSpreadsheet size={18} />
+            Xuất Excel
+          </button>
+          <button
             onClick={() => setShowResetConfirm(true)}
             disabled={!analytics || analytics.totalResponses === 0}
             className="hidden md:flex items-center gap-2 px-4 py-2.5 bg-white border border-sentiment-negative/30 rounded-xl text-sm font-bold text-sentiment-negative hover:bg-sentiment-negative/10 transition-colors shadow-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
@@ -218,6 +237,7 @@ export function Analytics() {
             <InsightCard icon={<Clock3 size={19} />} label="Ngày có phản hồi" value={responseDays} detail={latestResponse ? `Mới nhất: ${new Date(latestResponse.submittedAt).toLocaleDateString('vi-VN')}` : 'Chưa có dữ liệu'} tone="text-primary bg-primary-fixed" />
             <InsightCard icon={<MessageSquare size={19} />} label="Câu trả lời mở" value={analytics.textResponses.reduce((sum, item) => sum + item.responses.length, 0)} detail={`${analytics.textResponses.length} câu tự do`} tone="text-on-secondary-fixed bg-secondary-fixed" />
             <InsightCard icon={<TrendingUp size={19} />} label="Tỷ lệ trả lời" value={`${questionMetrics.length ? Math.round(questionMetrics.reduce((sum, item) => sum + item.rate, 0) / questionMetrics.length) : 0}%`} detail="Trung bình toàn bộ câu hỏi" tone="text-sentiment-neutral bg-sentiment-neutral/10" />
+            {selectedSurvey?.isQuiz && analytics.passRate !== undefined && <InsightCard icon={<CheckCircle size={19} />} label="Đạt từ 50%" value={`${analytics.passRate}%`} detail={`Trung vị: ${analytics.medianScore ?? 0} điểm`} tone="text-sentiment-positive bg-sentiment-positive/10" />}
           </section>
 
           <section className="bg-surface-container-lowest rounded-3xl border border-border-subtle shadow-sm overflow-hidden">
@@ -299,7 +319,7 @@ export function Analytics() {
               {visibleQuestionMetrics.map(({ question, answered, missing, rate }, index) => {
                 const choice = analytics.choiceDistributions.find(item => item.questionId === question.id);
                 const rating = analytics.starRatings.find(item => item.questionId === question.id);
-                const npsQuestion = question.type === 'nps' ? analytics.nps : null;
+                const npsQuestion = question.type === 'nps' ? analytics.npsByQuestion.find(item => item.questionId === question.id) : null;
                 const text = analytics.textResponses.find(item => stripHtml(item.questionText) === stripHtml(question.text));
                 const chartValues = choice?.options || [];
                 const maxChoice = Math.max(...chartValues.map(item => item.count), 1);
@@ -481,6 +501,21 @@ export function Analytics() {
                     <p className="text-xs font-semibold text-primary uppercase tracking-widest mb-1">Điểm số trung bình</p>
                     <p className="font-display text-2xl font-bold text-primary">{analytics.averageScore} / {analytics.quizTotalQuestions}</p>
                   </div>
+                </div>
+              </div>
+            )}
+
+            {selectedSurvey?.isQuiz && analytics.scoreDistribution && (
+              <div className="col-span-2 bg-surface-container-lowest p-6 rounded-3xl border border-border-subtle shadow-sm">
+                <div className="flex items-center justify-between mb-4">
+                  <div><p className="text-xs font-semibold text-text-secondary uppercase tracking-widest">Phân bố kết quả</p><p className="text-sm text-text-primary font-bold mt-1">Điểm trung vị {analytics.medianScore ?? 0} · Đạt từ 50%: {analytics.passRate ?? 0}%</p></div>
+                  <BarChart3 className="text-primary" size={22} />
+                </div>
+                <div className="grid grid-cols-4 gap-3 items-end h-28">
+                  {analytics.scoreDistribution.map(bucket => {
+                    const max = Math.max(...analytics.scoreDistribution!.map(item => item.count), 1);
+                    return <div key={bucket.label} className="h-full flex flex-col justify-end items-center gap-2"><span className="text-xs font-bold text-primary">{bucket.count}</span><div className="w-full max-w-14 rounded-t-lg bg-secondary-container" style={{ height: `${Math.max((bucket.count / max) * 100, bucket.count ? 6 : 0)}%` }} /><span className="text-[10px] text-text-secondary whitespace-nowrap">{bucket.label}</span></div>;
+                  })}
                 </div>
               </div>
             )}

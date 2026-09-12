@@ -25,6 +25,7 @@
     "@vitejs/plugin-react": "^4.4.1",
     "cors": "^2.8.5",
     "dotenv": "^16.5.0",
+    "exceljs": "^4.4.0",
     "express": "^5.1.0",
     "firebase": "^12.16.0",
     "firebase-admin": "^14.4.0",

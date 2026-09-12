@@ -36,6 +36,11 @@ export interface SurveyAnalytics {
   recentResponses: SurveyResponse[];
   averageScore?: number;
   quizTotalQuestions?: number;
+  medianScore?: number;
+  passRate?: number;
+  scoreDistribution?: { label: string; count: number }[];
+  npsByQuestion: (NpsResult & { questionId: string; questionText: string; totalAnswered: number })[];
+  questionMetrics: { questionId: string; questionText: string; type: string; required: boolean; answered: number; missing: number; answerRate: number; correctCount?: number; correctRate?: number }[];
 }
 
 export function calculateNps(scores: number[]): NpsResult | null {
@@ -120,13 +125,61 @@ export function computeSurveyAnalytics(survey: Survey, responses: SurveyResponse
 
   const completionRate = totalResponses > 0 ? Math.round((fullyAnswered / totalResponses) * 100) : 0;
 
-  const npsQuestion = survey.questions.find(q => q.type === 'nps');
-  const npsScores = npsQuestion
-    ? responses
-        .map(r => r.answers[npsQuestion.id])
-        .filter((v): v is number => typeof v === 'number' && !isNaN(v) && v >= 0 && v <= 10)
+  const npsByQuestion = survey.questions
+    .filter(q => q.type === 'nps')
+    .flatMap(question => {
+      const scores = responses
+        .map(r => r.answers[question.id])
+        .filter((v): v is number => typeof v === 'number' && !isNaN(v) && v >= 0 && v <= 10);
+      const result = calculateNps(scores);
+      return result ? [{ ...result, questionId: question.id, questionText: question.text, totalAnswered: scores.length }] : [];
+    });
+  const nps = npsByQuestion[0] || null;
+
+  const questionMetrics = survey.questions.map(question => {
+    let answered = 0;
+    let correctCount = 0;
+    for (const response of responses) {
+      const answer = response.answers[question.id];
+      const hasAnswer = answer !== undefined && answer !== null && answer !== '' && !(Array.isArray(answer) && answer.length === 0);
+      if (!hasAnswer) continue;
+      answered++;
+      if (question.type === 'single_choice' && typeof question.correctAnswer === 'string' && answer === question.correctAnswer) correctCount++;
+      if (question.type === 'multiple_choice' && Array.isArray(question.correctAnswer) && Array.isArray(answer)) {
+        const actual = [...answer].sort();
+        const expected = [...question.correctAnswer].sort();
+        if (actual.length === expected.length && actual.every((value, index) => value === expected[index])) correctCount++;
+      }
+    }
+    const canScore = (question.type === 'single_choice' && typeof question.correctAnswer === 'string' && question.correctAnswer.trim()) || (question.type === 'multiple_choice' && Array.isArray(question.correctAnswer) && question.correctAnswer.length > 0);
+    return {
+      questionId: question.id,
+      questionText: question.text,
+      type: question.type,
+      required: Boolean(question.required),
+      answered,
+      missing: totalResponses - answered,
+      answerRate: totalResponses ? Math.round((answered / totalResponses) * 100) : 0,
+      ...(canScore ? { correctCount, correctRate: answered ? Math.round((correctCount / answered) * 100) : 0 } : {}),
+    };
+  });
+
+  const scoredResponses = survey.isQuiz
+    ? responses.filter(response => response.score !== undefined && response.score !== null && !isNaN(Number(response.score)))
     : [];
-  const nps = calculateNps(npsScores);
+  const scorePercents = scoredResponses.map(response => {
+    const total = Number(response.totalQuizQuestions) || calculatedTotalPossible;
+    return total > 0 ? (Number(response.score) / total) * 100 : 0;
+  });
+  const sortedScores = [...scoredResponses].map(response => Number(response.score)).sort((a, b) => a - b);
+  const midpoint = Math.floor(sortedScores.length / 2);
+  const medianScore = sortedScores.length ? (sortedScores.length % 2 ? sortedScores[midpoint] : (sortedScores[midpoint - 1] + sortedScores[midpoint]) / 2) : undefined;
+  const scoreDistribution = survey.isQuiz && scorePercents.length ? [
+    { label: '0–49%', count: scorePercents.filter(value => value < 50).length },
+    { label: '50–69%', count: scorePercents.filter(value => value >= 50 && value < 70).length },
+    { label: '70–84%', count: scorePercents.filter(value => value >= 70 && value < 85).length },
+    { label: '85–100%', count: scorePercents.filter(value => value >= 85).length },
+  ] : undefined;
 
   const choiceDistributions: ChoiceDistribution[] = [];
   for (const q of survey.questions.filter(q => q.type === 'single_choice' || q.type === 'multiple_choice')) {
@@ -206,6 +259,11 @@ export function computeSurveyAnalytics(survey: Survey, responses: SurveyResponse
       .sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime()),
     averageScore: quizCount > 0 ? Number((totalScore / quizCount).toFixed(1)) : undefined,
     quizTotalQuestions: quizTotalQuestions && quizTotalQuestions > 0 ? quizTotalQuestions : undefined,
+    medianScore,
+    passRate: scorePercents.length ? Math.round((scorePercents.filter(value => value >= 50).length / scorePercents.length) * 100) : undefined,
+    scoreDistribution,
+    npsByQuestion,
+    questionMetrics,
   };
 }
 
