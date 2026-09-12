@@ -93,6 +93,16 @@ function drawDoughnutChart(title: string, labels: string[], values: number[]) {
     ctx.closePath();
     ctx.fillStyle = `#${PALETTE[index % PALETTE.length]}`;
     ctx.fill();
+    const share = value / total;
+    if (share >= 0.05) {
+      const labelAngle = startAngle + (endAngle - startAngle) / 2;
+      const labelRadius = (outerRadius + innerRadius) / 2;
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 15px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText(`${Math.round(share * 100)}%`, centerX + Math.cos(labelAngle) * labelRadius, centerY + Math.sin(labelAngle) * labelRadius + 5);
+      ctx.textAlign = 'left';
+    }
     startAngle = endAngle;
   });
   ctx.beginPath();
@@ -108,8 +118,11 @@ function drawDoughnutChart(title: string, labels: string[], values: number[]) {
   ctx.fillText('phản hồi', centerX, centerY + 22);
   ctx.textAlign = 'left';
 
+  ctx.fillStyle = '#172033';
+  ctx.font = 'bold 16px Arial';
+  ctx.fillText('Ghi chú', 545, 88);
   labels.forEach((label, index) => {
-    const y = 115 + index * 58;
+    const y = 130 + index * 58;
     const percent = Math.round((values[index] / total) * 100);
     ctx.fillStyle = `#${PALETTE[index % PALETTE.length]}`;
     ctx.fillRect(545, y - 14, 18, 18);
