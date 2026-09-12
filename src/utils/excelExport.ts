@@ -6,6 +6,23 @@ import { cleanHtmlWhitespace, stripHtml } from './stringUtils';
 const BRAND = '3730A3';
 const PALETTE = ['3730A3', '006591', '60A5FA', '10B981', 'F59E0B', 'EF4444'];
 
+function displayText(value: string | undefined) {
+  return stripHtml(cleanHtmlWhitespace(value)).replace(/\s+/g, ' ').trim();
+}
+
+function shortenText(value: string, maxLength = 58) {
+  return value.length > maxLength ? `${value.slice(0, maxLength - 1).trimEnd()}…` : value;
+}
+
+function createDownloadFilename(title: string) {
+  const safeTitle = displayText(title)
+    .normalize('NFC')
+    .replace(/[\\/:*?"<>|]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return `${safeTitle || 'Phân tích khảo sát'}_phan-tich.xlsx`;
+}
+
 function drawBarChart(title: string, labels: string[], values: number[], color = '#3730a3') {
   const canvas = document.createElement('canvas');
   canvas.width = 1100;
@@ -62,6 +79,44 @@ function formatSheet(sheet: ExcelJS.Worksheet, widths: number[]) {
   });
 }
 
+function addChartSection(
+  sheet: ExcelJS.Worksheet,
+  startRow: number,
+  title: string,
+  headers: [string, string, string],
+  rows: Array<[string, number, number]>,
+  color: string,
+) {
+  sheet.mergeCells(`A${startRow}:C${startRow}`);
+  const titleCell = sheet.getCell(`A${startRow}`);
+  titleCell.value = title;
+  titleCell.font = { bold: true, color: { argb: `FF${BRAND}` }, size: 12 };
+  titleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEDE9FE' } };
+  titleCell.alignment = { vertical: 'middle' };
+  sheet.getRow(startRow).height = 24;
+
+  const headerRow = sheet.getRow(startRow + 1);
+  headerRow.values = headers;
+  headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+  headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${BRAND}` } };
+  headerRow.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+
+  rows.forEach((row, index) => {
+    const target = sheet.getRow(startRow + index + 2);
+    target.values = row;
+    target.alignment = { vertical: 'top', wrapText: true };
+  });
+  sheet.getColumn(3).numFmt = '0.0%';
+
+  const chart = drawBarChart(title, rows.map(([label]) => label), rows.map(([, count]) => count), color);
+  if (chart) {
+    const id = sheet.workbook.addImage({ base64: chart, extension: 'png' });
+    sheet.addImage(id, { tl: { col: 4, row: startRow - 1 }, ext: { width: 720, height: 340 } });
+  }
+
+  return Math.max(startRow + rows.length + 4, startRow + 23);
+}
+
 export async function exportSurveyAnalysisToExcel(survey: Survey, responses: SurveyResponse[]) {
   const analytics = computeSurveyAnalytics(survey, responses);
   const workbook = new ExcelJS.Workbook();
@@ -70,7 +125,7 @@ export async function exportSurveyAnalysisToExcel(survey: Survey, responses: Sur
 
   const overview = workbook.addWorksheet('Tổng quan');
   overview.mergeCells('A1:F1');
-  overview.getCell('A1').value = `Phân tích khảo sát: ${stripHtml(survey.title)}`;
+  overview.getCell('A1').value = `Phân tích khảo sát: ${displayText(survey.title)}`;
   overview.getCell('A1').font = { bold: true, size: 18, color: { argb: 'FFFFFFFF' } };
   overview.getCell('A1').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${BRAND}` } };
   overview.getCell('A1').alignment = { vertical: 'middle' };
@@ -96,20 +151,21 @@ export async function exportSurveyAnalysisToExcel(survey: Survey, responses: Sur
   const questionSheet = workbook.addWorksheet('Phân tích câu hỏi');
   questionSheet.addRow(['STT', 'Câu hỏi', 'Loại', 'Bắt buộc', 'Đã trả lời', 'Bỏ qua', 'Tỷ lệ trả lời', 'Đúng', 'Tỷ lệ đúng']);
   analytics.questionMetrics.forEach((metric, index) => questionSheet.addRow([
-    index + 1, stripHtml(cleanHtmlWhitespace(metric.questionText)), metric.type, metric.required ? 'Có' : 'Không', metric.answered, metric.missing, metric.answerRate / 100, metric.correctCount ?? '', metric.correctRate !== undefined ? metric.correctRate / 100 : '',
+    index + 1, displayText(metric.questionText), metric.type, metric.required ? 'Có' : 'Không', metric.answered, metric.missing, metric.answerRate / 100, metric.correctCount ?? null, metric.correctRate !== undefined ? metric.correctRate / 100 : null,
   ]));
   formatSheet(questionSheet, [8, 55, 20, 12, 15, 12, 18, 12, 16]);
   questionSheet.getColumn(7).numFmt = '0.0%'; questionSheet.getColumn(9).numFmt = '0.0%';
 
   const raw = workbook.addWorksheet('Dữ liệu phản hồi');
-  raw.addRow(['Mã phản hồi', 'Thời gian gửi', ...(survey.isQuiz ? ['Điểm', 'Điểm tối đa', 'Tỷ lệ điểm'] : []), ...survey.questions.map(question => stripHtml(cleanHtmlWhitespace(question.text)))]);
+  raw.addRow(['Mã phản hồi', 'Thời gian gửi', ...(survey.isQuiz ? ['Điểm', 'Điểm tối đa', 'Tỷ lệ điểm'] : []), ...survey.questions.map(question => displayText(question.text))]);
   responses.forEach(response => raw.addRow([
     response.id,
     new Date(response.submittedAt),
     ...(survey.isQuiz ? [response.score ?? '', response.totalQuizQuestions ?? '', response.score !== null && response.score !== undefined && response.totalQuizQuestions ? Number(response.score) / Number(response.totalQuizQuestions) : ''] : []),
     ...survey.questions.map(question => {
       const answer = response.answers[question.id];
-      return Array.isArray(answer) ? answer.join('; ') : answer ?? '';
+      if (Array.isArray(answer)) return answer.map(item => displayText(String(item))).join('; ');
+      return typeof answer === 'string' ? displayText(answer) : answer ?? '';
     }),
   ]));
   formatSheet(raw, [22, 21, ...(survey.isQuiz ? [12, 14, 14] : []), ...survey.questions.map(() => 30)]);
@@ -117,25 +173,74 @@ export async function exportSurveyAnalysisToExcel(survey: Survey, responses: Sur
   if (survey.isQuiz) raw.getColumn(5).numFmt = '0.0%';
 
   const chartSheet = workbook.addWorksheet('Biểu đồ');
-  chartSheet.getColumn(1).width = 24;
-  chartSheet.getColumn(2).width = 18;
-  chartSheet.addRow(['Câu hỏi', 'Tỷ lệ trả lời']);
-  analytics.questionMetrics.forEach(metric => chartSheet.addRow([stripHtml(cleanHtmlWhitespace(metric.questionText)), metric.answerRate]));
-  formatSheet(chartSheet, [42, 20]);
-  const responseRateChart = drawBarChart('Tỷ lệ trả lời theo câu hỏi', analytics.questionMetrics.map((_, index) => `Câu ${index + 1}`), analytics.questionMetrics.map(metric => metric.answerRate), '#3730a3');
-  if (responseRateChart) {
-    const id = workbook.addImage({ base64: responseRateChart, extension: 'png' });
-    chartSheet.addImage(id, { tl: { col: 3, row: 1 }, ext: { width: 720, height: 340 } });
-  }
+  chartSheet.views = [{ showGridLines: false }];
+  chartSheet.getColumn(1).width = 44;
+  chartSheet.getColumn(2).width = 16;
+  chartSheet.getColumn(3).width = 14;
+  chartSheet.getColumn(4).width = 3;
+  chartSheet.mergeCells('A1:C1');
+  chartSheet.getCell('A1').value = 'Biểu đồ phân tích phản hồi';
+  chartSheet.getCell('A1').font = { bold: true, size: 16, color: { argb: 'FF172033' } };
+  chartSheet.getCell('A2').value = 'Các biểu đồ thể hiện dữ liệu thực tế theo từng câu hỏi.';
+  chartSheet.getCell('A2').font = { italic: true, color: { argb: 'FF64748B' } };
+
+  let nextChartRow = 4;
+  nextChartRow = addChartSection(
+    chartSheet,
+    nextChartRow,
+    'Tỷ lệ trả lời theo câu hỏi',
+    ['Câu hỏi', 'Tỷ lệ trả lời', 'Tỷ lệ'],
+    analytics.questionMetrics.map((metric, index) => [shortenText(`Câu ${index + 1}: ${displayText(metric.questionText)}`), metric.answerRate, metric.answerRate / 100]),
+    '#3730A3',
+  );
+
+  analytics.choiceDistributions.forEach((distribution, index) => {
+    if (distribution.options.length === 0) return;
+    nextChartRow = addChartSection(
+      chartSheet,
+      nextChartRow,
+      `Câu ${survey.questions.findIndex(question => question.id === distribution.questionId) + 1}: ${shortenText(displayText(distribution.questionText), 64)}`,
+      ['Lựa chọn', 'Số lượt chọn', 'Tỷ lệ'],
+      distribution.options.map(option => [shortenText(displayText(option.label)), option.count, option.percent / 100]),
+      `#${PALETTE[(index + 1) % PALETTE.length]}`,
+    );
+  });
+
+  analytics.starRatings.forEach((rating, index) => {
+    nextChartRow = addChartSection(
+      chartSheet,
+      nextChartRow,
+      `Câu ${survey.questions.findIndex(question => question.id === rating.questionId) + 1}: ${shortenText(displayText(rating.questionText), 64)}`,
+      ['Mức đánh giá', 'Số phản hồi', 'Tỷ lệ'],
+      [1, 2, 3, 4, 5].map(star => [`${star} sao`, rating.distribution[star] || 0, rating.totalAnswered ? (rating.distribution[star] || 0) / rating.totalAnswered : 0]),
+      `#${PALETTE[(index + 2) % PALETTE.length]}`,
+    );
+  });
+
+  analytics.npsByQuestion.forEach((result, index) => {
+    nextChartRow = addChartSection(
+      chartSheet,
+      nextChartRow,
+      `Câu ${survey.questions.findIndex(question => question.id === result.questionId) + 1}: ${shortenText(displayText(result.questionText), 64)}`,
+      ['Nhóm NPS', 'Số phản hồi', 'Tỷ lệ'],
+      [
+        ['Ủng hộ', result.promoters, result.promoterPercent / 100],
+        ['Thụ động', result.passives, result.passivePercent / 100],
+        ['Phản đối', result.detractors, result.detractorPercent / 100],
+      ],
+      `#${PALETTE[(index + 3) % PALETTE.length]}`,
+    );
+  });
+
   if (analytics.scoreDistribution) {
-    const startRow = analytics.questionMetrics.length + 4;
-    chartSheet.getCell(`A${startRow}`).value = 'Khoảng điểm'; chartSheet.getCell(`B${startRow}`).value = 'Số người';
-    analytics.scoreDistribution.forEach((item, index) => chartSheet.getRow(startRow + index + 1).values = [item.label, item.count]);
-    const scoreChart = drawBarChart('Phân bố điểm bài kiểm tra', analytics.scoreDistribution.map(item => item.label), analytics.scoreDistribution.map(item => item.count), '#006591');
-    if (scoreChart) {
-      const id = workbook.addImage({ base64: scoreChart, extension: 'png' });
-      chartSheet.addImage(id, { tl: { col: 3, row: 20 }, ext: { width: 720, height: 340 } });
-    }
+    addChartSection(
+      chartSheet,
+      nextChartRow,
+      'Phân bố điểm bài kiểm tra',
+      ['Khoảng điểm', 'Số người', 'Tỷ lệ'],
+      analytics.scoreDistribution.map(item => [item.label, item.count, analytics.totalResponses ? item.count / analytics.totalResponses : 0]),
+      '#006591',
+    );
   }
 
   const buffer = await workbook.xlsx.writeBuffer();
@@ -143,7 +248,7 @@ export async function exportSurveyAnalysisToExcel(survey: Survey, responses: Sur
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
-  link.download = `${stripHtml(survey.title).replace(/[^a-zA-Z0-9]/g, '_') || 'survey'}_analysis.xlsx`;
+  link.download = createDownloadFilename(survey.title);
   link.click();
   URL.revokeObjectURL(url);
 }
