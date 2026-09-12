@@ -16,9 +16,10 @@ export function Dashboard({
   onShowToast?: (msg: string, type: 'success' | 'error' | 'info') => void;
   onAddNotification?: (msg: string) => void;
 }) {
-  const { surveys, drafts, fetchSurveys, fetchDrafts, setCurrentSurvey, deleteSurvey, searchQuery } = useSurvey();
+  const { surveys, drafts, fetchSurveys, fetchDrafts, setCurrentSurvey, deleteSurvey, deleteDraft, searchQuery } = useSurvey();
   const [shareModal, setShareModal] = useState<{ id: string; title: string } | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; title: string } | null>(null);
+  const [deleteDraftConfirm, setDeleteDraftConfirm] = useState<{ id: string; title: string } | null>(null);
 
   useEffect(() => {
     void fetchSurveys();
@@ -120,6 +121,15 @@ export function Dashboard({
                       <span className="w-1.5 h-1.5 rounded-full bg-sentiment-neutral animate-pulse"></span>
                       Nháp
                     </div>
+                    <button
+                      type="button"
+                      onClick={() => setDeleteDraftConfirm({ id: draft.id, title: draft.title })}
+                      className="p-1.5 text-text-secondary hover:text-sentiment-negative transition-colors cursor-pointer rounded-lg hover:bg-sentiment-negative/10"
+                      title="Xóa bản nháp"
+                      aria-label={`Xóa bản nháp ${stripHtml(draft.title)}`}
+                    >
+                      <Trash2 size={16} />
+                    </button>
                   </div>
                   <button type="button" onClick={() => onViewChange?.('builder')} className="text-left cursor-pointer min-w-0">
                     <h4 className="font-display text-lg font-bold text-text-primary group-hover:text-primary transition-colors mb-1 leading-tight line-clamp-2 break-all" title={stripHtml(draft.title)}>{stripHtml(draft.title)}</h4>
@@ -237,6 +247,33 @@ export function Dashboard({
                     setDeleteConfirm(null);
                   }
                 }} 
+                className="px-4 py-2 bg-sentiment-negative text-white rounded-lg font-semibold text-sm hover:bg-sentiment-negative/90 transition-colors shadow-sm cursor-pointer"
+              >
+                Đồng ý xóa
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deleteDraftConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-surface-background/80 backdrop-blur-sm p-4">
+          <div className="bg-surface-container-lowest border border-border-subtle rounded-2xl p-6 max-w-sm w-full shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+            <h3 className="font-display text-xl font-bold text-text-primary mb-2">Xóa bản nháp?</h3>
+            <p className="text-text-secondary text-sm mb-6">Bạn có chắc chắn muốn xóa bản nháp “{stripHtml(deleteDraftConfirm.title)}” không? Thao tác này không thể hoàn tác.</p>
+            <div className="flex justify-end gap-3">
+              <button onClick={() => setDeleteDraftConfirm(null)} className="px-4 py-2 rounded-lg font-semibold text-sm text-text-secondary hover:bg-surface-container-high transition-colors cursor-pointer">Hủy</button>
+              <button
+                onClick={async () => {
+                  try {
+                    await deleteDraft(deleteDraftConfirm.id);
+                    onShowToast?.('Đã xóa bản nháp.', 'success');
+                  } catch {
+                    onShowToast?.('Không thể xóa bản nháp. Vui lòng thử lại.', 'error');
+                  } finally {
+                    setDeleteDraftConfirm(null);
+                  }
+                }}
                 className="px-4 py-2 bg-sentiment-negative text-white rounded-lg font-semibold text-sm hover:bg-sentiment-negative/90 transition-colors shadow-sm cursor-pointer"
               >
                 Đồng ý xóa

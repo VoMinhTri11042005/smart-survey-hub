@@ -352,10 +352,21 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const deleteDraft = useCallback(async (id: string) => {
-    try {
-      await fetch(`${API_BASE}/surveys/drafts/${id}`, { method: 'DELETE', headers: { 'X-Confirm-Action': 'delete-draft' } });
-    } catch (error) {
-      console.error('Error deleting draft:', error);
+    const res = await fetch(`${API_BASE}/surveys/drafts/${id}`, { method: 'DELETE', headers: { 'X-Confirm-Action': 'delete-draft' } });
+    if (!res.ok) throw new Error('Failed to delete draft');
+
+    // Keep the browser fallback storage in sync, without touching other drafts.
+    for (const key of ['smart-survey-hub-builder-draft', 'smart-survey-hub-drafts']) {
+      try {
+        const raw = localStorage.getItem(key);
+        if (!raw) continue;
+        const value = JSON.parse(raw);
+        const next = Array.isArray(value) ? value.filter((draft: any) => draft?.id !== id) : value?.id === id ? null : value;
+        if (next === null) localStorage.removeItem(key);
+        else localStorage.setItem(key, JSON.stringify(next));
+      } catch (error) {
+        console.warn('Failed to synchronize local draft storage', error);
+      }
     }
     setDrafts(prev => prev.filter(d => d.id !== id));
   }, []);
