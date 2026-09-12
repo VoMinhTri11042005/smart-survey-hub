@@ -143,12 +143,17 @@ export async function updateSurvey(id: string, data: any) {
     const existing = inMemorySurveys[id];
     if (!existing) return null;
     const survey = {
-      ...existing, title: title ?? existing.title, description: description ?? existing.description,
-      questions: questions ?? existing.questions, status: status ?? existing.status,
-      isQuiz: isQuiz ?? existing.isQuiz, displayMode: displayMode ?? existing.displayMode,
-      showScore: showScore ?? existing.showScore, closesAt: closesAt ?? existing.closesAt,
-      maxAttemptsPerDevice: maxAttemptsPerDevice ?? existing.maxAttemptsPerDevice,
-      timeLimitMinutes: timeLimitMinutes ?? existing.timeLimitMinutes,
+      ...existing,
+      title: data.title ?? existing.title,
+      description: data.description ?? existing.description,
+      questions: data.questions ?? existing.questions,
+      status: data.status ?? existing.status,
+      isQuiz: data.isQuiz ?? existing.isQuiz,
+      displayMode: data.displayMode ?? existing.displayMode,
+      showScore: data.showScore ?? existing.showScore,
+      closesAt: data.closesAt ?? existing.closesAt,
+      maxAttemptsPerDevice: data.maxAttemptsPerDevice ?? existing.maxAttemptsPerDevice,
+      timeLimitMinutes: data.timeLimitMinutes ?? existing.timeLimitMinutes,
     };
     inMemorySurveys[id] = survey;
     return survey;

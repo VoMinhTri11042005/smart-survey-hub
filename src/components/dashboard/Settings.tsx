@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ChangeEvent, type FormEvent } from 'react';
 import { Camera, Save, User, Mail, Briefcase, RefreshCw, X } from 'lucide-react';
 import type { UserProfile } from '../../types';
 import { ToastType } from '../common/Toast';
@@ -15,7 +15,7 @@ export function Settings({ profile, onUpdateProfile, onClose, onShowToast, onAdd
   const [formData, setFormData] = useState<UserProfile>(profile);
   const [isSaving, setIsSaving] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setIsSaving(true);
 
@@ -48,7 +48,7 @@ export function Settings({ profile, onUpdateProfile, onClose, onShowToast, onAdd
     }
   };
 
-  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePhotoUpload = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();

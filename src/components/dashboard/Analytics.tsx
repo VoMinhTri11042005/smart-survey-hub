@@ -55,8 +55,8 @@ export function Analytics() {
     timeline[day] = (timeline[day] || 0) + 1;
     return timeline;
   }, {});
-  const timelineEntries = Object.entries(responseTimeline).slice(-14);
-  const maxTimelineResponses = Math.max(...timelineEntries.map(([, count]) => count), 1);
+  const timelineEntries = Object.entries(responseTimeline).slice(-14) as [string, number][];
+  const maxTimelineResponses = Math.max(...timelineEntries.map(([, count]) => Number(count)), 1);
   const visibleQuestionMetrics = filteredQuestionMetrics.filter(({ question }) => {
     if (questionFilter === 'all') return true;
     if (questionFilter === 'choice') return question.type === 'single_choice' || question.type === 'multiple_choice';
@@ -248,7 +248,7 @@ export function Analytics() {
                     <div key={day} className="flex-1 min-w-0 h-full flex flex-col items-center justify-end gap-2">
                       <span className="text-[11px] font-bold text-primary">{count}</span>
                       <div className="w-full max-w-10 rounded-t-lg bg-primary/15 flex items-end h-32">
-                        <div className="w-full rounded-t-lg bg-primary transition-all duration-700" style={{ height: `${Math.max((count / maxTimelineResponses) * 100, 6)}%` }} />
+                        <div className="w-full rounded-t-lg bg-primary transition-all duration-700" style={{ height: `${Math.max((Number(count) / maxTimelineResponses) * 100, 6)}%` }} />
                       </div>
                       <span className="text-[10px] text-text-secondary truncate max-w-full">{day}</span>
                     </div>
@@ -412,13 +412,14 @@ export function Analytics() {
                   <div key={dist.questionId} className="space-y-3">
                     <p className="text-xs font-semibold text-text-secondary">{stripHtml(dist.questionText)}</p>
                     {dist.options.map((opt, i) => (
-                      <ProgressBar
-                        key={opt.label}
-                        label={stripHtml(opt.label)}
-                        count={`${opt.count} phản hồi`}
-                        percent={opt.percent}
-                        color={['bg-primary-container', 'bg-secondary-container', 'bg-primary-fixed-dim', 'bg-surface-container-highest'][i % 4]}
-                      />
+                      <div key={opt.label}>
+                        <ProgressBar
+                          label={stripHtml(opt.label)}
+                          count={`${opt.count} phản hồi`}
+                          percent={opt.percent}
+                          color={['bg-primary-container', 'bg-secondary-container', 'bg-primary-fixed-dim', 'bg-surface-container-highest'][i % 4]}
+                        />
+                      </div>
                     ))}
                   </div>
                 ))}

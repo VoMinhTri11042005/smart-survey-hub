@@ -18,7 +18,7 @@ export async function list(_req: Request, res: Response, next: NextFunction) {
   } catch (err) { next(err); }
 }
 
-export async function getById(req: Request, res: Response, next: NextFunction) {
+export async function getById(req: Request<{ id: string }>, res: Response, next: NextFunction) {
   try {
     const survey = await surveyService.getSurveyById(req.params.id);
     if (!survey) return res.status(404).json({ error: 'Không tìm thấy khảo sát.' });
@@ -26,7 +26,7 @@ export async function getById(req: Request, res: Response, next: NextFunction) {
   } catch (err) { next(err); }
 }
 
-export async function update(req: Request, res: Response, next: NextFunction) {
+export async function update(req: Request<{ id: string }>, res: Response, next: NextFunction) {
   try {
     const survey = await surveyService.updateSurvey(req.params.id, req.body);
     if (!survey) return res.status(404).json({ error: 'Không tìm thấy khảo sát.' });
@@ -34,7 +34,7 @@ export async function update(req: Request, res: Response, next: NextFunction) {
   } catch (err) { next(err); }
 }
 
-export async function remove(req: Request, res: Response, next: NextFunction) {
+export async function remove(req: Request<{ id: string }>, res: Response, next: NextFunction) {
   try {
     const deleted = await surveyService.deleteSurvey(req.params.id);
     if (!deleted) return res.status(404).json({ error: 'Không tìm thấy khảo sát.' });

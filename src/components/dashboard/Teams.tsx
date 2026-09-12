@@ -1,9 +1,9 @@
 import { Users, UserPlus, Mail, Shield, Edit3, Eye, Trash2, X, RefreshCw } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { useSurvey } from '../../context/SurveyContext';
 import type { TeamRole } from '../../types';
 
-const roleLabels: Record<TeamRole, { label: string; icon: React.ReactNode; color: string }> = {
+const roleLabels: Record<TeamRole, { label: string; icon: ReactNode; color: string }> = {
   admin: { label: 'Quản trị', icon: <Shield size={14} />, color: 'bg-primary-fixed text-primary' },
   editor: { label: 'Biên tập', icon: <Edit3 size={14} />, color: 'bg-secondary-fixed text-secondary' },
   viewer: { label: 'Xem', icon: <Eye size={14} />, color: 'bg-surface-container text-text-secondary' },
@@ -20,7 +20,7 @@ export function Teams() {
 
   useEffect(() => { fetchTeamMembers(); }, [fetchTeamMembers]);
 
-  const handleInvite = async (e: React.FormEvent) => {
+  const handleInvite = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
     setIsInviting(true);

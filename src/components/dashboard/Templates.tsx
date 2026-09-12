@@ -1,10 +1,10 @@
 import { FileText, Sparkles, Search, CircleDot, CheckSquare, Star, AlignLeft, Minus } from 'lucide-react';
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { SURVEY_TEMPLATES, TEMPLATE_CATEGORIES } from '../../data/templates';
 import type { View, QuestionType } from '../../types';
 import { useSurvey } from '../../context/SurveyContext';
 
-const typeIcons: Record<QuestionType, React.ReactNode> = {
+const typeIcons: Record<QuestionType, ReactNode> = {
   single_choice: <CircleDot size={12} />,
   multiple_choice: <CheckSquare size={12} />,
   star_rating: <Star size={12} />,

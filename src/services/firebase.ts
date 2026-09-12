@@ -1,3 +1,4 @@
+/// <reference types="vite/client" />
 /**
  * Firebase Configuration & Authentication Service
  * Cung cấp Google Sign-In cho Smart Survey Hub.

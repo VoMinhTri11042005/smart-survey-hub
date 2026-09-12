@@ -31,7 +31,7 @@ export const UpdateSurveySchema = CreateSurveySchema.partial();
 
 export const SubmitResponseSchema = z.object({
   respondentId: z.string().min(1, 'Thiếu định danh người dùng.'),
-  answers: z.record(z.union([z.string(), z.array(z.string()), z.number()])),
+  answers: z.record(z.string(), z.union([z.string(), z.array(z.string()), z.number()])),
   score: z.number().nullable().optional(),
   totalQuizQuestions: z.number().nullable().optional(),
 });

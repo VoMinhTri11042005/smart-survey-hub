@@ -18,7 +18,7 @@ export async function save(req: Request, res: Response, next: NextFunction) {
   } catch (err) { next(err); }
 }
 
-export async function remove(req: Request, res: Response, next: NextFunction) {
+export async function remove(req: Request<{ id: string }>, res: Response, next: NextFunction) {
   try {
     const deleted = await surveyService.deleteDraft(req.params.id);
     if (!deleted) return res.status(404).json({ error: 'Draft not found' });
