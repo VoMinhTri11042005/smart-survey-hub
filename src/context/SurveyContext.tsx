@@ -353,7 +353,7 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
 
   const deleteDraft = useCallback(async (id: string) => {
     try {
-      await fetch(`${API_BASE}/surveys/drafts/${id}`, { method: 'DELETE' });
+      await fetch(`${API_BASE}/surveys/drafts/${id}`, { method: 'DELETE', headers: { 'X-Confirm-Action': 'delete-draft' } });
     } catch (error) {
       console.error('Error deleting draft:', error);
     }
@@ -362,7 +362,7 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
 
   const deleteSurvey = useCallback(async (id: string) => {
     try {
-      await fetch(`${API_BASE}/surveys/${id}`, { method: 'DELETE' });
+      await fetch(`${API_BASE}/surveys/${id}`, { method: 'DELETE', headers: { 'X-Confirm-Action': 'delete-survey' } });
     } catch (e) {
       console.error('Error deleting survey via API:', e);
     }
@@ -419,7 +419,7 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const resetResponses = useCallback(async (surveyId: string): Promise<number> => {
-    const res = await fetch(`${API_BASE}/surveys/${surveyId}/responses`, { method: 'DELETE' });
+    const res = await fetch(`${API_BASE}/surveys/${surveyId}/responses`, { method: 'DELETE', headers: { 'X-Confirm-Action': 'reset-responses' } });
     if (!res.ok) throw new Error('Failed to reset survey responses');
     const data = await res.json();
     return data.deletedCount ?? 0;

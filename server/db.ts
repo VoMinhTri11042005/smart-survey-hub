@@ -16,12 +16,18 @@ pool.on('error', (err, client) => {
 
 export const initDB = async () => {
   if (!process.env.DATABASE_URL) {
-    console.warn('⚠️ WARNING: DATABASE_URL is not set. Database will fail.');
+    const message = 'DATABASE_URL is not set.';
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error(`${message} Refusing to start in production without durable storage.`);
+    }
+    console.warn(`⚠️ WARNING: ${message} Development-only in-memory mode is active.`);
     return;
   }
 
+  let client;
   try {
-    const client = await pool.connect();
+    client = await pool.connect();
+    await client.query('BEGIN');
     
     // Create surveys table
     await client.query(`
@@ -55,8 +61,9 @@ export const initDB = async () => {
       );
     `);
 
-    // In case table already exists without respondent_id or quiz columns
-    try {
+    // In case table already exists without respondent_id or quiz columns.
+    // Any unexpected conversion failure aborts startup and rolls back safely.
+    {
       await client.query(`ALTER TABLE surveys ADD COLUMN IF NOT EXISTS is_quiz BOOLEAN DEFAULT FALSE;`);
       await client.query(`ALTER TABLE surveys ADD COLUMN IF NOT EXISTS display_mode VARCHAR(32) DEFAULT 'single';`);
       await client.query(`ALTER TABLE surveys ADD COLUMN IF NOT EXISTS show_score BOOLEAN DEFAULT TRUE;`);
@@ -75,24 +82,21 @@ export const initDB = async () => {
       await client.query(`ALTER TABLE responses ALTER COLUMN score TYPE NUMERIC(10,2) USING score::numeric;`);
       await client.query(`ALTER TABLE responses ALTER COLUMN total_quiz_questions TYPE NUMERIC(10,2) USING total_quiz_questions::numeric;`);
 
-      // Xoá các bản ghi trùng (survey_id, respondent_id) còn sót lại từ trước khi
-      // constraint UNIQUE được thêm vào. Nếu không xoá, lệnh ADD CONSTRAINT bên
-      // dưới sẽ luôn thất bại âm thầm (bị catch nuốt lỗi), khiến ON CONFLICT
-      // trong route submit response báo lỗi 500 mỗi lần người dùng nộp bài.
-      await client.query(`
-        DELETE FROM responses a USING responses b
-        WHERE a.survey_id = b.survey_id
-          AND a.respondent_id = b.respondent_id
-          AND a.respondent_id IS NOT NULL
-          AND a.ctid < b.ctid;
+      const constraintCheck = await client.query(`
+        SELECT EXISTS (
+          SELECT 1 FROM pg_constraint
+          WHERE conname = 'responses_survey_id_respondent_id_key'
+        ) AS exists
       `);
-
-      await client.query(`ALTER TABLE responses ADD CONSTRAINT responses_survey_id_respondent_id_key UNIQUE (survey_id, respondent_id);`);
-    } catch (e: any) {
-      // Chỉ bỏ qua nếu constraint đã tồn tại sẵn (42710) hoặc lỗi tương tự (42P07).
-      // Mọi lỗi khác sẽ được log ra để dễ debug trên Render logs.
-      if (e?.code !== '42710' && e?.code !== '42P07') {
-        console.error('⚠️ Failed to ensure responses unique constraint:', e?.message || e);
+      if (!constraintCheck.rows[0].exists) {
+        await client.query('SAVEPOINT response_unique_constraint');
+        try {
+          // Never delete legacy duplicates just to make this constraint pass.
+          await client.query(`ALTER TABLE responses ADD CONSTRAINT responses_survey_id_respondent_id_key UNIQUE (survey_id, respondent_id);`);
+        } catch (e: any) {
+          await client.query('ROLLBACK TO SAVEPOINT response_unique_constraint');
+          console.error('⚠️ Could not add response uniqueness without changing existing data:', e?.message || e);
+        }
       }
     }
 
@@ -142,8 +146,8 @@ export const initDB = async () => {
       ON CONFLICT (id) DO NOTHING;
     `);
 
-    // Backward-compatible schema updates
-    try {
+    // Backward-compatible schema updates. These are additive only.
+    {
       await client.query(`ALTER TABLE surveys ADD COLUMN IF NOT EXISTS display_mode VARCHAR(32) DEFAULT 'single';`);
       await client.query(`ALTER TABLE surveys ADD COLUMN IF NOT EXISTS show_score BOOLEAN DEFAULT TRUE;`);
       await client.query(`ALTER TABLE surveys ADD COLUMN IF NOT EXISTS closes_at TIMESTAMP;`);
@@ -152,14 +156,16 @@ export const initDB = async () => {
       await client.query(`ALTER TABLE survey_drafts ADD COLUMN IF NOT EXISTS closes_at TIMESTAMP;`);
       await client.query(`ALTER TABLE survey_drafts ADD COLUMN IF NOT EXISTS max_attempts_per_device INTEGER;`);
       await client.query(`ALTER TABLE survey_drafts ADD COLUMN IF NOT EXISTS time_limit_minutes INTEGER;`);
-    } catch (e) {
-      // Ignore if the column already exists or migration is not needed.
     }
 
-    client.release();
+    await client.query('COMMIT');
     console.log('✅ PostgreSQL Database connected and tables initialized.');
   } catch (err) {
+    if (client) await client.query('ROLLBACK').catch(() => undefined);
     console.error('❌ Error connecting to PostgreSQL:', err);
+    throw err;
+  } finally {
+    client?.release();
   }
 };
 
