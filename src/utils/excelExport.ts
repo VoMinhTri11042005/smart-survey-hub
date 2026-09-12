@@ -66,6 +66,63 @@ function drawBarChart(title: string, labels: string[], values: number[], color =
   return canvas.toDataURL('image/png');
 }
 
+function drawDoughnutChart(title: string, labels: string[], values: number[]) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 1100;
+  canvas.height = 520;
+  const ctx = canvas.getContext('2d');
+  const total = values.reduce((sum, value) => sum + value, 0);
+  if (!ctx || total <= 0) return '';
+
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = '#172033';
+  ctx.font = 'bold 26px Arial';
+  ctx.fillText(title, 55, 55);
+
+  const centerX = 285;
+  const centerY = 285;
+  const outerRadius = 155;
+  const innerRadius = 82;
+  let startAngle = -Math.PI / 2;
+  values.forEach((value, index) => {
+    const endAngle = startAngle + (value / total) * Math.PI * 2;
+    ctx.beginPath();
+    ctx.moveTo(centerX, centerY);
+    ctx.arc(centerX, centerY, outerRadius, startAngle, endAngle);
+    ctx.closePath();
+    ctx.fillStyle = `#${PALETTE[index % PALETTE.length]}`;
+    ctx.fill();
+    startAngle = endAngle;
+  });
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, innerRadius, 0, Math.PI * 2);
+  ctx.fillStyle = '#ffffff';
+  ctx.fill();
+  ctx.fillStyle = '#172033';
+  ctx.font = 'bold 34px Arial';
+  ctx.textAlign = 'center';
+  ctx.fillText(String(total), centerX, centerY - 4);
+  ctx.font = '14px Arial';
+  ctx.fillStyle = '#64748b';
+  ctx.fillText('phản hồi', centerX, centerY + 22);
+  ctx.textAlign = 'left';
+
+  labels.forEach((label, index) => {
+    const y = 115 + index * 58;
+    const percent = Math.round((values[index] / total) * 100);
+    ctx.fillStyle = `#${PALETTE[index % PALETTE.length]}`;
+    ctx.fillRect(545, y - 14, 18, 18);
+    ctx.fillStyle = '#172033';
+    ctx.font = 'bold 15px Arial';
+    ctx.fillText(shortenText(label, 44), 575, y);
+    ctx.fillStyle = '#64748b';
+    ctx.font = '14px Arial';
+    ctx.fillText(`${values[index]} phản hồi (${percent}%)`, 575, y + 20);
+  });
+  return canvas.toDataURL('image/png');
+}
+
 function formatSheet(sheet: ExcelJS.Worksheet, widths: number[]) {
   sheet.views = [{ state: 'frozen', ySplit: 1 }];
   sheet.columns.forEach((column, index) => { column.width = widths[index] || 18; });
@@ -86,6 +143,7 @@ function addChartSection(
   headers: [string, string, string],
   rows: Array<[string, number, number]>,
   color: string,
+  chartKind: 'bar' | 'doughnut' = 'bar',
 ) {
   sheet.mergeCells(`A${startRow}:C${startRow}`);
   const titleCell = sheet.getCell(`A${startRow}`);
@@ -108,7 +166,9 @@ function addChartSection(
   });
   sheet.getColumn(3).numFmt = '0.0%';
 
-  const chart = drawBarChart(title, rows.map(([label]) => label), rows.map(([, count]) => count), color);
+  const chart = chartKind === 'doughnut'
+    ? drawDoughnutChart(title, rows.map(([label]) => label), rows.map(([, count]) => count))
+    : drawBarChart(title, rows.map(([label]) => label), rows.map(([, count]) => count), color);
   if (chart) {
     const id = sheet.workbook.addImage({ base64: chart, extension: 'png' });
     sheet.addImage(id, { tl: { col: 4, row: startRow - 1 }, ext: { width: 720, height: 340 } });
@@ -196,6 +256,7 @@ export async function exportSurveyAnalysisToExcel(survey: Survey, responses: Sur
 
   analytics.choiceDistributions.forEach((distribution, index) => {
     if (distribution.options.length === 0) return;
+    const question = survey.questions.find(item => item.id === distribution.questionId);
     nextChartRow = addChartSection(
       chartSheet,
       nextChartRow,
@@ -203,6 +264,7 @@ export async function exportSurveyAnalysisToExcel(survey: Survey, responses: Sur
       ['Lựa chọn', 'Số lượt chọn', 'Tỷ lệ'],
       distribution.options.map(option => [shortenText(displayText(option.label)), option.count, option.percent / 100]),
       `#${PALETTE[(index + 1) % PALETTE.length]}`,
+      question?.type === 'single_choice' && distribution.options.length <= 6 ? 'doughnut' : 'bar',
     );
   });
 
@@ -229,6 +291,7 @@ export async function exportSurveyAnalysisToExcel(survey: Survey, responses: Sur
         ['Phản đối', result.detractors, result.detractorPercent / 100],
       ],
       `#${PALETTE[(index + 3) % PALETTE.length]}`,
+      'doughnut',
     );
   });
 
