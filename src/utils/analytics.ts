@@ -1,6 +1,7 @@
-import type { Survey, SurveyQuestion, SurveyResponse } from '../types';
+import type { Survey, SurveyResponse } from '../types';
 import { stripHtml, cleanHtmlWhitespace } from './stringUtils';
 import { roundLegacyStarRating } from '../../shared/starRating';
+import { cleanTextAnswer, getTextAnalyticsEligibility, summarizeTextCategories, type TextCategoryOption } from './textAnalytics';
 
 export interface ChoiceDistribution {
   questionId: string;
@@ -27,13 +28,29 @@ export interface StarRatingResult {
   distribution: Record<number, number>;
 }
 
+export interface TextResponseResult {
+  questionId: string;
+  questionText: string;
+  responses: string[];
+}
+
+export interface TextCategoryDistribution {
+  questionId: string;
+  questionText: string;
+  totalAnswered: number;
+  uniqueCategories: number;
+  source: 'automatic' | 'manual';
+  options: TextCategoryOption[];
+}
+
 export interface SurveyAnalytics {
   totalResponses: number;
   completionRate: number;
   nps: NpsResult | null;
   choiceDistributions: ChoiceDistribution[];
   starRatings: StarRatingResult[];
-  textResponses: { questionText: string; responses: string[] }[];
+  textResponses: TextResponseResult[];
+  textCategoryDistributions: TextCategoryDistribution[];
   recentResponses: SurveyResponse[];
   averageScore?: number;
   quizTotalQuestions?: number;
@@ -247,13 +264,28 @@ export function computeSurveyAnalytics(survey: Survey, responses: SurveyResponse
     });
   }
 
-  const textResponses: { questionText: string; responses: string[] }[] = [];
+  const textResponses: TextResponseResult[] = [];
+  const textCategoryDistributions: TextCategoryDistribution[] = [];
   for (const q of survey.questions.filter(q => q.type === 'text')) {
     const texts = responses
       .map(r => r.answers[q.id])
-      .filter((v): v is string => typeof v === 'string' && v.trim().length > 0);
+      .map(cleanTextAnswer)
+      .filter((value): value is string => value.length > 0);
     if (texts.length > 0) {
-      textResponses.push({ questionText: q.text, responses: texts });
+      textResponses.push({ questionId: q.id, questionText: q.text, responses: texts });
+
+      const eligibility = getTextAnalyticsEligibility(q);
+      if (eligibility.enabled && eligibility.source) {
+        const summary = summarizeTextCategories(texts);
+        textCategoryDistributions.push({
+          questionId: q.id,
+          questionText: q.text,
+          totalAnswered: summary.totalAnswered,
+          uniqueCategories: summary.options.length,
+          source: eligibility.source,
+          options: summary.options,
+        });
+      }
     }
   }
 
@@ -264,6 +296,7 @@ export function computeSurveyAnalytics(survey: Survey, responses: SurveyResponse
     choiceDistributions,
     starRatings,
     textResponses,
+    textCategoryDistributions,
     recentResponses: [...responses]
       .sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime()),
     averageScore: quizCount > 0 ? Number((totalScore / quizCount).toFixed(1)) : undefined,

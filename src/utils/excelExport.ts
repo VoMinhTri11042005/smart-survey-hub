@@ -321,6 +321,29 @@ export async function exportSurveyAnalysisToExcel(survey: Survey, responses: Sur
     fitWrappedRows(openResponses, 1, openResponses.rowCount, openResponseWidths);
   }
 
+  if (analytics.textCategoryDistributions.length > 0) {
+    const textStatistics = workbook.addWorksheet('Thống kê văn bản');
+    textStatistics.addRow(['STT câu', 'Câu hỏi', 'Cách tổng hợp', 'Nhóm trả lời', 'Số phản hồi', 'Tỷ lệ', 'Cỡ mẫu (n)']);
+    analytics.textCategoryDistributions.forEach(distribution => {
+      const questionNumber = survey.questions.findIndex(question => question.id === distribution.questionId) + 1;
+      distribution.options.forEach(option => {
+        textStatistics.addRow([
+          questionNumber,
+          displayText(distribution.questionText),
+          distribution.source === 'manual' ? 'Bật thủ công' : 'Tự động',
+          option.label,
+          option.count,
+          option.percent / 100,
+          distribution.totalAnswered,
+        ]);
+      });
+    });
+    const textStatisticsWidths = [10, 62, 18, 42, 16, 14, 16];
+    formatSheet(textStatistics, textStatisticsWidths);
+    textStatistics.getColumn(6).numFmt = '0.0%';
+    fitWrappedRows(textStatistics, 1, textStatistics.rowCount, textStatisticsWidths);
+  }
+
   const choiceByQuestionId = new Map(analytics.choiceDistributions.map(distribution => [distribution.questionId, distribution]));
   const ratingByQuestionId = new Map(analytics.starRatings.map(rating => [rating.questionId, rating]));
   const npsByQuestionId = new Map(analytics.npsByQuestion.map(result => [result.questionId, result]));
@@ -399,6 +422,38 @@ export async function exportSurveyAnalysisToExcel(survey: Survey, responses: Sur
         kind: question?.type === 'single_choice' && distribution.options.length <= 6 ? 'doughnut' : 'bar',
         chartTitle: `Câu ${questionNumber}`,
         chartLabels: distribution.options.map((_, optionIndex) => `Lựa chọn ${optionIndex + 1}`),
+      },
+    );
+  });
+
+  analytics.textCategoryDistributions.forEach((distribution, index) => {
+    if (distribution.options.length === 0) return;
+    const questionNumber = survey.questions.findIndex(question => question.id === distribution.questionId) + 1;
+    const omittedOptions = distribution.options.slice(9);
+    const omittedCount = omittedOptions.reduce((sum, option) => sum + option.count, 0);
+    const chartOptions = distribution.options.length > 10
+      ? [
+          ...distribution.options.slice(0, 9),
+          {
+            label: `Khác (${distribution.options.length - 9} nhóm)`,
+            count: omittedCount,
+            percent: distribution.totalAnswered
+              ? Math.round((omittedCount / distribution.totalAnswered) * 1000) / 10
+              : 0,
+          },
+        ]
+      : distribution.options;
+    nextChartRow = addChartSection(
+      chartSheet,
+      nextChartRow,
+      `Câu ${questionNumber}: ${displayText(distribution.questionText)}${distribution.options.length > 10 ? ' (Top 9 + Khác)' : ''}`,
+      ['Nhóm trả lời', 'Số phản hồi', 'Tỷ lệ'],
+      chartOptions.map(option => [displayText(option.label), option.count, option.percent / 100]),
+      `#${PALETTE[(index + 4) % PALETTE.length]}`,
+      {
+        kind: chartOptions.length <= 6 ? 'doughnut' : 'bar',
+        chartTitle: `Câu ${questionNumber}`,
+        chartLabels: chartOptions.map(option => displayText(option.label)),
       },
     );
   });

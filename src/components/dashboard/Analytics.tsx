@@ -1,9 +1,10 @@
 import { Info, Sparkles, Timer, CheckCircle, TrendingUp, Download, ChevronDown, BarChart3, MessageSquare, RefreshCw, Trash2, Search, Users, ClipboardCheck, Clock3, ListChecks, Filter, FileSpreadsheet } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { useSurvey } from '../../context/SurveyContext';
-import { computeSurveyAnalytics, exportResponsesToCsv } from '../../utils/analytics';
+import { computeSurveyAnalytics, exportResponsesToCsv, type TextCategoryDistribution } from '../../utils/analytics';
 import { exportSurveyAnalysisToExcel } from '../../utils/excelExport';
 import { cleanHtmlWhitespace, stripHtml, toUnaccented } from '../../utils/stringUtils';
+import { getTextAnalyticsEligibility, isPersonalIdentifierQuestion } from '../../utils/textAnalytics';
 import type { Survey, SurveyResponse } from '../../types';
 
 const QUESTION_CHART_COLORS = ['#3730a3', '#006591', '#89ceff', '#c3c0ff', '#94a3b8', '#10b981', '#f59e0b', '#ef4444'];
@@ -52,7 +53,10 @@ export function Analytics() {
   });
   const filteredChoiceDistributions = analytics?.choiceDistributions.filter(item => matchesSearch(stripHtml(item.questionText), ...item.options.map(option => option.label))) || [];
   const filteredRatings = analytics?.starRatings.filter(item => matchesSearch(stripHtml(item.questionText))) || [];
-  const filteredTextResponses = analytics?.textResponses.filter(item => matchesSearch(stripHtml(item.questionText), ...item.responses)) || [];
+  const filteredTextResponses = analytics?.textResponses.filter(item => {
+    const question = selectedSurvey?.questions.find(candidate => candidate.id === item.questionId);
+    return (!question || !isPersonalIdentifierQuestion(question)) && matchesSearch(stripHtml(item.questionText), ...item.responses);
+  }) || [];
   const filteredRecentResponses = analytics?.recentResponses.filter(response => matchesSearch(response.id, new Date(response.submittedAt).toLocaleString('vi-VN'), ...Object.values(response.answers))) || [];
   const filteredQuestionMetrics = questionMetrics.filter(item => matchesSearch(stripHtml(item.question.text), item.question.label, item.question.type));
   const responseDays = new Set(responses.map(response => new Date(response.submittedAt).toLocaleDateString('vi-VN'))).size;
@@ -241,7 +245,7 @@ export function Analytics() {
             <InsightCard icon={<ListChecks size={19} />} label="Câu hỏi" value={selectedSurvey?.questions.length ?? 0} detail={`${selectedSurvey?.questions.filter(q => q.required).length ?? 0} câu bắt buộc`} tone="text-primary bg-primary-fixed" />
             <InsightCard icon={<ClipboardCheck size={19} />} label="Hoàn thành" value={`${analytics.completionRate}%`} detail={`${Math.round((analytics.completionRate / 100) * analytics.totalResponses)} bài đầy đủ`} tone="text-sentiment-positive bg-sentiment-positive/10" />
             <InsightCard icon={<Clock3 size={19} />} label="Ngày có phản hồi" value={responseDays} detail={latestResponse ? `Mới nhất: ${new Date(latestResponse.submittedAt).toLocaleDateString('vi-VN')}` : 'Chưa có dữ liệu'} tone="text-primary bg-primary-fixed" />
-            <InsightCard icon={<MessageSquare size={19} />} label="Câu trả lời mở" value={analytics.textResponses.reduce((sum, item) => sum + item.responses.length, 0)} detail={`${analytics.textResponses.length} câu tự do`} tone="text-on-secondary-fixed bg-secondary-fixed" />
+            <InsightCard icon={<MessageSquare size={19} />} label="Nhóm văn bản" value={analytics.textCategoryDistributions.length} detail={`${analytics.textCategoryDistributions.reduce((sum, item) => sum + item.totalAnswered, 0)} phản hồi đã tổng hợp`} tone="text-on-secondary-fixed bg-secondary-fixed" />
             <InsightCard icon={<TrendingUp size={19} />} label="Tỷ lệ trả lời" value={`${questionMetrics.length ? Math.round(questionMetrics.reduce((sum, item) => sum + item.rate, 0) / questionMetrics.length) : 0}%`} detail="Trung bình toàn bộ câu hỏi" tone="text-sentiment-neutral bg-sentiment-neutral/10" />
             {selectedSurvey?.isQuiz && analytics.passRate !== undefined && <InsightCard icon={<CheckCircle size={19} />} label="Đạt từ 50%" value={`${analytics.passRate}%`} detail={`Trung vị: ${analytics.medianScore ?? 0} điểm`} tone="text-sentiment-positive bg-sentiment-positive/10" />}
           </section>
@@ -327,7 +331,9 @@ export function Analytics() {
                 const rating = analytics.starRatings.find(item => item.questionId === question.id);
                 const ratingLevels = rating ? getRatingLevels(rating.distribution) : [];
                 const npsQuestion = question.type === 'nps' ? analytics.npsByQuestion.find(item => item.questionId === question.id) : null;
-                const text = analytics.textResponses.find(item => stripHtml(item.questionText) === stripHtml(question.text));
+                const text = analytics.textResponses.find(item => item.questionId === question.id);
+                const textCategoryDistribution = analytics.textCategoryDistributions.find(item => item.questionId === question.id);
+                const textEligibility = question.type === 'text' ? getTextAnalyticsEligibility(question) : null;
                 const chartValues = choice?.options || [];
                 const maxChoice = Math.max(...chartValues.map(item => item.count), 1);
                 return (
@@ -380,7 +386,14 @@ export function Analytics() {
                       <div className="flex items-center justify-between rounded-2xl bg-primary-fixed/60 p-4"><div><p className="text-xs text-text-secondary">Điểm NPS</p><p className="font-display text-4xl font-bold text-primary">{npsQuestion.score}</p></div><div className="text-right text-xs text-text-secondary"><p>Ủng hộ {npsQuestion.promoterPercent}%</p><p>Thụ động {npsQuestion.passivePercent}%</p><p>Phản đối {npsQuestion.detractorPercent}%</p></div></div>
                     )}
                     {question.type === 'text' && (
-                      <div className="rounded-2xl bg-primary/5 p-4"><p className="text-2xl font-bold text-primary">{text?.responses.length || 0}</p><p className="text-xs text-text-secondary mt-1">câu trả lời mở có nội dung</p><div className="mt-3 space-y-2 max-h-24 overflow-y-auto custom-scrollbar">{(text?.responses || []).slice(0, 3).map((response, responseIndex) => <p key={responseIndex} className="text-xs text-text-secondary line-clamp-2">“{response}”</p>)}</div></div>
+                      textCategoryDistribution ? (
+                        <TextCategorySummary distribution={textCategoryDistribution} />
+                      ) : (
+                        <TextResponsePreview
+                          responses={text?.responses || []}
+                          reason={textEligibility?.reason}
+                        />
+                      )
                     )}
                   </article>
                 );
@@ -626,7 +639,7 @@ function ProgressBar({ label, count, percent, color }: { label: string; count: s
   );
 }
 
-function DonutChart({ options }: { options: { label: string; count: number; percent: number }[] }) {
+function DonutChart({ options, totalLabel = 'lượt chọn' }: { options: { label: string; count: number; percent: number }[]; totalLabel?: string }) {
   const totalSelections = options.reduce((sum, option) => sum + option.count, 0);
   let offset = 0;
   const segments = options
@@ -648,12 +661,71 @@ function DonutChart({ options }: { options: { label: string; count: number; perc
       >
         <div className="absolute inset-5 rounded-full bg-white flex flex-col items-center justify-center">
           <span className="font-display text-xl font-bold text-primary">{totalSelections}</span>
-          <span className="text-[10px] text-text-secondary">lượt chọn</span>
+          <span className="text-[10px] text-text-secondary">{totalLabel}</span>
         </div>
       </div>
       <span className="text-[10px] text-text-secondary text-center">
         {options.length} lựa chọn
       </span>
+    </div>
+  );
+}
+
+function TextCategorySummary({ distribution }: { distribution: TextCategoryDistribution }) {
+  const showDonut = distribution.options.length <= 6;
+  const highestCount = Math.max(...distribution.options.map(option => option.count), 1);
+
+  return (
+    <div className="rounded-2xl bg-primary/5 p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
+        <div>
+          <p className="text-xs font-bold text-primary">Thống kê dữ liệu văn bản</p>
+          <p className="text-xs text-text-secondary mt-1">n = {distribution.totalAnswered} · {distribution.uniqueCategories} nhóm · {distribution.source === 'manual' ? 'đã bật thủ công' : 'tự động nhận diện'}</p>
+        </div>
+      </div>
+      <div className={showDonut ? 'grid grid-cols-1 sm:grid-cols-[150px_1fr] gap-5 items-center' : ''}>
+        {showDonut && <DonutChart options={distribution.options} totalLabel="phản hồi" />}
+        <div className="space-y-3 max-h-56 overflow-y-auto custom-scrollbar pr-1">
+          {distribution.options.map((option, optionIndex) => (
+            <div key={option.label} className="space-y-1">
+              <div className="flex justify-between gap-3 text-xs">
+                <span className="truncate text-text-primary" title={option.label}>{option.label}</span>
+                <span className="shrink-0 font-bold text-primary">{option.count} · {option.percent.toLocaleString('vi-VN', { maximumFractionDigits: 1 })}%</span>
+              </div>
+              <div className="h-2.5 rounded-full bg-surface-container overflow-hidden">
+                <div
+                  className="h-full rounded-full transition-all duration-700"
+                  style={{
+                    width: `${(option.count / highestCount) * 100}%`,
+                    backgroundColor: QUESTION_CHART_COLORS[optionIndex % QUESTION_CHART_COLORS.length],
+                  }}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TextResponsePreview({ responses, reason }: { responses: string[]; reason?: string }) {
+  const message = reason === 'personal_data'
+    ? 'Câu hỏi nhận diện cá nhân nên không được tổng hợp hoặc hiển thị trong phần phân tích.'
+    : reason === 'disabled'
+      ? 'Chủ khảo sát đã tắt thống kê theo nhóm cho câu này.'
+      : 'Đây là phản hồi mở. Bạn có thể bật “Thống kê theo nhóm” khi chỉnh sửa câu hỏi nếu muốn tổng hợp dữ liệu này.';
+
+  return (
+    <div className="rounded-2xl bg-primary/5 p-4">
+      <p className="text-2xl font-bold text-primary">{responses.length}</p>
+      <p className="text-xs text-text-secondary mt-1">câu trả lời mở có nội dung</p>
+      <p className="text-xs text-text-secondary mt-3 leading-relaxed">{message}</p>
+      {reason !== 'personal_data' && (
+        <div className="mt-3 space-y-2 max-h-24 overflow-y-auto custom-scrollbar">
+          {responses.slice(0, 3).map((response, responseIndex) => <p key={responseIndex} className="text-xs text-text-secondary line-clamp-2">“{response}”</p>)}
+        </div>
+      )}
     </div>
   );
 }

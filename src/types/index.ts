@@ -12,6 +12,7 @@ export interface UserProfile {
 
 export type QuestionType = 'single_choice' | 'multiple_choice' | 'star_rating' | 'text' | 'nps';
 export type SurveyDisplayMode = 'single' | 'all';
+export type TextAnalysisMode = 'auto' | 'include' | 'exclude';
 
 export interface SurveyQuestion {
   id: string;
@@ -22,6 +23,7 @@ export interface SurveyQuestion {
   correctAnswer?: string | string[]; // For quiz mode
   points?: number; // Custom points for quiz mode
   label?: string; // Optional display label / custom question label
+  textAnalysisMode?: TextAnalysisMode; // Optional aggregation setting for text questions
 }
 
 export interface Survey {

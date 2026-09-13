@@ -778,10 +778,25 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError }: { onP
                        </div>
                      )}
 
-                     {/* Footer Settings */}
-                     {isActive && (
-                       <div className="mt-4 pt-4 border-t border-border-subtle flex flex-col sm:flex-row sm:items-center justify-end gap-4">
-                         {isQuiz && (q.type === 'single_choice' || q.type === 'multiple_choice') && (
+                      {/* Footer Settings */}
+                      {isActive && (
+                        <div className="mt-4 pt-4 border-t border-border-subtle flex flex-col sm:flex-row sm:items-center justify-end gap-4">
+                          {q.type === 'text' && (
+                            <label className="flex flex-col gap-1.5 sm:mr-auto">
+                              <span className="text-sm font-medium text-text-secondary">Thống kê theo nhóm</span>
+                              <select
+                                value={q.textAnalysisMode ?? 'auto'}
+                                onChange={(e) => updateQuestion(q.id, { textAnalysisMode: e.target.value as 'auto' | 'include' | 'exclude' })}
+                                className="min-w-56 bg-surface-background border border-border-subtle rounded-lg px-3 py-2 text-sm text-text-primary outline-none focus:ring-2 focus:ring-primary/30"
+                              >
+                                <option value="auto">Tự động (trường, ngành, khoa...)</option>
+                                <option value="include">Luôn thống kê câu này</option>
+                                <option value="exclude">Chỉ giữ phản hồi mở</option>
+                              </select>
+                              <span className="text-[11px] text-text-secondary">Họ tên, email, SĐT và mã số cá nhân luôn không được tổng hợp.</span>
+                            </label>
+                          )}
+                          {isQuiz && (q.type === 'single_choice' || q.type === 'multiple_choice') && (
                            <div className="flex items-center gap-2">
                              <span className="text-sm font-medium text-text-secondary">Điểm:</span>
                              <input

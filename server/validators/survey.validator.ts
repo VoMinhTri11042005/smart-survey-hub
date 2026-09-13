@@ -17,6 +17,7 @@ export const CreateSurveySchema = z.object({
     correctAnswer: z.union([z.string(), z.array(z.string())]).optional(),
     points: z.number().optional(),
     label: z.string().optional(),
+    textAnalysisMode: z.enum(['auto', 'include', 'exclude']).optional(),
   })),
   isQuiz: z.boolean().optional().default(false),
   displayMode: z.enum(['single', 'all']).optional().default('single'),
