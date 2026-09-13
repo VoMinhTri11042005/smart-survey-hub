@@ -3,10 +3,16 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { useSurvey } from '../../context/SurveyContext';
 import { computeSurveyAnalytics, exportResponsesToCsv } from '../../utils/analytics';
 import { exportSurveyAnalysisToExcel } from '../../utils/excelExport';
-import { stripHtml, toUnaccented } from '../../utils/stringUtils';
+import { cleanHtmlWhitespace, stripHtml, toUnaccented } from '../../utils/stringUtils';
 import type { Survey, SurveyResponse } from '../../types';
 
 const QUESTION_CHART_COLORS = ['#3730a3', '#006591', '#89ceff', '#c3c0ff', '#94a3b8', '#10b981', '#f59e0b', '#ef4444'];
+const hasAnswer = (value: unknown) => {
+  if (Array.isArray(value)) return value.length > 0;
+  if (typeof value === 'string') return stripHtml(cleanHtmlWhitespace(value)).trim().length > 0;
+  return value !== undefined && value !== null;
+};
+const getRatingLevels = (distribution: Record<number, number>) => Object.keys(distribution).map(Number).sort((a, b) => a - b);
 
 export function Analytics() {
   const { surveys, currentSurvey, setCurrentSurvey, fetchSurveys, fetchResponses, resetResponses } = useSurvey();
@@ -40,7 +46,7 @@ export function Analytics() {
   const questionMetrics = (selectedSurvey?.questions || []).map(question => {
     const answered = responses.filter(response => {
       const answer = response.answers[question.id];
-      return answer !== undefined && answer !== null && answer !== '' && !(Array.isArray(answer) && answer.length === 0);
+      return hasAnswer(answer);
     }).length;
     return { question, answered, missing: responses.length - answered, rate: responses.length ? Math.round((answered / responses.length) * 100) : 0 };
   });
@@ -319,6 +325,7 @@ export function Analytics() {
               {visibleQuestionMetrics.map(({ question, answered, missing, rate }, index) => {
                 const choice = analytics.choiceDistributions.find(item => item.questionId === question.id);
                 const rating = analytics.starRatings.find(item => item.questionId === question.id);
+                const ratingLevels = rating ? getRatingLevels(rating.distribution) : [];
                 const npsQuestion = question.type === 'nps' ? analytics.npsByQuestion.find(item => item.questionId === question.id) : null;
                 const text = analytics.textResponses.find(item => stripHtml(item.questionText) === stripHtml(question.text));
                 const chartValues = choice?.options || [];
@@ -365,7 +372,7 @@ export function Analytics() {
                       <div>
                         <div className="flex items-end gap-2 mb-4"><span className="font-display text-4xl font-bold text-primary">{rating.average}</span><span className="text-sm text-text-secondary mb-1">/ 5 sao</span></div>
                         <div className="flex items-end gap-2 h-24">
-                          {[1, 2, 3, 4, 5].map(star => <div key={star} className="flex-1 h-full flex flex-col justify-end items-center gap-1"><div className="w-full rounded-t-md bg-primary" style={{ height: `${Math.max(((rating.distribution[star] || 0) / Math.max(rating.totalAnswered, 1)) * 100, rating.distribution[star] ? 5 : 0)}%` }} /><span className="text-[10px] text-text-secondary">{star}★</span></div>)}
+                          {ratingLevels.map(star => <div key={star} className="flex-1 h-full flex flex-col justify-end items-center gap-1"><div className="w-full rounded-t-md bg-primary" style={{ height: `${Math.max(((rating.distribution[star] || 0) / Math.max(rating.totalAnswered, 1)) * 100, rating.distribution[star] ? 5 : 0)}%` }} /><span className="text-[10px] text-text-secondary">{star}★</span></div>)}
                         </div>
                       </div>
                     )}
@@ -458,7 +465,7 @@ export function Analytics() {
                     <span className="text-text-secondary text-sm mb-1">/ 5 sao</span>
                   </div>
                   <div className="flex gap-1 mt-3">
-                    {[1, 2, 3, 4, 5].map(star => (
+                    {getRatingLevels(sr.distribution).map(star => (
                       <div key={star} className="flex-1 text-center">
                         <div className="h-16 bg-surface-container rounded-md flex items-end justify-center overflow-hidden">
                           <div

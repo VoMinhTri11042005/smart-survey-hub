@@ -39,8 +39,15 @@ export interface SurveyAnalytics {
   medianScore?: number;
   passRate?: number;
   scoreDistribution?: { label: string; count: number }[];
+  scoredResponseCount?: number;
   npsByQuestion: (NpsResult & { questionId: string; questionText: string; totalAnswered: number })[];
   questionMetrics: { questionId: string; questionText: string; type: string; required: boolean; answered: number; missing: number; answerRate: number; correctCount?: number; correctRate?: number }[];
+}
+
+function hasAnswer(value: unknown): boolean {
+  if (Array.isArray(value)) return value.length > 0;
+  if (typeof value === 'string') return stripHtml(cleanHtmlWhitespace(value)).trim().length > 0;
+  return value !== undefined && value !== null;
 }
 
 export function calculateNps(scores: number[]): NpsResult | null {
@@ -118,7 +125,7 @@ export function computeSurveyAnalytics(survey: Survey, responses: SurveyResponse
       .filter(q => q.required)
       .every(q => {
         const ans = resp.answers[q.id];
-        return ans !== undefined && ans !== null && ans !== '' && !(Array.isArray(ans) && ans.length === 0);
+        return hasAnswer(ans);
       });
     if (answeredRequired) fullyAnswered++;
   }
@@ -141,8 +148,7 @@ export function computeSurveyAnalytics(survey: Survey, responses: SurveyResponse
     let correctCount = 0;
     for (const response of responses) {
       const answer = response.answers[question.id];
-      const hasAnswer = answer !== undefined && answer !== null && answer !== '' && !(Array.isArray(answer) && answer.length === 0);
-      if (!hasAnswer) continue;
+      if (!hasAnswer(answer)) continue;
       answered++;
       if (question.type === 'single_choice' && typeof question.correctAnswer === 'string' && answer === question.correctAnswer) correctCount++;
       if (question.type === 'multiple_choice' && Array.isArray(question.correctAnswer) && Array.isArray(answer)) {
@@ -189,11 +195,15 @@ export function computeSurveyAnalytics(survey: Survey, responses: SurveyResponse
     let answeredForThisQ = 0;
     for (const resp of responses) {
       const ans = resp.answers[q.id];
-      if (ans !== undefined && ans !== null && ans !== '' && !(Array.isArray(ans) && ans.length === 0)) {
+      if (hasAnswer(ans)) {
         answeredForThisQ++;
         if (Array.isArray(ans)) {
-          for (const a of ans) if (counts[a] !== undefined) counts[a]++;
-        } else if (typeof ans === 'string' && counts[ans] !== undefined) {
+          for (const a of ans) {
+            if (counts[a] === undefined) counts[a] = 0;
+            counts[a]++;
+          }
+        } else if (typeof ans === 'string') {
+          if (counts[ans] === undefined) counts[ans] = 0;
           counts[ans]++;
         }
       }
@@ -216,15 +226,16 @@ export function computeSurveyAnalytics(survey: Survey, responses: SurveyResponse
 
   const starRatings: StarRatingResult[] = [];
   for (const q of survey.questions.filter(q => q.type === 'star_rating')) {
-    const distribution: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+    const distribution: Record<number, number> = Object.fromEntries(
+      Array.from({ length: 10 }, (_, index) => [Number((0.5 + index * 0.5).toFixed(1)), 0]),
+    );
     const scores: number[] = [];
 
     for (const resp of responses) {
       const ans = resp.answers[q.id];
       if (typeof ans === 'number' && !isNaN(ans) && ans >= 0.5 && ans <= 5) {
         scores.push(ans);
-        // Categorize into nearest star bucket 1..5
-        const starBucket = Math.min(5, Math.max(1, Math.ceil(ans)));
+        const starBucket = Number((Math.round(ans * 2) / 2).toFixed(1));
         distribution[starBucket] = (distribution[starBucket] || 0) + 1;
       }
     }
@@ -262,6 +273,7 @@ export function computeSurveyAnalytics(survey: Survey, responses: SurveyResponse
     medianScore,
     passRate: scorePercents.length ? Math.round((scorePercents.filter(value => value >= 50).length / scorePercents.length) * 100) : undefined,
     scoreDistribution,
+    scoredResponseCount: scoredResponses.length || undefined,
     npsByQuestion,
     questionMetrics,
   };
