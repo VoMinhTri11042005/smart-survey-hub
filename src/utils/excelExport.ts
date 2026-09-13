@@ -179,6 +179,9 @@ function addChartSection(
   const chartKind = presentation.kind ?? 'bar';
   const chartTitle = presentation.chartTitle ?? title;
   const chartLabels = presentation.chartLabels ?? rows.map(([label]) => label);
+  const tableRows = chartKind === 'doughnut'
+    ? rows.map(([label, count, percent], index) => [`${index + 1}. ${label}`, count, percent] as [string, number, number])
+    : rows;
   sheet.mergeCells(`A${startRow}:C${startRow}`);
   const titleCell = sheet.getCell(`A${startRow}`);
   titleCell.value = title;
@@ -188,12 +191,12 @@ function addChartSection(
   sheet.getRow(startRow).height = Math.max(24, estimatedLineCount(title, 74) * 16 + 8);
 
   const headerRow = sheet.getRow(startRow + 1);
-  headerRow.values = headers;
+  headerRow.values = chartKind === 'doughnut' ? ['Ghi chú', headers[1], headers[2]] : headers;
   headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
   headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${BRAND}` } };
   headerRow.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
 
-  rows.forEach((row, index) => {
+  tableRows.forEach((row, index) => {
     const target = sheet.getRow(startRow + index + 2);
     target.values = row;
     target.alignment = { vertical: 'top', wrapText: true };
@@ -209,7 +212,7 @@ function addChartSection(
     sheet.addImage(id, { tl: { col: 4, row: startRow - 1 }, ext: { width: 720, height: 340 } });
   }
 
-  const tableVisualRows = rows.reduce((sum, [label]) => sum + estimatedLineCount(label, 44), 0);
+  const tableVisualRows = tableRows.reduce((sum, [label]) => sum + estimatedLineCount(label, 44), 0);
   return Math.max(startRow + tableVisualRows + 4, startRow + 23);
 }
 
