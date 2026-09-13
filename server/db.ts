@@ -1,4 +1,4 @@
-import { Pool } from 'pg';
+import { Pool, type PoolClient } from 'pg';
 import dotenv from 'dotenv';
 dotenv.config();
 
@@ -13,6 +13,46 @@ const pool = new Pool({
 pool.on('error', (err, client) => {
   console.error('Unexpected error on idle client', err);
 });
+
+/**
+ * One-time, idempotent repair for answers collected while the UI allowed
+ * half-star selection. Only numeric 0.5–5 ratings on current star-rating
+ * questions are rounded; invalid or nonnumeric values are left untouched.
+ */
+async function normalizeLegacyStarRatingResponses(client: PoolClient) {
+  const result = await client.query<{ id: string; ratingCount: number }>(`
+    WITH replacements AS (
+      SELECT
+        r.id,
+        jsonb_object_agg(
+          q.question ->> 'id',
+          to_jsonb(ROUND((r.answers ->> (q.question ->> 'id'))::numeric))
+        ) AS patch,
+        COUNT(*)::int AS rating_count
+      FROM responses r
+      INNER JOIN surveys s ON s.id = r.survey_id
+      CROSS JOIN LATERAL jsonb_array_elements(
+        CASE WHEN jsonb_typeof(s.questions) = 'array' THEN s.questions ELSE '[]'::jsonb END
+      ) AS q(question)
+      WHERE q.question ->> 'type' = 'star_rating'
+        AND q.question ? 'id'
+        AND jsonb_typeof(r.answers -> (q.question ->> 'id')) = 'number'
+        AND (r.answers ->> (q.question ->> 'id'))::numeric BETWEEN 0.5 AND 5
+        AND (r.answers ->> (q.question ->> 'id'))::numeric <> ROUND((r.answers ->> (q.question ->> 'id'))::numeric)
+      GROUP BY r.id
+    )
+    UPDATE responses r
+    SET answers = r.answers || replacements.patch
+    FROM replacements
+    WHERE r.id = replacements.id
+    RETURNING r.id, replacements.rating_count AS "ratingCount"
+  `);
+
+  const repairedRatings = result.rows.reduce((sum, row) => sum + Number(row.ratingCount || 0), 0);
+  if (repairedRatings > 0) {
+    console.log(`✅ Rounded ${repairedRatings} legacy star-rating value(s) across ${result.rowCount ?? 0} response(s).`);
+  }
+}
 
 export const initDB = async () => {
   if (!process.env.DATABASE_URL) {
@@ -157,6 +197,10 @@ export const initDB = async () => {
       await client.query(`ALTER TABLE survey_drafts ADD COLUMN IF NOT EXISTS max_attempts_per_device INTEGER;`);
       await client.query(`ALTER TABLE survey_drafts ADD COLUMN IF NOT EXISTS time_limit_minutes INTEGER;`);
     }
+
+    // Runs before the server accepts requests. It is safe to rerun because
+    // integer ratings do not match the migration predicate.
+    await normalizeLegacyStarRatingResponses(client);
 
     await client.query('COMMIT');
     console.log('✅ PostgreSQL Database connected and tables initialized.');

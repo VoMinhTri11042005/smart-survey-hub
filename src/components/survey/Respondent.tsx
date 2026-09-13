@@ -3,12 +3,23 @@ import { useState, useEffect, useCallback } from 'react';
 import { useSurvey } from '../../context/SurveyContext';
 import { stripHtml, cleanHtmlWhitespace } from '../../utils/stringUtils';
 import type { Survey, SurveyQuestion } from '../../types';
+import { roundLegacyStarRating } from '../../../shared/starRating';
 
 interface RespondentProps {
   survey: Survey | null;
   onExit: () => void;
   onComplete?: () => void;
   isPublic?: boolean;
+}
+
+function normalizeSavedStarRatings(survey: Survey, source: Record<string, any>) {
+  const normalized = { ...source };
+  for (const question of survey.questions) {
+    if (question.type !== 'star_rating') continue;
+    const rating = roundLegacyStarRating(normalized[question.id]);
+    if (rating !== null) normalized[question.id] = rating;
+  }
+  return normalized;
 }
 
 export function Respondent({ survey, onExit, onComplete, isPublic = false }: RespondentProps) {
@@ -80,7 +91,7 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
           if (savedDraft) {
             const savedAnswers = JSON.parse(savedDraft);
             if (savedAnswers && typeof savedAnswers === 'object') {
-              setAnswers(savedAnswers);
+              setAnswers(normalizeSavedStarRatings(survey, savedAnswers));
             }
           }
         } catch (error) {
@@ -90,7 +101,7 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
         try {
           const existingResponse = await fetchMyResponse(survey.id, rid);
           if (existingResponse && existingResponse.answers && Object.keys(existingResponse.answers).length > 0) {
-            setAnswers(existingResponse.answers);
+            setAnswers(normalizeSavedStarRatings(survey, existingResponse.answers));
             if (existingResponse.score !== undefined) setQuizScore(existingResponse.score);
             if (existingResponse.totalQuizQuestions !== undefined) setQuizTotal(existingResponse.totalQuizQuestions);
             setIsCompleted(true);
@@ -402,7 +413,11 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
         setQuizTotal(totalQ);
       }
 
-      await submitResponse(survey.id, respondentId, answers, score, totalQ);
+      const normalizedAnswers = normalizeSavedStarRatings(survey, answers);
+      if (Object.keys(normalizedAnswers).some(key => normalizedAnswers[key] !== answers[key])) {
+        setAnswers(normalizedAnswers);
+      }
+      await submitResponse(survey.id, respondentId, normalizedAnswers, score, totalQ);
 
       const deviceKey = `survey-device-attempts:${survey.id}`;
       const deviceId = getDeviceId();
@@ -475,37 +490,25 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
           <div className="flex flex-col items-center gap-6 py-8 bg-white border border-border-subtle rounded-2xl shadow-sm">
             <div className="flex flex-row gap-2">
               {[1, 2, 3, 4, 5].map((star) => {
-                const fill = (answer || 0);
-                let fillPercent = 0;
-                if (fill >= star) fillPercent = 100;
-                else if (fill >= star - 0.5) fillPercent = 50;
-                else fillPercent = 0;
-                const gradId = `grad-${questionId}-${star}`;
+                const rating = roundLegacyStarRating(answer) ?? 0;
+                const selected = rating >= star;
                 return (
                   <button
                     key={star}
-                    onClick={(e) => {
-                      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                      const x = e.clientX - rect.left;
-                      const isLeft = x < rect.width / 2;
-                      const value = isLeft ? star - 0.5 : star;
-                      setAnswerForQuestion(questionId, value);
-                    }}
+                    type="button"
+                    aria-label={`Chọn ${star} sao`}
+                    aria-pressed={rating === star}
+                    onClick={() => setAnswerForQuestion(questionId, star)}
                     className="cursor-pointer transition-transform active:scale-90 hover:scale-110 p-1"
                   >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="56" height="56" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={fillPercent > 0 ? 'text-primary' : 'text-surface-container-highest'}>
-                      <defs>
-                        <linearGradient id={gradId} x1="0%" x2="100%" y1="0%" y2="0%">
-                          <stop offset={`${fillPercent}%`} stopColor="currentColor" />
-                          <stop offset={`${fillPercent}%`} stopColor="transparent" />
-                        </linearGradient>
-                      </defs>
-                      <polygon fill={fillPercent > 0 ? `url(#${gradId})` : 'none'} points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                    <svg xmlns="http://www.w3.org/2000/svg" width="56" height="56" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={selected ? 'text-primary' : 'text-surface-container-highest'}>
+                      <polygon fill={selected ? 'currentColor' : 'none'} points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
                     </svg>
                   </button>
                 );
               })}
             </div>
+            <p className="text-sm font-medium text-text-secondary">Chọn một mức nguyên từ 1 đến 5 sao</p>
             <div className="flex justify-between w-full px-8 text-sm font-semibold text-text-secondary italic">
               <span>Cần cải thiện</span>
               <span>Tuyệt vời</span>

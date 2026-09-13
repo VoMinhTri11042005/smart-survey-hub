@@ -2,6 +2,7 @@ import ExcelJS from 'exceljs';
 import type { Survey, SurveyResponse } from '../types';
 import { computeSurveyAnalytics } from './analytics';
 import { cleanHtmlWhitespace, stripHtml } from './stringUtils';
+import { roundLegacyStarRating } from '../../shared/starRating';
 
 const BRAND = '3730A3';
 const PALETTE = ['3730A3', '006591', '60A5FA', '10B981', 'F59E0B', 'EF4444'];
@@ -283,6 +284,7 @@ export async function exportSurveyAnalysisToExcel(survey: Survey, responses: Sur
     ...(survey.isQuiz ? [response.score ?? '', response.totalQuizQuestions ?? '', response.score !== null && response.score !== undefined && response.totalQuizQuestions ? Number(response.score) / Number(response.totalQuizQuestions) : ''] : []),
     ...survey.questions.map(question => {
       const answer = response.answers[question.id];
+      if (question.type === 'star_rating') return roundLegacyStarRating(answer) ?? answer ?? '';
       if (Array.isArray(answer)) return answer.map(item => displayText(String(item))).join('; ');
       return typeof answer === 'string' ? displayText(answer) : answer ?? '';
     }),

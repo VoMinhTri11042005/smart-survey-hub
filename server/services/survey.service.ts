@@ -4,6 +4,7 @@
  */
 import pool from '../db';
 import { generateId } from '../utils/helpers';
+import { isIntegerStarRating } from '../../shared/starRating';
 
 // ─── In-memory fallback for development without DATABASE_URL ───
 const inMemorySurveys: Record<string, any> = {
@@ -87,6 +88,17 @@ export function computeServerQuizScore(questions: any[], answers: Record<string,
     }
   }
   return { score, totalPossible };
+}
+
+function assertIntegerStarRatings(questions: any[], answers: Record<string, unknown> | undefined) {
+  for (const question of questions || []) {
+    if (question.type !== 'star_rating') continue;
+    const answer = answers?.[question.id];
+    if (answer === undefined || answer === null || answer === '') continue;
+    if (!isIntegerStarRating(answer)) {
+      throw Object.assign(new Error('Thang điểm sao chỉ nhận các mức nguyên từ 1 đến 5.'), { status: 400 });
+    }
+  }
 }
 
 // ─── Survey CRUD ───
@@ -202,6 +214,8 @@ export async function submitResponse(surveyId: string, data: any) {
 
   if (!process.env.DATABASE_URL) {
     const survey = inMemorySurveys[surveyId];
+    if (!survey) return null;
+    assertIntegerStarRatings(survey.questions, answers);
     let finalScore: number | null = null;
     let finalTotal: number | null = null;
     if (survey?.isQuiz) {
@@ -229,10 +243,11 @@ export async function submitResponse(surveyId: string, data: any) {
   if (surveyResult.rows.length === 0) return null; // survey not found
 
   const survey = surveyResult.rows[0];
+  const questions = typeof survey.questions === 'string' ? JSON.parse(survey.questions) : survey.questions;
+  assertIntegerStarRatings(questions, answers);
   let finalScore: number | null = null;
   let finalTotal: number | null = null;
   if (survey.is_quiz) {
-    const questions = typeof survey.questions === 'string' ? JSON.parse(survey.questions) : survey.questions;
     const computed = computeServerQuizScore(questions, answers || {});
     finalScore = computed.score; finalTotal = computed.totalPossible;
   } else if (score !== undefined && score !== null && Number.isFinite(Number(score))) {

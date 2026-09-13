@@ -1,5 +1,6 @@
 import type { Survey, SurveyQuestion, SurveyResponse } from '../types';
 import { stripHtml, cleanHtmlWhitespace } from './stringUtils';
+import { roundLegacyStarRating } from '../../shared/starRating';
 
 export interface ChoiceDistribution {
   questionId: string;
@@ -226,17 +227,14 @@ export function computeSurveyAnalytics(survey: Survey, responses: SurveyResponse
 
   const starRatings: StarRatingResult[] = [];
   for (const q of survey.questions.filter(q => q.type === 'star_rating')) {
-    const distribution: Record<number, number> = Object.fromEntries(
-      Array.from({ length: 10 }, (_, index) => [Number((0.5 + index * 0.5).toFixed(1)), 0]),
-    );
+    const distribution: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
     const scores: number[] = [];
 
     for (const resp of responses) {
-      const ans = resp.answers[q.id];
-      if (typeof ans === 'number' && !isNaN(ans) && ans >= 0.5 && ans <= 5) {
-        scores.push(ans);
-        const starBucket = Number((Math.round(ans * 2) / 2).toFixed(1));
-        distribution[starBucket] = (distribution[starBucket] || 0) + 1;
+      const rating = roundLegacyStarRating(resp.answers[q.id]);
+      if (rating !== null) {
+        scores.push(rating);
+        distribution[rating]++;
       }
     }
 
