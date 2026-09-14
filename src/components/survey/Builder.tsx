@@ -32,6 +32,8 @@ const toDateTimeLocalValue = (value: string | null | undefined) => {
   return localTime.toISOString().slice(0, 16);
 };
 
+const roundScore = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
+
 export function Builder({ onPublished, onUpdated, onDraftSaved, onError }: { onPublished?: () => void; onUpdated?: () => void; onDraftSaved?: () => void; onError?: (msg: string) => void }) {
   const { parseDocx, createSurvey, updateSurvey, currentSurvey, setCurrentSurvey, isLoading, pendingTemplate, clearPendingTemplate, chatWithAI, fetchDrafts, saveDraft, deleteDraft } = useSurvey();
   const DRAFT_STORAGE_KEY = 'smart-survey-hub-builder-draft';
@@ -347,7 +349,7 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError }: { onP
   };
 
   const totalPossibleScore = useMemo(() => {
-    return questions.reduce((sum, question) => {
+    return roundScore(questions.reduce((sum, question) => {
       if (question.type === 'single_choice') {
         const hasCorrect = typeof question.correctAnswer === 'string' && question.correctAnswer.trim().length > 0;
         if (hasCorrect) {
@@ -362,7 +364,7 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError }: { onP
         }
       }
       return sum;
-    }, 0);
+    }, 0));
   }, [questions]);
 
   const saveSurveyDraft = async () => {

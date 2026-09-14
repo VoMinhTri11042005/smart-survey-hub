@@ -22,6 +22,8 @@ function normalizeSavedStarRatings(survey: Survey, source: Record<string, any>) 
   return normalized;
 }
 
+const roundScore = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
+
 export function Respondent({ survey, onExit, onComplete, isPublic = false }: RespondentProps) {
   const { submitResponse, fetchMyResponse } = useSurvey();
   const [step, setStep] = useState(0);
@@ -409,15 +411,15 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
             }
           }
         });
-        setQuizScore(score);
-        setQuizTotal(totalQ);
+        setQuizScore(roundScore(score));
+        setQuizTotal(roundScore(totalQ));
       }
 
       const normalizedAnswers = normalizeSavedStarRatings(survey, answers);
       if (Object.keys(normalizedAnswers).some(key => normalizedAnswers[key] !== answers[key])) {
         setAnswers(normalizedAnswers);
       }
-      await submitResponse(survey.id, respondentId, normalizedAnswers, score, totalQ);
+      await submitResponse(survey.id, respondentId, normalizedAnswers, score === undefined ? score : roundScore(score), totalQ === undefined ? totalQ : roundScore(totalQ));
 
       const deviceKey = `survey-device-attempts:${survey.id}`;
       const deviceId = getDeviceId();

@@ -27,6 +27,8 @@ const inMemoryResponses: Record<string, any[]> = {};
 
 // ─── Helpers ───
 
+const roundQuizScore = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
+
 export function mapRowToSurvey(row: any) {
   return {
     id: row.id,
@@ -51,8 +53,8 @@ export function mapRowToResponse(row: any) {
     surveyId: row.survey_id,
     respondentId: row.respondent_id,
     answers: row.answers,
-    score: row.score !== null && row.score !== undefined ? parseFloat(row.score) : null,
-    totalQuizQuestions: row.total_quiz_questions !== null && row.total_quiz_questions !== undefined ? parseFloat(row.total_quiz_questions) : null,
+    score: row.score !== null && row.score !== undefined ? roundQuizScore(parseFloat(row.score)) : null,
+    totalQuizQuestions: row.total_quiz_questions !== null && row.total_quiz_questions !== undefined ? roundQuizScore(parseFloat(row.total_quiz_questions)) : null,
     submittedAt: row.submitted_at,
   };
 }
@@ -87,7 +89,7 @@ export function computeServerQuizScore(questions: any[], answers: Record<string,
       }
     }
   }
-  return { score, totalPossible };
+  return { score: roundQuizScore(score), totalPossible: roundQuizScore(totalPossible) };
 }
 
 function assertIntegerStarRatings(questions: any[], answers: Record<string, unknown> | undefined) {
@@ -222,8 +224,8 @@ export async function submitResponse(surveyId: string, data: any) {
       const computed = computeServerQuizScore(survey.questions, answers || {});
       finalScore = computed.score; finalTotal = computed.totalPossible;
     } else if (score !== undefined && score !== null && Number.isFinite(Number(score))) {
-      finalScore = Number(score);
-      finalTotal = totalQuizQuestions !== undefined && totalQuizQuestions !== null && Number.isFinite(Number(totalQuizQuestions)) ? Number(totalQuizQuestions) : null;
+      finalScore = roundQuizScore(Number(score));
+      finalTotal = totalQuizQuestions !== undefined && totalQuizQuestions !== null && Number.isFinite(Number(totalQuizQuestions)) ? roundQuizScore(Number(totalQuizQuestions)) : null;
     }
     inMemoryResponses[surveyId] = inMemoryResponses[surveyId] || [];
     const existing = inMemoryResponses[surveyId].find((r: any) => r.respondentId === respondentId);
@@ -251,8 +253,8 @@ export async function submitResponse(surveyId: string, data: any) {
     const computed = computeServerQuizScore(questions, answers || {});
     finalScore = computed.score; finalTotal = computed.totalPossible;
   } else if (score !== undefined && score !== null && Number.isFinite(Number(score))) {
-    finalScore = Number(score);
-    finalTotal = totalQuizQuestions !== undefined && totalQuizQuestions !== null && Number.isFinite(Number(totalQuizQuestions)) ? Number(totalQuizQuestions) : null;
+    finalScore = roundQuizScore(Number(score));
+    finalTotal = totalQuizQuestions !== undefined && totalQuizQuestions !== null && Number.isFinite(Number(totalQuizQuestions)) ? roundQuizScore(Number(totalQuizQuestions)) : null;
   }
 
   const existingCheck = await pool.query('SELECT id FROM responses WHERE survey_id = $1 AND respondent_id = $2', [surveyId, respondentId]);

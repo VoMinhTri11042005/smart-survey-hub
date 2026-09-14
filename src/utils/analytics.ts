@@ -103,7 +103,7 @@ export function computeSurveyAnalytics(survey: Survey, responses: SurveyResponse
 
   // Calculate maximum possible quiz score directly from survey questions
   const calculatedTotalPossible = survey.isQuiz
-    ? survey.questions.reduce((sum, q) => {
+    ? Math.round(survey.questions.reduce((sum, q) => {
         if ((q.type === 'single_choice' || q.type === 'multiple_choice') && q.correctAnswer) {
           const hasCorrect =
             typeof q.correctAnswer === 'string'
@@ -115,7 +115,7 @@ export function computeSurveyAnalytics(survey: Survey, responses: SurveyResponse
           }
         }
         return sum;
-      }, 0)
+      }, 0) * 100) / 100
     : 0;
 
   if (survey.isQuiz) {
