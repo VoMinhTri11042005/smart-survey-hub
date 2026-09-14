@@ -138,7 +138,9 @@ function numberReference(formula: string, values: number[], numberFormat = '#,##
 
 function dataLabels(showValues: boolean, showPercent: boolean) {
   if (!showValues && !showPercent) return '';
-  return `<c:dLbls><c:showLegendKey val="0"/><c:showVal val="${showValues ? 1 : 0}"/><c:showCatName val="0"/><c:showSerName val="0"/><c:showPercent val="${showPercent ? 1 : 0}"/><c:showLeaderLines val="${showPercent ? 1 : 0}"/></c:dLbls>`;
+  // showLeaderLines is only valid for pie/doughnut labels in Excel's schema;
+  // emitting it on bar charts makes desktop Excel offer to repair the file.
+  return `<c:dLbls><c:showLegendKey val="0"/><c:showVal val="${showValues ? 1 : 0}"/><c:showCatName val="0"/><c:showSerName val="0"/><c:showPercent val="${showPercent ? 1 : 0}"/>${showPercent ? '<c:showLeaderLines val="1"/>' : ''}</c:dLbls>`;
 }
 
 function chartSeries(spec: NativeChartSpec, index: number, includePoints: boolean) {
