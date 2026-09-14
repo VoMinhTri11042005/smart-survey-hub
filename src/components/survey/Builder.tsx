@@ -88,6 +88,8 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError }: { onP
   // Drag state for question reordering
   const [dragOverId, setDragOverId] = useState<string | null>(null);
   const dragOverRef = useRef<string | null>(null);
+  const [draggedOption, setDraggedOption] = useState<{ questionId: string; index: number } | null>(null);
+  const [dragOverOption, setDragOverOption] = useState<{ questionId: string; index: number } | null>(null);
 
   const handleDragStart = (e: React.DragEvent, id: string) => {
     try {
@@ -130,6 +132,55 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError }: { onP
     });
     dragOverRef.current = null;
     setDragOverId(null);
+  };
+
+  const handleOptionDragStart = (e: React.DragEvent, questionId: string, index: number) => {
+    e.stopPropagation();
+    e.dataTransfer.setData('application/x-survey-option', JSON.stringify({ questionId, index }));
+    e.dataTransfer.effectAllowed = 'move';
+    setDraggedOption({ questionId, index });
+  };
+
+  const handleOptionDragOver = (e: React.DragEvent, questionId: string, index: number) => {
+    const source = draggedOption;
+    if (!source || source.questionId !== questionId) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverOption({ questionId, index });
+  };
+
+  const handleOptionDrop = (e: React.DragEvent, questionId: string, targetIndex: number) => {
+    e.preventDefault();
+    e.stopPropagation();
+    let source: { questionId: string; index: number } | null = draggedOption;
+    try {
+      const encoded = e.dataTransfer.getData('application/x-survey-option');
+      if (encoded) source = JSON.parse(encoded) as { questionId: string; index: number };
+    } catch {
+      // Keep the in-memory drag state as a fallback for browsers that strip custom data.
+    }
+    if (!source || source.questionId !== questionId || source.index === targetIndex) {
+      setDraggedOption(null);
+      setDragOverOption(null);
+      return;
+    }
+    setQuestions(prev => prev.map(question => {
+      if (question.id !== questionId || !question.options) return question;
+      const options = [...question.options];
+      if (source!.index < 0 || source!.index >= options.length || targetIndex < 0 || targetIndex >= options.length) return question;
+      const [moved] = options.splice(source!.index, 1);
+      options.splice(targetIndex, 0, moved);
+      return { ...question, options };
+    }));
+    setDraggedOption(null);
+    setDragOverOption(null);
+  };
+
+  const handleOptionDragEnd = (e: React.DragEvent) => {
+    e.stopPropagation();
+    setDraggedOption(null);
+    setDragOverOption(null);
   };
 
   // AI Chat state
@@ -710,8 +761,26 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError }: { onP
                      {(q.type === 'single_choice' || q.type === 'multiple_choice') && q.options && (
                        <div className="space-y-2 mt-3">
                          {q.options.map((opt, optIdx) => (
-                           <div key={optIdx} className={`flex items-center gap-3 p-3 bg-surface-background rounded-xl border group ${isQuiz && ((q.type === 'single_choice' && q.correctAnswer === opt) || (q.type === 'multiple_choice' && Array.isArray(q.correctAnswer) && q.correctAnswer.includes(opt))) ? 'border-sentiment-positive bg-sentiment-positive/5' : 'border-border-subtle'}`}>
-                             {isQuiz ? (
+                            <div
+                              key={optIdx}
+                              draggable
+                              onDragStart={(e) => handleOptionDragStart(e, q.id, optIdx)}
+                              onDragOver={(e) => handleOptionDragOver(e, q.id, optIdx)}
+                              onDrop={(e) => handleOptionDrop(e, q.id, optIdx)}
+                              onDragEnd={handleOptionDragEnd}
+                              className={`flex items-center gap-3 p-3 bg-surface-background rounded-xl border group transition-colors ${isQuiz && ((q.type === 'single_choice' && q.correctAnswer === opt) || (q.type === 'multiple_choice' && Array.isArray(q.correctAnswer) && q.correctAnswer.includes(opt))) ? 'border-sentiment-positive bg-sentiment-positive/5' : 'border-border-subtle'} ${dragOverOption?.questionId === q.id && dragOverOption.index === optIdx ? 'ring-2 ring-primary/40 border-primary' : ''} ${draggedOption?.questionId === q.id && draggedOption.index === optIdx ? 'opacity-50' : ''}`}
+                            >
+                              <span
+                                draggable
+                                onDragStart={(e) => handleOptionDragStart(e, q.id, optIdx)}
+                                onDragEnd={handleOptionDragEnd}
+                                className="flex-shrink-0 p-1 -ml-1 text-text-secondary/60 hover:text-primary cursor-grab active:cursor-grabbing"
+                                title="Nhấn giữ và kéo để sắp xếp đáp án"
+                                aria-label={`Kéo đáp án ${optIdx + 1} để sắp xếp`}
+                              >
+                                <GripVertical size={16} />
+                              </span>
+                              {isQuiz ? (
                                <button
                                  onClick={(e) => { e.stopPropagation(); toggleCorrectAnswer(q.id, opt); }}
                                  className={`flex-shrink-0 w-5 h-5 ${q.type === 'multiple_choice' ? 'rounded-md' : 'rounded-full'} border-2 flex items-center justify-center transition-colors cursor-pointer ${
