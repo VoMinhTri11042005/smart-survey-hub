@@ -71,6 +71,9 @@ export function Analytics() {
   const visibleQuestionMetrics = filteredQuestionMetrics.filter(({ question }) => {
     if (questionFilter === 'all') return true;
     if (questionFilter === 'choice') return question.type === 'single_choice' || question.type === 'multiple_choice';
+    // The filter uses the reader-facing label "rating", while the data model
+    // stores star-scale questions as "star_rating".
+    if (questionFilter === 'rating') return question.type === 'star_rating';
     return question.type === questionFilter;
   });
 
