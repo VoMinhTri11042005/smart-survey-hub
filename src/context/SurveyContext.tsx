@@ -365,7 +365,7 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
         const raw = localStorage.getItem(key);
         if (!raw) continue;
         const value = JSON.parse(raw);
-        const next = Array.isArray(value) ? value.filter((draft: any) => draft?.id !== id) : value?.id === id ? null : value;
+        const next = Array.isArray(value) ? value.filter((draft: any) => draft?.id !== id) : (value?.id === id || key === 'smart-survey-hub-builder-draft' ? null : value);
         if (next === null) localStorage.removeItem(key);
         else localStorage.setItem(key, JSON.stringify(next));
       } catch (error) {

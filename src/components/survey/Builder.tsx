@@ -319,6 +319,7 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError }: { onP
     if (!showSurvey) return;
 
     const draft = {
+      id: draftId || undefined,
       surveyTitle,
       surveyDescription,
       questions,
