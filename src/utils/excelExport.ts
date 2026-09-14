@@ -317,6 +317,9 @@ function buildProfessionalSheets(workbook: ExcelJS.Workbook, survey: Survey, res
   addDashboardTable('Thói quen phổ biến nhất', habits?.options, 'bar');
   addDashboardTable('Cơ cấu năm học', year?.options, 'doughnut');
   addDashboardTable('Trường của người tham gia', school?.options, 'doughnut');
+  if (primaryRating) {
+    addDashboardTable('Phân bố mức ảnh hưởng', [1, 2, 3, 4, 5].map(star => ({ label: `${star} sao`, count: primaryRating.distribution[star] ?? 0, percent: primaryRating.totalAnswered ? (primaryRating.distribution[star] ?? 0) / primaryRating.totalAnswered * 100 : 0 })), 'bar');
+  }
   chartTables.forEach((chart, index) => {
     const dataStart = chart.row + 2;
     const dataEnd = dataStart + chart.rows.length - 1;
@@ -353,7 +356,7 @@ function buildProfessionalSheets(workbook: ExcelJS.Workbook, survey: Survey, res
     detail.getColumn(4).numFmt = '0.0%'; styleTableBody(detail, detailRow + 2, detailRow + 6, [9, 55, 14, 14, 14]);
     detailChartRows.push({ title: `Câu ${number}`, rows, type: 'bar', row: detailRow }); detailRow += 9;
   });
-  detailChartRows.slice(0, 8).forEach((chart, index) => {
+  detailChartRows.slice(0, 12).forEach((chart, index) => {
     const dataStart = chart.row + 2; const dataEnd = dataStart + chart.rows.length - 1;
     nativeCharts.push({ sheetName: 'Chi tiết câu hỏi', type: chart.type, title: chart.title, categoryFormula: `'Chi tiết câu hỏi'!$B$${dataStart}:$B$${dataEnd}`, categories: chart.rows.map(row => row[0]), series: [{ name: 'Số lượt', valueFormula: `'Chi tiết câu hỏi'!$C$${dataStart}:$C$${dataEnd}`, values: chart.rows.map(row => row[1]), color: index % 2 ? '70AD47' : '1F4E78' }], anchor: { from: { col: 7 + (index % 2) * 8, row: chart.row - 1 }, to: { col: 14 + (index % 2) * 8, row: chart.row + 12 } }, showLegend: chart.type === 'doughnut', showValues: chart.type === 'bar', showPercent: chart.type === 'doughnut' });
   });
@@ -385,6 +388,26 @@ function buildProfessionalSheets(workbook: ExcelJS.Workbook, survey: Survey, res
     const insight = rows.flatMap(row => row.slice(1).map((value, index) => ({ label: row[0] as string, group: groups[index].label, value: Number(value) }))).sort((a, b) => b.value - a.value)[0];
     cross.mergeCells(`A${crossRow + rows.length + 3}:H${crossRow + rows.length + 4}`); cross.getCell(`A${crossRow + rows.length + 3}`).value = insight ? `Nhận xét định lượng: “${insight.label}” cao nhất ở nhóm “${insight.group}” (${(insight.value * 100).toFixed(1)}%). Đây là mô tả theo mẫu khảo sát, không phải kết luận nhân quả.` : 'Chưa đủ dữ liệu để tạo nhận xét định lượng.'; cross.getCell(`A${crossRow + rows.length + 3}`).font = { name: 'Arial', size: 10, italic: true, color: { argb: 'FF475569' } }; cross.getCell(`A${crossRow + rows.length + 3}`).alignment = { wrapText: true, vertical: 'top' }; crossRow += rows.length + 7;
     nativeCharts.push({ sheetName: 'Phân tích chéo', type: 'bar', title: 'Tỷ lệ theo nhóm (%)', categoryFormula: `'Phân tích chéo'!$A$${crossRow - rows.length - 5}:$A$${crossRow - 6}`, categories: rows.map(row => String(row[0])), series: groups.map((group, index) => ({ name: group.label, valueFormula: `'Phân tích chéo'!$${String.fromCharCode(66 + index)}$${crossRow - rows.length - 5}:$${String.fromCharCode(66 + index)}$${crossRow - 6}`, values: rows.map(row => Number(row[index + 1]) * 100), color: index % 2 ? '70AD47' : '1F4E78', numberFormat: '0.0' })), anchor: { from: { col: 7, row: 3 }, to: { col: 15, row: 22 } }, showLegend: true, valueAxisTitle: 'Tỷ lệ (%)', valueAxisNumberFormat: '0.0' });
+    if (primaryRating) {
+      const addCrossRating = (title: string, question: SurveyQuestion | undefined) => {
+        if (!question) return;
+        const options = choiceByQuestion.get(question.id)?.options ?? [];
+        if (!options.length) return;
+        const start = crossRow + 1;
+        cross.getCell(`A${start}`).value = title; cross.getCell(`A${start}`).font = { bold: true, color: { argb: `FF${BRAND}` } };
+        cross.getRow(start + 1).values = ['Nhóm', 'Số mẫu', 'Điểm TB']; styleTableHeader(cross.getRow(start + 1));
+        const table = options.slice(0, 8).map(option => {
+          const matching = responses.filter(response => responseHasSelection(response, question.id, option.label));
+          const ratings = matching.map(response => Number(response.answers[primaryRating.questionId])).filter(value => Number.isFinite(value) && value >= 1 && value <= 5);
+          return [option.label, ratings.length, ratings.length ? ratings.reduce((sum, value) => sum + value, 0) / ratings.length : 0] as [string, number, number];
+        });
+        table.forEach((values, i) => cross.getRow(start + i + 2).values = values); cross.getColumn(3).numFmt = '0.00'; styleTableBody(cross, start + 2, start + table.length + 1, [48, 16, 16]);
+        nativeCharts.push({ sheetName: 'Phân tích chéo', type: 'bar', title, categoryFormula: `'Phân tích chéo'!$A$${start + 2}:$A$${start + table.length + 1}`, categories: table.map(row => row[0]), series: [{ name: 'Điểm TB', valueFormula: `'Phân tích chéo'!$C$${start + 2}:$C$${start + table.length + 1}`, values: table.map(row => row[2]), color: '70AD47', numberFormat: '0.00' }], anchor: { from: { col: 7, row: start - 1 }, to: { col: 15, row: start + 16 } }, showLegend: false, showValues: true, valueAxisTitle: 'Điểm trung bình', valueAxisNumberFormat: '0.00' });
+        crossRow = start + table.length + 4;
+      };
+      addCrossRating('Điểm ảnh hưởng TB theo nhóm thói quen', survey.questions.find(question => question.text.toLocaleLowerCase('vi-VN').includes('thói quen') && question.type === 'multiple_choice'));
+      addCrossRating('Điểm ảnh hưởng TB theo tần suất', survey.questions.find(question => ['tần suất', 'thường xuyên', 'mỗi ngày'].some(term => question.text.toLocaleLowerCase('vi-VN').includes(term)) && (question.type === 'single_choice' || question.type === 'multiple_choice')));
+    }
   } else {
     cross.mergeCells('A4:H6'); cross.getCell('A4').value = 'Chưa có đồng thời biến phân nhóm và câu hỏi đa lựa chọn để thực hiện phân tích chéo.'; cross.getCell('A4').alignment = { wrapText: true, vertical: 'top' }; cross.getCell('A4').font = { italic: true, color: { argb: 'FF64748B' } };
   }
