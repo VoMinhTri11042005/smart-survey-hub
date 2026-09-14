@@ -356,8 +356,14 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const deleteDraft = useCallback(async (id: string) => {
-    const res = await fetch(`${API_BASE}/surveys/drafts/${id}`, { method: 'DELETE', headers: { 'X-Confirm-Action': 'delete-draft' } });
-    if (!res.ok) throw new Error('Failed to delete draft');
+    // Server deletion is best-effort: a draft may exist only in local fallback
+    // storage (or already be deleted remotely), but must still disappear here.
+    try {
+      const res = await fetch(`${API_BASE}/surveys/drafts/${id}`, { method: 'DELETE', headers: { 'X-Confirm-Action': 'delete-draft' } });
+      if (!res.ok && res.status !== 404) console.warn('Draft delete API returned', res.status);
+    } catch (error) {
+      console.warn('Draft delete API unavailable; removing local copy', error);
+    }
 
     // Keep the browser fallback storage in sync, without touching other drafts.
     for (const key of ['smart-survey-hub-builder-draft', 'smart-survey-hub-drafts']) {
