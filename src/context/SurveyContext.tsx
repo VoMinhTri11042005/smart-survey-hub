@@ -58,7 +58,10 @@ let envApi = (import.meta as any).env.VITE_API_URL;
 if (envApi && !envApi.endsWith('/api')) {
   envApi = envApi.endsWith('/') ? envApi + 'api' : envApi + '/api';
 }
-const API_BASE = envApi || '/api';
+// Vercel hosts the frontend while the persistent API/database run on Render.
+// Keep a production fallback so drafts do not silently fall back to per-device localStorage
+// when VITE_API_URL is not injected into the Vercel build.
+const API_BASE = envApi || (import.meta.env.PROD ? 'https://smart-survey-hub.onrender.com/api' : '/api');
 
 export function SurveyProvider({ children }: { children: ReactNode }) {
   const [surveys, setSurveys] = useState<Survey[]>(() => {
