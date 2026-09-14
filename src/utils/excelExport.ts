@@ -59,6 +59,11 @@ function createDownloadFilename(title: string) {
   return `${safeTitle || 'Phân tích khảo sát'}_phan-tich.xlsx`;
 }
 
+function chartLabel(value: unknown, maxLength = 32) {
+  const text = displayText(String(value ?? ''));
+  return text.length > maxLength ? `${text.slice(0, maxLength - 1).trim()}…` : text;
+}
+
 function drawBarChart(title: string, labels: string[], values: number[], color = '#3730a3') {
   const canvas = document.createElement('canvas');
   canvas.width = 1100;
@@ -89,7 +94,8 @@ function drawBarChart(title: string, labels: string[], values: number[], color =
 
   const slot = width / Math.max(labels.length, 1);
   const barWidth = Math.min(88, slot * 0.62);
-  labels.forEach((label, index) => {
+  labels.forEach((rawLabel, index) => {
+    const label = chartLabel(rawLabel);
     const barHeight = (values[index] / max) * height;
     const x = left + index * slot + (slot - barWidth) / 2;
     const y = top + height - barHeight;
@@ -160,7 +166,8 @@ function drawDoughnutChart(title: string, labels: string[], values: number[]) {
   ctx.fillStyle = '#172033';
   ctx.font = 'bold 16px Arial';
   ctx.fillText('Ghi chú', 545, 88);
-  labels.forEach((label, index) => {
+  labels.forEach((rawLabel, index) => {
+    const label = displayText(String(rawLabel ?? ''));
     const y = 130 + index * 58;
     const percent = Math.round((values[index] / total) * 100);
     ctx.fillStyle = `#${PALETTE[index % PALETTE.length]}`;
@@ -293,7 +300,7 @@ function buildProfessionalSheets(workbook: ExcelJS.Workbook, survey: Survey, res
   addKpiCard(dashboard, 'A4:B5', 'TỔNG PHẢN HỒI', analytics.totalResponses);
   addKpiCard(dashboard, 'C4:D5', 'TỶ LỆ HOÀN THÀNH', `${analytics.completionRate}%`);
   addKpiCard(dashboard, 'E4:F5', 'MỨC ẢNH HƯỞNG TB', primaryRating ? `${primaryRating.average}/5` : 'Chưa có');
-  addKpiCard(dashboard, 'G4:H5', 'NHÓM PHỔ BIẾN NHẤT', habits?.options[0]?.label ?? 'Chưa có');
+  addKpiCard(dashboard, 'G4:H5', 'NHÓM PHỔ BIẾN NHẤT', displayText(habits?.options[0]?.label) || 'Chưa có');
   dashboard.getRow(4).height = 30; dashboard.getRow(5).height = 32;
   dashboard.mergeCells('A7:H7');
   dashboard.getCell('A7').value = 'Tổng hợp các kết quả chính';
@@ -794,8 +801,8 @@ export async function exportSurveyAnalysisToExcel(survey: Survey, responses: Sur
     const sheet = workbook.getWorksheet(spec.sheetName);
     if (!sheet) return;
     const image = spec.type === 'doughnut' || spec.type === 'pie'
-      ? drawDoughnutChart(spec.title, spec.categories, spec.series[0].values)
-      : drawBarChart(spec.title, spec.categories, spec.series[0].values, `#${spec.series[0].color ?? '3730A3'}`);
+      ? drawDoughnutChart(displayText(spec.title), spec.categories.map(label => displayText(label)), spec.series[0].values)
+      : drawBarChart(displayText(spec.title), spec.categories.map(label => displayText(label)), spec.series[0].values, `#${spec.series[0].color ?? '3730A3'}`);
     if (!image) return;
     const imageId = workbook.addImage({ base64: image, extension: 'png' });
     sheet.addImage(imageId, { tl: { col: spec.anchor.from.col, row: spec.anchor.from.row }, ext: { width: 720, height: 340 } });
