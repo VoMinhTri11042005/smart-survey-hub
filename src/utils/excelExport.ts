@@ -1,8 +1,10 @@
 import ExcelJS from 'exceljs';
-import type { Survey, SurveyResponse } from '../types';
+import type { Survey, SurveyQuestion, SurveyResponse } from '../types';
 import { computeSurveyAnalytics } from './analytics';
 import { cleanHtmlWhitespace, stripHtml } from './stringUtils';
 import { roundLegacyStarRating } from '../../shared/starRating';
+import { isPersonalIdentifierQuestion, normalizeTextCategoryValue } from './textAnalytics';
+import { injectNativeCharts, type NativeChartSpec } from './xlsxNativeCharts';
 
 const BRAND = '3730A3';
 const PALETTE = ['3730A3', '006591', '60A5FA', '10B981', 'F59E0B', 'EF4444'];
@@ -168,6 +170,241 @@ function formatSheet(sheet: ExcelJS.Worksheet, widths: number[]) {
   });
 }
 
+function sheetTitle(sheet: ExcelJS.Worksheet, title: string, subtitle: string, endColumn = 'H') {
+  sheet.views = [{ showGridLines: false }];
+  sheet.mergeCells(`A1:${endColumn}1`);
+  sheet.mergeCells(`A2:${endColumn}2`);
+  sheet.getCell('A1').value = title;
+  sheet.getCell('A2').value = subtitle;
+  sheet.getCell('A1').font = { name: 'Arial', size: 16, bold: true, color: { argb: 'FF172033' } };
+  sheet.getCell('A2').font = { name: 'Arial', size: 10, italic: true, color: { argb: 'FF64748B' } };
+  sheet.getRow(1).height = 28;
+  sheet.getRow(2).height = 22;
+}
+
+function styleTableHeader(row: ExcelJS.Row) {
+  row.font = { name: 'Arial', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
+  row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${BRAND}` } };
+  row.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+  row.height = 28;
+}
+
+function styleTableBody(sheet: ExcelJS.Worksheet, firstRow: number, lastRow: number, widths: number[]) {
+  for (let rowNumber = firstRow; rowNumber <= lastRow; rowNumber++) {
+    const row = sheet.getRow(rowNumber);
+    row.font = { name: 'Arial', size: 10, color: { argb: 'FF172033' } };
+    row.alignment = { vertical: 'top', wrapText: true };
+    row.height = Math.min(300, Math.max(20, Math.max(...widths.map((width, index) => estimatedLineCount(row.getCell(index + 1).value, width))) * 15 + 6));
+  }
+}
+
+function promptKey(value: unknown) {
+  return displayText(String(value ?? ''))
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D')
+    .toLocaleLowerCase('vi-VN');
+}
+
+function findQuestion(survey: Survey, matcher: RegExp, types?: SurveyQuestion['type'][]) {
+  return survey.questions.find(question => (!types || types.includes(question.type)) && matcher.test(promptKey(question.text)));
+}
+
+function addKpiCard(sheet: ExcelJS.Worksheet, range: string, label: string, value: string | number) {
+  sheet.mergeCells(range);
+  const [start] = range.split(':');
+  const cell = sheet.getCell(start);
+  cell.value = `${label}\n${value}`;
+  cell.font = { name: 'Arial', size: 12, bold: true, color: { argb: 'FF172033' } };
+  cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } };
+  cell.alignment = { vertical: 'middle', horizontal: 'left', wrapText: true };
+  cell.border = { top: { style: 'thin', color: { argb: 'FFD9E2F3' } }, bottom: { style: 'thin', color: { argb: 'FFD9E2F3' } }, left: { style: 'thin', color: { argb: 'FFD9E2F3' } }, right: { style: 'thin', color: { argb: 'FFD9E2F3' } } };
+}
+
+function categoryRows(options: Array<{ label: string; count: number; percent?: number }>, limit = 8) {
+  const sorted = [...options].sort((a, b) => b.count - a.count || a.label.localeCompare(b.label, 'vi'));
+  if (sorted.length <= limit) return sorted;
+  const top = sorted.slice(0, limit - 1);
+  const rest = sorted.slice(limit - 1).reduce((sum, option) => sum + option.count, 0);
+  return [...top, { label: 'Khác', count: rest, percent: sorted.reduce((sum, option) => sum + (option.percent ?? 0), 0) - top.reduce((sum, option) => sum + (option.percent ?? 0), 0) }];
+}
+
+function writeAnalysisTable(sheet: ExcelJS.Worksheet, startRow: number, headers: string[], rows: Array<Array<string | number>>, widths: number[]) {
+  sheet.getRow(startRow).values = headers;
+  styleTableHeader(sheet.getRow(startRow));
+  rows.forEach((values, index) => { sheet.getRow(startRow + index + 1).values = values; });
+  if (rows.length) styleTableBody(sheet, startRow + 1, startRow + rows.length, widths);
+  widths.forEach((width, index) => { sheet.getColumn(index + 1).width = Math.max(sheet.getColumn(index + 1).width || 0, width); });
+  return startRow + rows.length;
+}
+
+function responseHasSelection(response: SurveyResponse, questionId: string, label: string) {
+  const answer = response.answers[questionId];
+  if (Array.isArray(answer)) return answer.some(value => displayText(String(value)) === label);
+  return typeof answer === 'string' && answer.split(';').map(value => displayText(value)).includes(label);
+}
+
+function groupAnswerKey(question: SurveyQuestion, answer: unknown) {
+  if (question.type === 'text') return normalizeTextCategoryValue(answer)?.key ?? null;
+  return displayText(String(answer ?? '')).toLocaleLowerCase('vi-VN') || null;
+}
+
+function buildProfessionalSheets(workbook: ExcelJS.Workbook, survey: Survey, responses: SurveyResponse[], analytics: ReturnType<typeof computeSurveyAnalytics>) {
+  const nativeCharts: NativeChartSpec[] = [];
+  const choiceByQuestion = new Map(analytics.choiceDistributions.map(distribution => [distribution.questionId, distribution]));
+  const textByQuestion = new Map(analytics.textCategoryDistributions.map(distribution => [distribution.questionId, distribution]));
+  const starByQuestion = new Map(analytics.starRatings.map(result => [result.questionId, result]));
+  const topChoice = (matcher: RegExp, types?: SurveyQuestion['type'][]) => {
+    const question = findQuestion(survey, matcher, types);
+    return question ? choiceByQuestion.get(question.id) : undefined;
+  };
+  const topText = (matcher: RegExp) => {
+    const question = findQuestion(survey, matcher, ['text']);
+    return question ? textByQuestion.get(question.id) : undefined;
+  };
+
+  const habits = topChoice(/thoi quen/, ['multiple_choice']) ?? analytics.choiceDistributions.find(distribution => survey.questions.find(question => question.id === distribution.questionId)?.type === 'multiple_choice');
+  const recommendations = topChoice(/bien phap|khac phuc|giai phap/, ['multiple_choice']);
+  const year = topChoice(/nam may|nam hoc|nam thu|sinh vien nam/, ['single_choice', 'multiple_choice']) ?? topText(/nam may|nam hoc|nam thu|sinh vien nam/);
+  const school = topText(/truong|dai hoc|university|college/);
+  const major = topText(/nganh|chuyen nganh|major|khoa/);
+  const primaryRating = analytics.starRatings[0];
+
+  const dashboard = workbook.addWorksheet('Dashboard');
+  sheetTitle(dashboard, `DASHBOARD PHÂN TÍCH: ${displayText(survey.title).toUpperCase()}`, `Mẫu khảo sát n = ${analytics.totalResponses} phản hồi · Xuất lúc ${new Date().toLocaleString('vi-VN')}`, 'H');
+  ['A','B','C','D','E','F','G','H'].forEach(column => dashboard.getColumn(column).width = 18);
+  addKpiCard(dashboard, 'A4:B5', 'TỔNG PHẢN HỒI', analytics.totalResponses);
+  addKpiCard(dashboard, 'C4:D5', 'TỶ LỆ HOÀN THÀNH', `${analytics.completionRate}%`);
+  addKpiCard(dashboard, 'E4:F5', 'MỨC ẢNH HƯỞNG TB', primaryRating ? `${primaryRating.average}/5` : 'Chưa có');
+  addKpiCard(dashboard, 'G4:H5', 'NHÓM PHỔ BIẾN NHẤT', habits?.options[0]?.label ?? 'Chưa có');
+  dashboard.getRow(4).height = 30; dashboard.getRow(5).height = 32;
+  dashboard.mergeCells('A7:H7');
+  dashboard.getCell('A7').value = 'Tổng hợp các kết quả chính';
+  dashboard.getCell('A7').font = { name: 'Arial', size: 12, bold: true, color: { argb: `FF${BRAND}` } };
+  dashboard.getCell('A7').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEDE9FE' } };
+
+  let row = 8;
+  const chartTables: Array<{ type: NativeChartSpec['type']; title: string; rows: Array<[string, number]>; categoryCol: number; valueCol: number; showPercent?: boolean; row: number }> = [];
+  const addDashboardTable = (title: string, options: Array<{ label: string; count: number; percent?: number }> | undefined, chartType: NativeChartSpec['type']) => {
+    if (!options?.length) return;
+    const compact = categoryRows(options, 6);
+    dashboard.getCell(`A${row}`).value = title;
+    dashboard.getCell(`A${row}`).font = { bold: true, color: { argb: `FF${BRAND}` } };
+    dashboard.getCell(`A${row + 1}`).value = 'Nhóm'; dashboard.getCell(`B${row + 1}`).value = 'Số lượt'; dashboard.getCell(`C${row + 1}`).value = 'Tỷ lệ';
+    styleTableHeader(dashboard.getRow(row + 1));
+    compact.forEach((option, index) => {
+      dashboard.getCell(`A${row + index + 2}`).value = option.label;
+      dashboard.getCell(`B${row + index + 2}`).value = option.count;
+      dashboard.getCell(`C${row + index + 2}`).value = (option.percent ?? (analytics.totalResponses ? option.count / analytics.totalResponses * 100 : 0)) / 100;
+    });
+    dashboard.getColumn(3).numFmt = '0.0%';
+    styleTableBody(dashboard, row + 2, row + compact.length + 1, [44, 14, 14]);
+    chartTables.push({ type: chartType, title, rows: compact.map(option => [option.label, option.count]), categoryCol: 1, valueCol: 2, showPercent: chartType === 'doughnut', row });
+    row += compact.length + 4;
+  };
+  addDashboardTable('Thói quen phổ biến nhất', habits?.options, 'bar');
+  addDashboardTable('Cơ cấu năm học', year?.options, 'doughnut');
+  addDashboardTable('Trường của người tham gia', school?.options, 'doughnut');
+  chartTables.forEach((chart, index) => {
+    const dataStart = chart.row + 2;
+    const dataEnd = dataStart + chart.rows.length - 1;
+    nativeCharts.push({ sheetName: 'Dashboard', type: chart.type, title: chart.title, categoryFormula: `'Dashboard'!$A$${dataStart}:$A$${dataEnd}`, categories: chart.rows.map(row => row[0]), series: [{ name: 'Số lượt', valueFormula: `'Dashboard'!$B$${dataStart}:$B$${dataEnd}`, values: chart.rows.map(row => row[1]), color: '1F4E78' }], anchor: { from: { col: 4 + index * 4, row: 7 }, to: { col: 8 + index * 4, row: 24 } }, showLegend: chart.type === 'doughnut', showValues: chart.type === 'bar', showPercent: chart.showPercent });
+  });
+
+  const detail = workbook.addWorksheet('Chi tiết câu hỏi');
+  sheetTitle(detail, 'BIỂU ĐỒ CHI TIẾT THEO TỪNG CÂU HỎI', 'Phân phối câu trả lời, tỷ lệ trả lời và cỡ mẫu theo từng câu hỏi.', 'H');
+  ['A','B','C','D','E','F','G','H'].forEach((column, index) => detail.getColumn(column).width = [9, 55, 22, 14, 14, 14, 14, 14][index]);
+  let detailRow = 4;
+  const detailChartRows: Array<{ title: string; rows: Array<[string, number]>; type: NativeChartSpec['type']; row: number }> = [];
+  [...analytics.choiceDistributions, ...analytics.textCategoryDistributions].forEach(distribution => {
+    if (!distribution.options.length) return;
+    const number = survey.questions.findIndex(question => question.id === distribution.questionId) + 1;
+    const options = categoryRows(distribution.options, 10);
+    detail.mergeCells(`A${detailRow}:H${detailRow}`);
+    detail.getCell(`A${detailRow}`).value = `Câu ${number}: ${displayText(distribution.questionText)}`;
+    detail.getCell(`A${detailRow}`).font = { bold: true, color: { argb: `FF${BRAND}` } };
+    detail.getCell(`A${detailRow}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEDE9FE' } };
+    detail.getRow(detailRow + 1).values = ['STT', 'Nhóm trả lời', 'Số lượt', 'Tỷ lệ', 'Cỡ mẫu (n)', '', '', ''];
+    styleTableHeader(detail.getRow(detailRow + 1));
+    options.forEach((option, index) => detail.getRow(detailRow + index + 2).values = [index + 1, option.label, option.count, (option.percent ?? 0) / 100, distribution.totalAnswered, '', '', '']);
+    detail.getColumn(4).numFmt = '0.0%';
+    styleTableBody(detail, detailRow + 2, detailRow + options.length + 1, [9, 55, 14, 14, 14]);
+    detailChartRows.push({ title: `Câu ${number}`, rows: options.map(option => [option.label, option.count]), type: options.length <= 6 ? 'doughnut' : 'bar', row: detailRow });
+    detailRow += options.length + 4;
+  });
+  analytics.starRatings.forEach(rating => {
+    const number = survey.questions.findIndex(question => question.id === rating.questionId) + 1;
+    const rows = [1,2,3,4,5].map(star => [`${star} sao`, rating.distribution[star] ?? 0] as [string, number]);
+    detail.mergeCells(`A${detailRow}:H${detailRow}`); detail.getCell(`A${detailRow}`).value = `Câu ${number}: ${displayText(rating.questionText)}`; detail.getCell(`A${detailRow}`).font = { bold: true, color: { argb: `FF${BRAND}` } }; detail.getCell(`A${detailRow}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEDE9FE' } };
+    detail.getRow(detailRow + 1).values = ['STT', 'Mức đánh giá', 'Số phản hồi', 'Tỷ lệ', 'Cỡ mẫu (n)', '', '', '']; styleTableHeader(detail.getRow(detailRow + 1));
+    rows.forEach(([label, count], index) => detail.getRow(detailRow + index + 2).values = [index + 1, label, count, rating.totalAnswered ? count / rating.totalAnswered : 0, rating.totalAnswered, '', '', '']);
+    detail.getColumn(4).numFmt = '0.0%'; styleTableBody(detail, detailRow + 2, detailRow + 6, [9, 55, 14, 14, 14]);
+    detailChartRows.push({ title: `Câu ${number}`, rows, type: 'bar', row: detailRow }); detailRow += 9;
+  });
+  detailChartRows.slice(0, 8).forEach((chart, index) => {
+    const dataStart = chart.row + 2; const dataEnd = dataStart + chart.rows.length - 1;
+    nativeCharts.push({ sheetName: 'Chi tiết câu hỏi', type: chart.type, title: chart.title, categoryFormula: `'Chi tiết câu hỏi'!$B$${dataStart}:$B$${dataEnd}`, categories: chart.rows.map(row => row[0]), series: [{ name: 'Số lượt', valueFormula: `'Chi tiết câu hỏi'!$C$${dataStart}:$C$${dataEnd}`, values: chart.rows.map(row => row[1]), color: index % 2 ? '70AD47' : '1F4E78' }], anchor: { from: { col: 7 + (index % 2) * 8, row: chart.row - 1 }, to: { col: 14 + (index % 2) * 8, row: chart.row + 12 } }, showLegend: chart.type === 'doughnut', showValues: chart.type === 'bar', showPercent: chart.type === 'doughnut' });
+  });
+
+  const cross = workbook.addWorksheet('Phân tích chéo');
+  sheetTitle(cross, 'PHÂN TÍCH CHÉO — MỐI LIÊN HỆ GIỮA CÁC BIẾN', 'Tỷ lệ trong từng nhóm nhân khẩu học; các mẫu nhỏ cần diễn giải thận trọng.', 'H');
+  ['A','B','C','D','E','F','G','H'].forEach((column, index) => cross.getColumn(column).width = [48, 16, 16, 16, 16, 16, 16, 16][index]);
+  let crossRow = 4;
+  const groupQuestion = findQuestion(survey, /nam may|nam hoc|nam thu|sinh vien nam/, ['text', 'single_choice', 'multiple_choice'])
+    ?? findQuestion(survey, /truong|dai hoc|university|college|nganh|chuyen nganh|khoa/, ['text', 'single_choice', 'multiple_choice']);
+  const outcomeQuestion = findQuestion(survey, /thoi quen/, ['multiple_choice']) ?? survey.questions.find(question => question.type === 'multiple_choice');
+  if (groupQuestion && outcomeQuestion) {
+    const groupValues = groupQuestion.type === 'text' ? textByQuestion.get(groupQuestion.id)?.options ?? [] : choiceByQuestion.get(groupQuestion.id)?.options ?? [];
+    const groups = groupValues.slice(0, 6);
+    const outcome = choiceByQuestion.get(outcomeQuestion.id)?.options.slice(0, 6) ?? [];
+    cross.mergeCells(`A${crossRow}:H${crossRow}`); cross.getCell(`A${crossRow}`).value = `Tỷ lệ gặp từng nhóm của “${displayText(outcomeQuestion.text)}” theo “${displayText(groupQuestion.text)}”`; cross.getCell(`A${crossRow}`).font = { bold: true, color: { argb: `FF${BRAND}` } }; cross.getCell(`A${crossRow}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEDE9FE' } };
+    const groupHeaders = ['Nhóm thói quen', ...groups.map(group => group.label)]; cross.getRow(crossRow + 1).values = groupHeaders; styleTableHeader(cross.getRow(crossRow + 1));
+    const groupKeys = groups.map(group => ({ label: group.label, key: normalizeTextCategoryValue(group.label)?.key ?? group.label.toLocaleLowerCase('vi-VN') }));
+    const rows = outcome.map(option => {
+      const values = groupKeys.map(group => {
+        const inGroup = responses.filter(response => groupAnswerKey(groupQuestion, response.answers[groupQuestion.id]) === group.key);
+        const hits = inGroup.filter(response => responseHasSelection(response, outcomeQuestion.id, option.label)).length;
+        return inGroup.length ? hits / inGroup.length : 0;
+      });
+      return [option.label, ...values];
+    });
+    rows.forEach((values, index) => cross.getRow(crossRow + index + 2).values = values);
+    for (let groupIndex = 0; groupIndex < groups.length; groupIndex++) cross.getColumn(2 + groupIndex).numFmt = '0.0%'; styleTableBody(cross, crossRow + 2, crossRow + 1 + rows.length, [48, ...groups.map(() => 16)]);
+    const insight = rows.flatMap(row => row.slice(1).map((value, index) => ({ label: row[0] as string, group: groups[index].label, value: Number(value) }))).sort((a, b) => b.value - a.value)[0];
+    cross.mergeCells(`A${crossRow + rows.length + 3}:H${crossRow + rows.length + 4}`); cross.getCell(`A${crossRow + rows.length + 3}`).value = insight ? `Nhận xét định lượng: “${insight.label}” cao nhất ở nhóm “${insight.group}” (${(insight.value * 100).toFixed(1)}%). Đây là mô tả theo mẫu khảo sát, không phải kết luận nhân quả.` : 'Chưa đủ dữ liệu để tạo nhận xét định lượng.'; cross.getCell(`A${crossRow + rows.length + 3}`).font = { name: 'Arial', size: 10, italic: true, color: { argb: 'FF475569' } }; cross.getCell(`A${crossRow + rows.length + 3}`).alignment = { wrapText: true, vertical: 'top' }; crossRow += rows.length + 7;
+    nativeCharts.push({ sheetName: 'Phân tích chéo', type: 'bar', title: 'Tỷ lệ theo nhóm (%)', categoryFormula: `'Phân tích chéo'!$A$${crossRow - rows.length - 5}:$A$${crossRow - 6}`, categories: rows.map(row => String(row[0])), series: groups.map((group, index) => ({ name: group.label, valueFormula: `'Phân tích chéo'!$${String.fromCharCode(66 + index)}$${crossRow - rows.length - 5}:$${String.fromCharCode(66 + index)}$${crossRow - 6}`, values: rows.map(row => Number(row[index + 1]) * 100), color: index % 2 ? '70AD47' : '1F4E78', numberFormat: '0.0' })), anchor: { from: { col: 7, row: 3 }, to: { col: 15, row: 22 } }, showLegend: true, valueAxisTitle: 'Tỷ lệ (%)', valueAxisNumberFormat: '0.0' });
+  } else {
+    cross.mergeCells('A4:H6'); cross.getCell('A4').value = 'Chưa có đồng thời biến phân nhóm và câu hỏi đa lựa chọn để thực hiện phân tích chéo.'; cross.getCell('A4').alignment = { wrapText: true, vertical: 'top' }; cross.getCell('A4').font = { italic: true, color: { argb: 'FF64748B' } };
+  }
+
+  const deep = workbook.addWorksheet('Biểu đồ tròn & Phân tích sâu');
+  sheetTitle(deep, 'BIỂU ĐỒ TRÒN & PHÂN TÍCH SÂU', 'Cơ cấu mẫu, nhóm mức ảnh hưởng và các phân phối chính có thể dùng cho báo cáo nghiên cứu.', 'H');
+  ['A','B','C','D','E','F','G','H'].forEach((column, index) => deep.getColumn(column).width = [44, 16, 16, 16, 16, 16, 16, 16][index]);
+  let deepRow = 4;
+  const deepCharts: Array<{ title: string; rows: Array<[string, number]>; type: NativeChartSpec['type']; row: number }> = [];
+  const addDeepTable = (title: string, options: Array<{ label: string; count: number; percent?: number }> | undefined, type: NativeChartSpec['type']) => {
+    if (!options?.length) return;
+    const compact = categoryRows(options, 9);
+    deep.mergeCells(`A${deepRow}:D${deepRow}`); deep.getCell(`A${deepRow}`).value = title; deep.getCell(`A${deepRow}`).font = { bold: true, color: { argb: `FF${BRAND}` } }; deep.getCell(`A${deepRow}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEDE9FE' } };
+    deep.getRow(deepRow + 1).values = ['Nhóm', 'Số người', 'Tỷ lệ', 'Cỡ mẫu (n)']; styleTableHeader(deep.getRow(deepRow + 1));
+    compact.forEach((option, index) => deep.getRow(deepRow + index + 2).values = [option.label, option.count, (option.percent ?? (analytics.totalResponses ? option.count / analytics.totalResponses * 100 : 0)) / 100, analytics.totalResponses]);
+    deep.getColumn(3).numFmt = '0.0%'; styleTableBody(deep, deepRow + 2, deepRow + compact.length + 1, [44, 16, 16, 16]);
+    deepCharts.push({ title, rows: compact.map(option => [option.label, option.count]), type, row: deepRow }); deepRow += compact.length + 4;
+  };
+  addDeepTable('Trường đại học của người tham gia', school?.options, 'doughnut');
+  addDeepTable('Top ngành học', major?.options, 'bar');
+  if (primaryRating) {
+    const ratingBands = [{ label: '1–2 (thấp)', count: (primaryRating.distribution[1] ?? 0) + (primaryRating.distribution[2] ?? 0) }, { label: '3 (trung bình)', count: primaryRating.distribution[3] ?? 0 }, { label: '4–5 (cao)', count: (primaryRating.distribution[4] ?? 0) + (primaryRating.distribution[5] ?? 0) }];
+    addDeepTable('Nhóm mức độ ảnh hưởng', ratingBands, 'doughnut');
+  }
+  const frequency = topChoice(/tan suat|thuong xuyen|moi ngay/, ['single_choice', 'multiple_choice']);
+  addDeepTable('Tần suất thực hiện thói quen', frequency?.options, 'bar');
+  deepCharts.forEach(chart => {
+    const dataStart = chart.row + 2; const dataEnd = dataStart + chart.rows.length - 1;
+    nativeCharts.push({ sheetName: 'Biểu đồ tròn & Phân tích sâu', type: chart.type, title: chart.title, categoryFormula: `'Biểu đồ tròn & Phân tích sâu'!$A$${dataStart}:$A$${dataEnd}`, categories: chart.rows.map(row => row[0]), series: [{ name: 'Số người', valueFormula: `'Biểu đồ tròn & Phân tích sâu'!$B$${dataStart}:$B$${dataEnd}`, values: chart.rows.map(row => row[1]), color: '1F4E78' }], anchor: { from: { col: 5, row: chart.row - 1 }, to: { col: 13, row: chart.row + 15 } }, showLegend: chart.type === 'doughnut', showValues: chart.type === 'bar', showPercent: chart.type === 'doughnut' });
+  });
+
+  return nativeCharts;
+}
+
 function addChartSection(
   sheet: ExcelJS.Worksheet,
   startRow: number,
@@ -297,7 +534,7 @@ export async function exportSurveyAnalysisToExcel(survey: Survey, responses: Sur
 
   const textQuestions = survey.questions
     .map((question, index) => ({ question, index }))
-    .filter(({ question }) => question.type === 'text');
+    .filter(({ question }) => question.type === 'text' && !isPersonalIdentifierQuestion(question));
   if (textQuestions.length > 0) {
     const openResponses = workbook.addWorksheet('Phản hồi mở');
     openResponses.addRow(['STT câu', 'Câu hỏi', 'Mã phản hồi', 'Thời gian gửi', 'Phản hồi']);
@@ -500,7 +737,12 @@ export async function exportSurveyAnalysisToExcel(survey: Survey, responses: Sur
     );
   }
 
-  const buffer = await workbook.xlsx.writeBuffer();
+  // Add the reference-style reader sheets after the raw/audit tabs are built.
+  // Their charts are injected as editable OOXML charts after ExcelJS serializes
+  // the workbook, so the exported file remains useful for further research.
+  const nativeCharts = buildProfessionalSheets(workbook, survey, responses, analytics);
+  const workbookBuffer = await workbook.xlsx.writeBuffer();
+  const buffer = await injectNativeCharts(workbookBuffer, nativeCharts);
   const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');

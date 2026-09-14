@@ -133,7 +133,7 @@ export function getTextAnalyticsEligibility(question: SurveyQuestion): TextAnaly
     : { enabled: false, reason: 'not_categorical' };
 }
 
-function normalizeCategoryValue(value: string): { key: string; label: string } | null {
+export function normalizeTextCategoryValue(value: unknown): { key: string; label: string } | null {
   const trimmed = cleanTextAnswer(value)
     .replace(/^[\s.,;:!?()[\]{}“”"'`–—-]+|[\s.,;:!?()[\]{}“”"'`–—-]+$/gu, '')
     .trim();
@@ -155,7 +155,7 @@ export function summarizeTextCategories(values: unknown[]): TextCategorySummary 
   let totalAnswered = 0;
 
   for (const value of values) {
-    const normalized = normalizeCategoryValue(cleanTextAnswer(value));
+    const normalized = normalizeTextCategoryValue(value);
     if (!normalized) continue;
 
     totalAnswered++;
