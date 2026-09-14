@@ -4,7 +4,7 @@ import { computeSurveyAnalytics } from './analytics';
 import { cleanHtmlWhitespace } from './stringUtils';
 import { roundLegacyStarRating } from '../../shared/starRating';
 import { isPersonalIdentifierQuestion, normalizeTextCategoryValue } from './textAnalytics';
-import { injectNativeCharts, type NativeChartSpec } from './xlsxNativeCharts';
+import type { NativeChartSpec } from './xlsxNativeCharts';
 
 const BRAND = '3730A3';
 const PALETTE = ['3730A3', '006591', '60A5FA', '10B981', 'F59E0B', 'EF4444'];
@@ -775,8 +775,6 @@ export async function exportSurveyAnalysisToExcel(survey: Survey, responses: Sur
   }
 
   // Add the reference-style reader sheets after the raw/audit tabs are built.
-  // Their charts are injected as editable OOXML charts after ExcelJS serializes
-  // the workbook, so the exported file remains useful for further research.
   const nativeCharts = buildProfessionalSheets(workbook, survey, responses, analytics);
   // The professional export is intentionally self-contained. Keep only the
   // raw response sheet plus the reference-style analytical tabs; do not append
@@ -785,8 +783,19 @@ export async function exportSurveyAnalysisToExcel(survey: Survey, responses: Sur
     const legacySheet = workbook.getWorksheet(legacyName);
     if (legacySheet) workbook.removeWorksheet(legacySheet.id);
   }
-  const workbookBuffer = await workbook.xlsx.writeBuffer();
-  const buffer = await injectNativeCharts(workbookBuffer, nativeCharts);
+  // Embed charts as PNGs. ExcelJS writes these drawing parts itself, avoiding
+  // the fragile hand-built OOXML that desktop Excel was repairing/removing.
+  nativeCharts.forEach(spec => {
+    const sheet = workbook.getWorksheet(spec.sheetName);
+    if (!sheet) return;
+    const image = spec.type === 'doughnut' || spec.type === 'pie'
+      ? drawDoughnutChart(spec.title, spec.categories, spec.series[0].values)
+      : drawBarChart(spec.title, spec.categories, spec.series[0].values, `#${spec.series[0].color ?? '3730A3'}`);
+    if (!image) return;
+    const imageId = workbook.addImage({ base64: image, extension: 'png' });
+    sheet.addImage(imageId, { tl: { col: spec.anchor.from.col, row: spec.anchor.from.row }, br: { col: spec.anchor.to.col, row: spec.anchor.to.row } });
+  });
+  const buffer = await workbook.xlsx.writeBuffer();
   const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
