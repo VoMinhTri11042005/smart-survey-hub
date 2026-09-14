@@ -215,7 +215,7 @@ function drawingXml(anchors: Array<{ spec: NativeChartSpec; relationshipId: stri
   <xdr:twoCellAnchor editAs="twoCell">
     <xdr:from><xdr:col>${spec.anchor.from.col}</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>${spec.anchor.from.row}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from>
     <xdr:to><xdr:col>${spec.anchor.to.col}</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>${spec.anchor.to.row}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:to>
-    <xdr:graphicFrame macro=""><xdr:nvGraphicFramePr><xdr:cNvPr id="${index + 2}" name="Biểu đồ ${index + 1}"/><xdr:cNvGraphicFramePr/></xdr:nvGraphicFramePr><xdr:xfrm/><a:graphic><a:graphicData uri="${CHART_NS}"><c:chart r:id="${relationshipId}"/></a:graphicData></a:graphic></xdr:graphicFrame>
+    <xdr:graphicFrame macro=""><xdr:nvGraphicFramePr><xdr:cNvPr id="${index + 2}" name="Biểu đồ ${index + 1}"/><xdr:cNvGraphicFramePr><a:graphicFrameLocks noChangeAspect="1"/></xdr:cNvGraphicFramePr></xdr:nvGraphicFramePr><xdr:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/></xdr:xfrm><a:graphic><a:graphicData uri="${CHART_NS}"><c:chart r:id="${relationshipId}"/></a:graphicData></a:graphic></xdr:graphicFrame>
     <xdr:clientData/>
   </xdr:twoCellAnchor>`).join('');
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><xdr:wsDr xmlns:xdr="${DRAWING_NS}" xmlns:a="${MAIN_NS}" xmlns:c="${CHART_NS}" xmlns:r="${REL_NS}">${bodies}</xdr:wsDr>`;
