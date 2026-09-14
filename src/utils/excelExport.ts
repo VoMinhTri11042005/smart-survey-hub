@@ -1,7 +1,7 @@
 import ExcelJS from 'exceljs';
 import type { Survey, SurveyQuestion, SurveyResponse } from '../types';
 import { computeSurveyAnalytics } from './analytics';
-import { cleanHtmlWhitespace, stripHtml } from './stringUtils';
+import { cleanHtmlWhitespace } from './stringUtils';
 import { roundLegacyStarRating } from '../../shared/starRating';
 import { isPersonalIdentifierQuestion, normalizeTextCategoryValue } from './textAnalytics';
 import { injectNativeCharts, type NativeChartSpec } from './xlsxNativeCharts';
@@ -10,7 +10,21 @@ const BRAND = '3730A3';
 const PALETTE = ['3730A3', '006591', '60A5FA', '10B981', 'F59E0B', 'EF4444'];
 
 function displayText(value: string | undefined) {
-  return stripHtml(cleanHtmlWhitespace(value)).replace(/\s+/g, ' ').trim();
+  let text = cleanHtmlWhitespace(String(value ?? ''));
+  // Answers may arrive as Quill HTML or as already-escaped HTML from an
+  // import. Decode and strip twice so neither <p> nor &nbsp; leaks into XLSX.
+  for (let pass = 0; pass < 2; pass++) {
+    text = text
+      .replace(/<br\s*\/?\s*>/gi, ' ')
+      .replace(/<[^>]*>/g, ' ')
+      .replace(/&nbsp;|&#160;|&#x0*a0;/gi, ' ')
+      .replace(/&amp;/gi, '&')
+      .replace(/&quot;/gi, '"')
+      .replace(/&#39;|&apos;/gi, "'")
+      .replace(/&lt;/gi, '<')
+      .replace(/&gt;/gi, '>');
+  }
+  return text.replace(/\s+/g, ' ').trim();
 }
 
 type ChartPresentation = {
@@ -741,6 +755,13 @@ export async function exportSurveyAnalysisToExcel(survey: Survey, responses: Sur
   // Their charts are injected as editable OOXML charts after ExcelJS serializes
   // the workbook, so the exported file remains useful for further research.
   const nativeCharts = buildProfessionalSheets(workbook, survey, responses, analytics);
+  // The professional export is intentionally self-contained. Keep only the
+  // raw response sheet plus the reference-style analytical tabs; do not append
+  // the earlier legacy analysis tabs to the final download.
+  for (const legacyName of ['Tổng quan', 'Phân tích câu hỏi', 'Phản hồi mở', 'Thống kê văn bản', 'Kiểm tra số liệu', 'Biểu đồ']) {
+    const legacySheet = workbook.getWorksheet(legacyName);
+    if (legacySheet) workbook.removeWorksheet(legacySheet.id);
+  }
   const workbookBuffer = await workbook.xlsx.writeBuffer();
   const buffer = await injectNativeCharts(workbookBuffer, nativeCharts);
   const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
