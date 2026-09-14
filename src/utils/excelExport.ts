@@ -66,6 +66,8 @@ function drawBarChart(title: string, labels: string[], values: number[], color =
   const ctx = canvas.getContext('2d');
   if (!ctx) return '';
 
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = 'source-over';
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.fillStyle = '#172033';
@@ -109,6 +111,8 @@ function drawDoughnutChart(title: string, labels: string[], values: number[]) {
   const total = values.reduce((sum, value) => sum + value, 0);
   if (!ctx || total <= 0) return '';
 
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = 'source-over';
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.fillStyle = '#172033';
