@@ -86,6 +86,7 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError }: { onP
   const [publishedSurvey, setPublishedSurvey] = useState<{ id: string; title: string } | null>(null);
   const [maxAttemptsPerDevice, setMaxAttemptsPerDevice] = useState<number | null>(1);
   const [timeLimitMinutes, setTimeLimitMinutes] = useState<number | null>(null);
+  const draftSyncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Drag state for question reordering
   const [dragOverId, setDragOverId] = useState<string | null>(null);
@@ -336,7 +337,16 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError }: { onP
     } catch (error) {
       console.error('Failed to save draft', error);
     }
-  }, [showSurvey, surveyTitle, surveyDescription, questions, isQuiz, showScore, displayMode, closesAt, maxAttemptsPerDevice, timeLimitMinutes]);
+    if (draftSyncTimer.current) clearTimeout(draftSyncTimer.current);
+    if (!currentSurvey && (surveyTitle.trim() || questions.length > 0)) {
+      draftSyncTimer.current = setTimeout(() => {
+        void saveDraft({ id: draftId || undefined, title: surveyTitle || 'Khảo sát nháp', description: surveyDescription, questions, isQuiz, showScore, displayMode, closesAt, maxAttemptsPerDevice, timeLimitMinutes }).then(saved => {
+          if (!draftId && saved?.id) setDraftId(saved.id);
+        }).catch(error => console.warn('Background draft sync failed', error));
+      }, 700);
+    }
+    return () => { if (draftSyncTimer.current) clearTimeout(draftSyncTimer.current); };
+  }, [showSurvey, surveyTitle, surveyDescription, questions, isQuiz, showScore, displayMode, closesAt, maxAttemptsPerDevice, timeLimitMinutes, currentSurvey, draftId, saveDraft]);
 
   const clearDraft = () => {
     localStorage.removeItem(DRAFT_STORAGE_KEY);
