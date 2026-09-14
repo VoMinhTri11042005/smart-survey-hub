@@ -239,10 +239,10 @@ function addKpiCard(sheet: ExcelJS.Worksheet, range: string, label: string, valu
 
 function categoryRows(options: Array<{ label: string; count: number; percent?: number }>, limit = 8) {
   const sorted = [...options].sort((a, b) => b.count - a.count || a.label.localeCompare(b.label, 'vi'));
-  if (sorted.length <= limit) return sorted;
+  if (sorted.length <= limit) return sorted.map(option => ({ ...option, label: displayText(option.label) }));
   const top = sorted.slice(0, limit - 1);
   const rest = sorted.slice(limit - 1).reduce((sum, option) => sum + option.count, 0);
-  return [...top, { label: 'Khác', count: rest, percent: sorted.reduce((sum, option) => sum + (option.percent ?? 0), 0) - top.reduce((sum, option) => sum + (option.percent ?? 0), 0) }];
+  return [...top.map(option => ({ ...option, label: displayText(option.label) })), { label: 'Khác', count: rest, percent: sorted.reduce((sum, option) => sum + (option.percent ?? 0), 0) - top.reduce((sum, option) => sum + (option.percent ?? 0), 0) }];
 }
 
 function writeAnalysisTable(sheet: ExcelJS.Worksheet, startRow: number, headers: string[], rows: Array<Array<string | number>>, widths: number[]) {
@@ -256,12 +256,13 @@ function writeAnalysisTable(sheet: ExcelJS.Worksheet, startRow: number, headers:
 
 function responseHasSelection(response: SurveyResponse, questionId: string, label: string) {
   const answer = response.answers[questionId];
-  if (Array.isArray(answer)) return answer.some(value => displayText(String(value)) === label);
-  return typeof answer === 'string' && answer.split(';').map(value => displayText(value)).includes(label);
+  const target = displayText(label);
+  if (Array.isArray(answer)) return answer.some(value => displayText(String(value)) === target);
+  return typeof answer === 'string' && answer.split(';').map(value => displayText(value)).includes(target);
 }
 
 function groupAnswerKey(question: SurveyQuestion, answer: unknown) {
-  if (question.type === 'text') return normalizeTextCategoryValue(answer)?.key ?? null;
+  if (question.type === 'text') return normalizeTextCategoryValue(displayText(String(answer ?? '')))?.key ?? null;
   return displayText(String(answer ?? '')).toLocaleLowerCase('vi-VN') || null;
 }
 
@@ -374,8 +375,8 @@ function buildProfessionalSheets(workbook: ExcelJS.Workbook, survey: Survey, res
   const outcomeQuestion = findQuestion(survey, /thoi quen/, ['multiple_choice']) ?? survey.questions.find(question => question.type === 'multiple_choice');
   if (groupQuestion && outcomeQuestion) {
     const groupValues = groupQuestion.type === 'text' ? textByQuestion.get(groupQuestion.id)?.options ?? [] : choiceByQuestion.get(groupQuestion.id)?.options ?? [];
-    const groups = groupValues.slice(0, 6);
-    const outcome = choiceByQuestion.get(outcomeQuestion.id)?.options.slice(0, 6) ?? [];
+    const groups = groupValues.slice(0, 6).map(group => ({ ...group, label: displayText(group.label) }));
+    const outcome = choiceByQuestion.get(outcomeQuestion.id)?.options.slice(0, 6).map(option => ({ ...option, label: displayText(option.label) })) ?? [];
     cross.mergeCells(`A${crossRow}:H${crossRow}`); cross.getCell(`A${crossRow}`).value = `Tỷ lệ gặp từng nhóm của “${displayText(outcomeQuestion.text)}” theo “${displayText(groupQuestion.text)}”`; cross.getCell(`A${crossRow}`).font = { bold: true, color: { argb: `FF${BRAND}` } }; cross.getCell(`A${crossRow}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEDE9FE' } };
     const groupHeaders = ['Nhóm thói quen', ...groups.map(group => group.label)]; cross.getRow(crossRow + 1).values = groupHeaders; styleTableHeader(cross.getRow(crossRow + 1));
     const groupKeys = groups.map(group => ({ label: group.label, key: normalizeTextCategoryValue(group.label)?.key ?? group.label.toLocaleLowerCase('vi-VN') }));
