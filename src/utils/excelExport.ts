@@ -101,8 +101,9 @@ function drawBarChart(title: string, labels: string[], values: number[], color =
     const y = top + height - barHeight;
     ctx.fillStyle = color;
     ctx.fillRect(x, y, barWidth, barHeight);
+    const valueLabel = /%|tỷ lệ/i.test(title) ? `${Number(values[index]).toFixed(1)}%` : String(Math.round(Number(values[index])));
     ctx.fillStyle = '#172033'; ctx.font = 'bold 14px Arial';
-    ctx.fillText(String(values[index]), x + Math.max(0, (barWidth - ctx.measureText(String(values[index])).width) / 2), y - 8);
+    ctx.fillText(valueLabel, x + Math.max(0, (barWidth - ctx.measureText(valueLabel).width) / 2), y - 8);
     ctx.fillStyle = '#475569'; ctx.font = '13px Arial';
     ctx.save(); ctx.translate(x + barWidth / 2, top + height + 18); ctx.rotate(-0.42); ctx.textAlign = 'right'; ctx.fillText(label, 0, 0); ctx.restore();
   });
