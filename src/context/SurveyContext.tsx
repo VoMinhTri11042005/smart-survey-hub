@@ -11,6 +11,7 @@ interface SurveyDraft {
   displayMode?: SurveyDisplayMode;
   closesAt?: string | null;
   timeLimitMinutes?: number | null;
+  maxAttemptsPerDevice?: number | null;
   updatedAt?: string;
 }
 
