@@ -793,7 +793,7 @@ export async function exportSurveyAnalysisToExcel(survey: Survey, responses: Sur
       : drawBarChart(spec.title, spec.categories, spec.series[0].values, `#${spec.series[0].color ?? '3730A3'}`);
     if (!image) return;
     const imageId = workbook.addImage({ base64: image, extension: 'png' });
-    sheet.addImage(imageId, { tl: { col: spec.anchor.from.col, row: spec.anchor.from.row }, br: { col: spec.anchor.to.col, row: spec.anchor.to.row } });
+    sheet.addImage(imageId, { tl: { col: spec.anchor.from.col, row: spec.anchor.from.row }, ext: { width: 720, height: 340 } });
   });
   const buffer = await workbook.xlsx.writeBuffer();
   const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
