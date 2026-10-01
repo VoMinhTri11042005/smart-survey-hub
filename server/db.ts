@@ -96,6 +96,7 @@ export const initDB = async () => {
         answers JSONB NOT NULL,
         score NUMERIC(10,2),
         total_quiz_questions NUMERIC(10,2),
+        screened_out BOOLEAN NOT NULL DEFAULT FALSE,
         submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         UNIQUE (survey_id, respondent_id)
       );
@@ -125,6 +126,7 @@ export const initDB = async () => {
       await client.query(`ALTER TABLE responses ADD COLUMN IF NOT EXISTS respondent_id VARCHAR(255);`);
       await client.query(`ALTER TABLE responses ADD COLUMN IF NOT EXISTS score NUMERIC(10,2);`);
       await client.query(`ALTER TABLE responses ADD COLUMN IF NOT EXISTS total_quiz_questions NUMERIC(10,2);`);
+      await client.query(`ALTER TABLE responses ADD COLUMN IF NOT EXISTS screened_out BOOLEAN NOT NULL DEFAULT FALSE;`);
 
       // Nếu bảng responses đã tồn tại từ trước với cột score/total_quiz_questions
       // kiểu INT (không nhận số thập phân), đổi sang NUMERIC để chấp nhận điểm

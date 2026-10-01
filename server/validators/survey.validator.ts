@@ -3,22 +3,40 @@
  */
 import { z } from 'zod';
 
+const SurveyQuestionSchema = z.object({
+  id: z.string(),
+  type: z.enum(['single_choice', 'multiple_choice', 'star_rating', 'text', 'nps']),
+  text: z.string(),
+  options: z.array(z.string()).optional(),
+  maxSelections: z.number().int().min(1).max(100).optional(),
+  screenOutAnswer: z.string().min(1).optional(),
+  screenOutMessage: z.string().max(500).optional(),
+  required: z.boolean().optional().default(true),
+  correctAnswer: z.union([z.string(), z.array(z.string())]).optional(),
+  points: z.number().optional(),
+  label: z.string().optional(),
+  textAnalysisMode: z.enum(['auto', 'include', 'exclude']).optional(),
+}).superRefine((question, context) => {
+  if (question.maxSelections !== undefined) {
+    if (question.type !== 'multiple_choice') {
+      context.addIssue({ code: 'custom', path: ['maxSelections'], message: 'Giới hạn chỉ dùng cho câu hỏi nhiều lựa chọn.' });
+    } else if (question.options && question.maxSelections > question.options.length) {
+      context.addIssue({ code: 'custom', path: ['maxSelections'], message: 'Giới hạn không thể lớn hơn số đáp án.' });
+    }
+  }
+  if (question.screenOutAnswer !== undefined && (
+    question.type !== 'single_choice' || !question.options?.includes(question.screenOutAnswer)
+  )) {
+    context.addIssue({ code: 'custom', path: ['screenOutAnswer'], message: 'Đáp án kết thúc phải thuộc câu hỏi một lựa chọn.' });
+  }
+});
+
 // ─── Survey ───
 export const CreateSurveySchema = z.object({
   id: z.string().optional(),
   title: z.string().min(1, 'Tiêu đề không được để trống.'),
   description: z.string().optional().default(''),
-  questions: z.array(z.object({
-    id: z.string(),
-    type: z.enum(['single_choice', 'multiple_choice', 'star_rating', 'text', 'nps']),
-    text: z.string(),
-    options: z.array(z.string()).optional(),
-    required: z.boolean().optional().default(true),
-    correctAnswer: z.union([z.string(), z.array(z.string())]).optional(),
-    points: z.number().optional(),
-    label: z.string().optional(),
-    textAnalysisMode: z.enum(['auto', 'include', 'exclude']).optional(),
-  })),
+  questions: z.array(SurveyQuestionSchema),
   isQuiz: z.boolean().optional().default(false),
   displayMode: z.enum(['single', 'all']).optional().default('single'),
   showScore: z.boolean().optional().default(true),
@@ -42,9 +60,24 @@ const ImportedQuestionSchema = z.object({
   type: z.enum(['single_choice', 'multiple_choice', 'star_rating', 'text', 'nps']),
   text: z.string().min(1),
   options: z.array(z.string()).max(100).optional(),
+  maxSelections: z.number().int().min(1).max(100).optional(),
+  screenOutAnswer: z.string().min(1).optional(),
+  screenOutMessage: z.string().max(500).optional(),
   required: z.boolean().default(false),
   label: z.string().optional(),
   textAnalysisMode: z.enum(['auto', 'include', 'exclude']).optional(),
+}).superRefine((question, context) => {
+  if (question.maxSelections !== undefined && (
+    question.type !== 'multiple_choice'
+    || (question.options !== undefined && question.maxSelections > question.options.length)
+  )) {
+    context.addIssue({ code: 'custom', path: ['maxSelections'], message: 'Giới hạn số đáp án không hợp lệ.' });
+  }
+  if (question.screenOutAnswer !== undefined && (
+    question.type !== 'single_choice' || !question.options?.includes(question.screenOutAnswer)
+  )) {
+    context.addIssue({ code: 'custom', path: ['screenOutAnswer'], message: 'Đáp án kết thúc phải thuộc câu hỏi một lựa chọn.' });
+  }
 });
 
 export const ImportResponsesSchema = z.object({

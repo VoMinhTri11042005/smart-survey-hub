@@ -23,6 +23,7 @@ function normalizeSavedStarRatings(survey: Survey, source: Record<string, any>) 
 }
 
 const roundScore = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
+const DEFAULT_SCREEN_OUT_MESSAGE = 'Cảm ơn bạn đã tham gia. Dựa trên câu trả lời của bạn, bạn không thuộc đối tượng khảo sát này.';
 
 export function Respondent({ survey, onExit, onComplete, isPublic = false }: RespondentProps) {
   const { submitResponse, fetchMyResponse } = useSurvey();
@@ -31,6 +32,9 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
   const [respondentId, setRespondentId] = useState<string>('');
   const [isLoading, setIsLoading] = useState(true);
   const [isCompleted, setIsCompleted] = useState(false);
+  const [isScreenedOut, setIsScreenedOut] = useState(false);
+  const [isScreeningOut, setIsScreeningOut] = useState(false);
+  const [screenOutNotice, setScreenOutNotice] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [quizScore, setQuizScore] = useState<number | undefined>(undefined);
@@ -104,6 +108,15 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
           const existingResponse = await fetchMyResponse(survey.id, rid);
           if (existingResponse && existingResponse.answers && Object.keys(existingResponse.answers).length > 0) {
             setAnswers(normalizeSavedStarRatings(survey, existingResponse.answers));
+            if (existingResponse.screenedOut) {
+              const screeningQuestion = survey.questions.find(question =>
+                question.type === 'single_choice'
+                && question.screenOutAnswer
+                && existingResponse.answers[question.id] === question.screenOutAnswer
+              );
+              setIsScreenedOut(true);
+              setScreenOutNotice(screeningQuestion?.screenOutMessage?.trim() || DEFAULT_SCREEN_OUT_MESSAGE);
+            }
             if (existingResponse.score !== undefined) setQuizScore(existingResponse.score);
             if (existingResponse.totalQuizQuestions !== undefined) setQuizTotal(existingResponse.totalQuizQuestions);
             setIsCompleted(true);
@@ -273,6 +286,16 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
     );
   }
 
+  if (isScreeningOut && !isCompleted) {
+    return (
+      <div className="min-h-screen bg-surface-background flex flex-col items-center justify-center gap-4 px-6 text-center">
+        <div className="h-12 w-12 rounded-full border-4 border-primary/20 border-t-primary animate-spin" />
+        <h2 className="font-display text-xl font-bold text-text-primary">Đang kết thúc khảo sát...</h2>
+        <p className="text-sm text-text-secondary">Đang lưu câu trả lời sàng lọc của bạn.</p>
+      </div>
+    );
+  }
+
   if (isSurveyClosed) {
     return (
       <div className="min-h-screen bg-surface-background flex flex-col items-center justify-center gap-4 font-sans px-4 text-center">
@@ -369,7 +392,7 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
     return true;
   };
 
-  async function submitSurvey() {
+  async function submitSurvey(answerOverrides?: Record<string, any>, isScreenOutResponse = false) {
     if (isSubmitting || isCompleted) return;
     if (survey?.closesAt && new Date(survey.closesAt).getTime() <= Date.now()) {
       setErrorMsg('Khảo sát đã hết thời gian cho phép gửi phản hồi.');
@@ -378,10 +401,11 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
 
     setIsSubmitting(true);
     try {
+      const submittedAnswers = answerOverrides ?? answers;
       let score: number | undefined = undefined;
       let totalQ: number | undefined = undefined;
 
-      if (survey?.isQuiz) {
+      if (survey?.isQuiz && !isScreenOutResponse) {
         score = 0;
         totalQ = 0;
         survey.questions.forEach(q => {
@@ -390,7 +414,7 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
             if (hasCorrect) {
               const qPoints = typeof q.points === 'number' && q.points > 0 ? q.points : 1;
               totalQ! += qPoints;
-              const userAnswer = answers[q.id];
+              const userAnswer = submittedAnswers[q.id];
               if (typeof userAnswer === 'string' && userAnswer === q.correctAnswer) {
                 score! += qPoints;
               }
@@ -400,7 +424,7 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
             if (hasCorrect) {
               const qPoints = typeof q.points === 'number' && q.points > 0 ? q.points : 1;
               totalQ! += qPoints;
-              const userAnswer = answers[q.id];
+              const userAnswer = submittedAnswers[q.id];
               if (Array.isArray(userAnswer) && userAnswer.length === q.correctAnswer.length) {
                 const sortedUser = [...userAnswer].sort();
                 const sortedCorrect = [...q.correctAnswer].sort();
@@ -415,8 +439,8 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
         setQuizTotal(roundScore(totalQ));
       }
 
-      const normalizedAnswers = normalizeSavedStarRatings(survey, answers);
-      if (Object.keys(normalizedAnswers).some(key => normalizedAnswers[key] !== answers[key])) {
+      const normalizedAnswers = normalizeSavedStarRatings(survey, submittedAnswers);
+      if (Object.keys(normalizedAnswers).some(key => normalizedAnswers[key] !== submittedAnswers[key])) {
         setAnswers(normalizedAnswers);
       }
       await submitResponse(survey.id, respondentId, normalizedAnswers, score === undefined ? score : roundScore(score), totalQ === undefined ? totalQ : roundScore(totalQ));
@@ -432,14 +456,50 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
         console.warn('Failed to record device attempts', error);
       }
 
+      if (isScreenOutResponse) setIsScreenedOut(true);
       setIsCompleted(true);
       if (onComplete) onComplete();
     } catch (e) {
       console.error(e);
+      setErrorMsg(e instanceof Error ? e.message : 'Không thể lưu phản hồi. Vui lòng thử lại.');
+      if (isScreenOutResponse) {
+        setIsScreeningOut(false);
+        setScreenOutNotice('');
+      }
     } finally {
       setIsSubmitting(false);
     }
   }
+
+  const terminateSurveyForScreening = async (
+    question: SurveyQuestion,
+    selectedAnswer: string,
+    currentAnswers: Record<string, any>,
+  ) => {
+    if (!survey || isSubmitting || isCompleted || isScreeningOut) return;
+    if (maxAttemptsPerDevice && maxAttemptsPerDevice > 0 && currentDeviceAttempts >= maxAttemptsPerDevice) {
+      setErrorMsg(`Bạn chỉ được làm tối đa ${maxAttemptsPerDevice} lần trên thiết bị này.`);
+      return;
+    }
+    const stopIndex = survey.questions.findIndex(item => item.id === question.id);
+    const allowedQuestionIds = new Set(survey.questions.slice(0, stopIndex + 1).map(item => item.id));
+    const screeningAnswers = Object.fromEntries(
+      Object.entries(currentAnswers).filter(([questionId]) => allowedQuestionIds.has(questionId)),
+    );
+    screeningAnswers[question.id] = selectedAnswer;
+    setAnswers(screeningAnswers);
+    setScreenOutNotice(question.screenOutMessage?.trim() || DEFAULT_SCREEN_OUT_MESSAGE);
+    setIsScreeningOut(true);
+    await submitSurvey(screeningAnswers, true);
+  };
+
+  const selectSingleChoice = (question: SurveyQuestion, option: string) => {
+    const nextAnswers = { ...answers, [question.id]: option };
+    setAnswerForQuestion(question.id, option);
+    if (question.screenOutAnswer === option) {
+      void terminateSurveyForScreening(question, option, nextAnswers);
+    }
+  };
 
   const handleNext = async () => {
     if (maxAttemptsPerDevice && maxAttemptsPerDevice > 0 && currentDeviceAttempts >= maxAttemptsPerDevice) {
@@ -448,6 +508,15 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
     }
 
     if (showAllQuestions) {
+      const screenOutQuestion = questions.find(question =>
+        question.type === 'single_choice'
+        && question.screenOutAnswer
+        && answers[question.id] === question.screenOutAnswer
+      );
+      if (screenOutQuestion) {
+        await terminateSurveyForScreening(screenOutQuestion, screenOutQuestion.screenOutAnswer!, answers);
+        return;
+      }
       if (!validateAllQuestions()) return;
       await submitSurvey();
       return;
@@ -455,6 +524,15 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
 
     if (!validateCurrentQuestion()) {
       setErrorMsg('Vui lòng hoàn thành câu hỏi bắt buộc này để tiếp tục.');
+      return;
+    }
+
+    if (
+      currentQuestion?.type === 'single_choice'
+      && currentQuestion.screenOutAnswer
+      && currentAnswer === currentQuestion.screenOutAnswer
+    ) {
+      await terminateSurveyForScreening(currentQuestion, currentQuestion.screenOutAnswer, answers);
       return;
     }
 
@@ -475,13 +553,18 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
     if (step > 0) setStep(prev => prev - 1);
   };
 
-  const toggleMultiple = (questionId: string, option: string) => {
+  const toggleMultiple = (question: SurveyQuestion, option: string) => {
     setErrorMsg('');
-    const current: string[] = answers[questionId] || [];
+    const current = Array.isArray(answers[question.id]) ? answers[question.id] as string[] : [];
     if (current.includes(option)) {
-      setAnswerForQuestion(questionId, current.filter((o: string) => o !== option));
+      setAnswerForQuestion(question.id, current.filter((o: string) => o !== option));
     } else {
-      setAnswerForQuestion(questionId, [...current, option]);
+      const limit = question.maxSelections;
+      if (limit && current.length >= limit) {
+        setErrorMsg(`Chỉ được chọn tối đa ${limit} đáp án cho câu hỏi này.`);
+        return;
+      }
+      setAnswerForQuestion(question.id, [...current, option]);
     }
   };
 
@@ -521,28 +604,35 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
         return (
           <div className="space-y-3">
             {question.options?.map((option, idx) => (
-              <button key={idx} onClick={() => setAnswerForQuestion(questionId, option)} className={`w-full text-left flex items-center gap-4 p-4 rounded-xl border-2 transition-all cursor-pointer ${answer === option ? 'border-primary bg-primary-fixed shadow-sm' : 'border-border-subtle bg-white hover:border-primary/30 hover:shadow-sm'}`}>
+              <button key={idx} onClick={() => selectSingleChoice(question, option)} className={`w-full text-left flex items-center gap-4 p-4 rounded-xl border-2 transition-all cursor-pointer ${answer === option ? 'border-primary bg-primary-fixed shadow-sm' : 'border-border-subtle bg-white hover:border-primary/30 hover:shadow-sm'}`}>
                 <CircleDot size={20} className={`flex-shrink-0 mt-0.5 ${answer === option ? 'text-primary' : 'text-text-secondary'}`} />
                 <span className={`min-w-0 text-base font-medium rendered-option break-words ${answer === option ? 'text-primary' : 'text-text-primary'}`} dangerouslySetInnerHTML={{ __html: cleanHtmlWhitespace(option) }} />
               </button>
             ))}
           </div>
         );
-      case 'multiple_choice':
+      case 'multiple_choice': {
+        const selectedAnswers = Array.isArray(answer) ? answer : [];
+        const reachedLimit = Boolean(question.maxSelections && selectedAnswers.length >= question.maxSelections);
         return (
           <div className="space-y-3">
             {question.options?.map((option, idx) => {
-              const selected = (answer || []).includes(option);
+              const selected = selectedAnswers.includes(option);
               return (
-                <button key={idx} onClick={() => toggleMultiple(questionId, option)} className={`w-full text-left flex items-center gap-4 p-4 rounded-xl border-2 transition-all cursor-pointer ${selected ? 'border-primary bg-primary-fixed shadow-sm' : 'border-border-subtle bg-white hover:border-primary/30 hover:shadow-sm'}`}>
+                <button key={idx} onClick={() => toggleMultiple(question, option)} disabled={!selected && reachedLimit} className={`w-full text-left flex items-center gap-4 p-4 rounded-xl border-2 transition-all ${selected ? 'border-primary bg-primary-fixed shadow-sm cursor-pointer' : reachedLimit ? 'border-border-subtle bg-surface-container-low text-text-secondary/60 cursor-not-allowed' : 'border-border-subtle bg-white hover:border-primary/30 hover:shadow-sm cursor-pointer'}`}>
                   <CheckSquare size={20} className={`flex-shrink-0 mt-0.5 ${selected ? 'text-primary' : 'text-text-secondary'}`} />
                   <span className={`min-w-0 text-base font-medium rendered-option break-words ${selected ? 'text-primary' : 'text-text-primary'}`} dangerouslySetInnerHTML={{ __html: cleanHtmlWhitespace(option) }} />
                 </button>
               );
             })}
-            <p className="text-xs text-text-secondary font-medium mt-2">Có thể chọn nhiều đáp án</p>
+            <p className={`text-xs font-medium mt-2 ${question.maxSelections && reachedLimit ? 'text-sentiment-negative' : 'text-text-secondary'}`}>
+              {question.maxSelections
+                ? `Chọn tối đa ${question.maxSelections} đáp án · Đã chọn ${selectedAnswers.length}/${question.maxSelections}`
+                : 'Có thể chọn nhiều đáp án'}
+            </p>
           </div>
         );
+      }
       case 'text':
         return (
           <textarea
@@ -596,9 +686,11 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
             </div>
             
             <h1 className="font-display text-4xl md:text-5xl font-extrabold text-text-primary mb-4 tracking-tight leading-tight">
-              {survey.isQuiz ? 'Hoàn thành Bài kiểm tra!' : 'Cảm ơn bạn!'}
+              {isScreenedOut ? 'Khảo sát đã kết thúc' : survey.isQuiz ? 'Hoàn thành Bài kiểm tra!' : 'Cảm ơn bạn!'}
             </h1>
-            {survey.isQuiz ? (
+            {isScreenedOut ? (
+              <p className="text-text-secondary text-lg md:text-xl mb-10 max-w-lg mx-auto leading-relaxed">{screenOutNotice || DEFAULT_SCREEN_OUT_MESSAGE}</p>
+            ) : survey.isQuiz ? (
               survey.showScore !== false ? (
                 <div className="mb-10 text-center animate-in slide-in-from-bottom-4 duration-700 delay-150 fill-mode-both">
                   <p className="text-text-secondary text-lg mb-2 font-medium">Điểm số của bạn:</p>
@@ -759,6 +851,7 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
                     </div>
                     <h2 className="font-display text-xl sm:text-2xl md:text-3xl font-bold text-text-primary tracking-tight leading-[1.2] sm:leading-tight break-words" dangerouslySetInnerHTML={{ __html: cleanHtmlWhitespace(question.text) || (question.label && question.label.trim() !== '' ? question.label : `Câu hỏi ${index + 1}`) }} />
                   </header>
+                  {question.screenOutAnswer && <p className="mb-4 text-sm italic text-text-secondary">Nếu chọn “{stripHtml(question.screenOutAnswer)}”, khảo sát sẽ kết thúc tại đây.</p>}
                   {renderQuestionInput(question, answers[question.id], question.id)}
                 </section>
               ))
@@ -769,7 +862,10 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
                   {currentQuestion?.required && (
                     <p className="text-[11px] sm:text-xs md:text-sm text-sentiment-negative font-medium">* Bắt buộc</p>
                   )}
-                </header>
+                  {currentQuestion?.screenOutAnswer && (
+                    <p className="text-sm italic text-text-secondary">Nếu chọn “{stripHtml(currentQuestion.screenOutAnswer)}”, khảo sát sẽ kết thúc tại đây.</p>
+                  )}
+                  </header>
                 {currentQuestion && renderQuestionInput(currentQuestion, currentAnswer, currentQuestion.id)}
               </>
             )}

@@ -18,7 +18,7 @@ const getRatingLevels = (distribution: Record<number, number>) => Object.keys(di
 export function Analytics() {
   const { surveys, currentSurvey, setCurrentSurvey, fetchSurveys, fetchSurveyById, fetchResponses, resetResponses } = useSurvey();
   const [selectedSurvey, setSelectedSurvey] = useState<Survey | null>(currentSurvey);
-  const [responses, setResponses] = useState<SurveyResponse[]>([]);
+  const [allResponses, setAllResponses] = useState<SurveyResponse[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
@@ -38,10 +38,12 @@ export function Analytics() {
     if (!selectedSurvey) return;
     setIsLoading(true);
     fetchResponses(selectedSurvey.id)
-      .then(setResponses)
+      .then(setAllResponses)
       .finally(() => setIsLoading(false));
   }, [selectedSurvey, fetchResponses]);
 
+  const responses = allResponses.filter(response => !response.screenedOut);
+  const screenedOutCount = allResponses.filter(response => response.screenedOut).length;
   const analytics = selectedSurvey ? computeSurveyAnalytics(selectedSurvey, responses) : null;
   const normalizedSearch = analysisSearch.trim().toLocaleLowerCase('vi-VN');
   const matchesSearch = (...values: unknown[]) => !normalizedSearch || values.some(value => String(value ?? '').toLocaleLowerCase('vi-VN').includes(normalizedSearch));
@@ -112,7 +114,7 @@ export function Analytics() {
     const importedSurvey = await fetchSurveyById(surveyId);
     if (!importedSurvey) throw new Error('Dữ liệu đã được nhập nhưng không tải lại được khảo sát.');
     handleSelectSurvey(importedSurvey);
-    setResponses(await fetchResponses(surveyId));
+    setAllResponses(await fetchResponses(surveyId));
   };
 
   const handleResetResponses = async () => {
@@ -120,7 +122,7 @@ export function Analytics() {
     setIsResetting(true);
     try {
       await resetResponses(selectedSurvey.id);
-      setResponses([]);
+      setAllResponses([]);
       await fetchSurveys();
       setShowResetConfirm(false);
     } catch (error) {
@@ -159,6 +161,9 @@ export function Analytics() {
             {analytics && (
               <span className="text-text-secondary text-xs font-medium">• {analytics.totalResponses} phản hồi</span>
             )}
+            {screenedOutCount > 0 && (
+              <span className="text-amber-700 text-xs font-medium">• {screenedOutCount} đã sàng lọc (không tính vào thống kê)</span>
+            )}
           </div>
 
           {/* Survey Selector */}
@@ -195,7 +200,7 @@ export function Analytics() {
             />
           </label>
           <button
-            onClick={() => selectedSurvey && fetchResponses(selectedSurvey.id).then(setResponses)}
+            onClick={() => selectedSurvey && fetchResponses(selectedSurvey.id).then(setAllResponses)}
             className="p-2.5 bg-white border border-border-subtle rounded-xl hover:bg-surface-container-low transition-colors cursor-pointer"
             title="Làm mới"
           >
@@ -255,8 +260,12 @@ export function Analytics() {
       ) : analytics && analytics.totalResponses === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 bg-white rounded-3xl border border-border-subtle">
           <MessageSquare size={40} className="text-text-secondary mb-4" />
-          <h3 className="font-display text-xl font-bold text-text-primary mb-2">Chưa có phản hồi</h3>
-          <p className="text-text-secondary text-sm text-center max-w-md">Chia sẻ link khảo sát để bắt đầu thu thập dữ liệu phân tích.</p>
+          <h3 className="font-display text-xl font-bold text-text-primary mb-2">{screenedOutCount ? 'Chưa có phản hồi đủ điều kiện' : 'Chưa có phản hồi'}</h3>
+          <p className="text-text-secondary text-sm text-center max-w-md">
+            {screenedOutCount
+              ? `${screenedOutCount} phản hồi sàng lọc đã được lưu riêng. Chia sẻ link khảo sát để tiếp tục thu thập dữ liệu phù hợp.`
+              : 'Chia sẻ link khảo sát để bắt đầu thu thập dữ liệu phân tích.'}
+          </p>
         </div>
       ) : analytics && (
         <>

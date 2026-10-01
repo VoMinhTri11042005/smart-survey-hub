@@ -502,17 +502,30 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError }: { onP
     if (!q || !q.options) return;
     const newOptions = [...q.options];
     newOptions[optionIdx] = value;
-    updateQuestion(questionId, { options: newOptions });
+    updateQuestion(questionId, {
+      options: newOptions,
+      ...(q.screenOutAnswer === q.options[optionIdx] ? { screenOutAnswer: value } : {}),
+    });
   };
 
   const removeOption = (questionId: string, optionIdx: number) => {
     const q = questions.find(q => q.id === questionId);
     if (!q || !q.options || q.options.length <= 2) return;
-    updateQuestion(questionId, { options: q.options.filter((_, i) => i !== optionIdx) });
+    const options = q.options.filter((_, i) => i !== optionIdx);
+    updateQuestion(questionId, {
+      options,
+      ...(q.maxSelections && q.maxSelections > options.length ? { maxSelections: options.length } : {}),
+      ...(q.screenOutAnswer === q.options[optionIdx] ? { screenOutAnswer: undefined } : {}),
+    });
   };
 
   const changeQuestionType = (questionId: string, newType: QuestionType) => {
-    const updates: Partial<SurveyQuestion> = { type: newType, correctAnswer: undefined };
+    const updates: Partial<SurveyQuestion> = {
+      type: newType,
+      correctAnswer: undefined,
+      ...(newType !== 'multiple_choice' ? { maxSelections: undefined } : {}),
+      ...(newType !== 'single_choice' ? { screenOutAnswer: undefined, screenOutMessage: undefined } : {}),
+    };
     if (newType === 'single_choice' || newType === 'multiple_choice') {
       const q = questions.find(q => q.id === questionId);
       if (!q?.options || q.options.length === 0) {
@@ -863,6 +876,51 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError }: { onP
                       {/* Footer Settings */}
                       {isActive && (
                         <div className="mt-4 pt-4 border-t border-border-subtle flex flex-col sm:flex-row sm:items-center justify-end gap-4">
+                          {q.type === 'multiple_choice' && (
+                            <label className="flex flex-col gap-1.5 sm:mr-auto">
+                              <span className="text-sm font-medium text-text-secondary">Giới hạn số đáp án được chọn</span>
+                              <select
+                                value={q.maxSelections ?? ''}
+                                onChange={(e) => updateQuestion(q.id, { maxSelections: e.target.value ? Number(e.target.value) : undefined })}
+                                className="min-w-56 bg-surface-background border border-border-subtle rounded-lg px-3 py-2 text-sm text-text-primary outline-none focus:ring-2 focus:ring-primary/30"
+                              >
+                                <option value="">Không giới hạn</option>
+                                {Array.from({ length: q.options?.length ?? 0 }, (_, index) => index + 1).map(limit => (
+                                  <option key={limit} value={limit}>Tối đa {limit} {limit === 1 ? 'đáp án' : 'đáp án'}</option>
+                                ))}
+                              </select>
+                              <span className="text-[11px] text-text-secondary">Người trả lời sẽ không thể chọn quá số này.</span>
+                            </label>
+                          )}
+                          {q.type === 'single_choice' && (
+                            <label className="flex flex-col gap-1.5 sm:mr-auto">
+                              <span className="text-sm font-medium text-text-secondary">Kết thúc khảo sát nếu chọn</span>
+                              <select
+                                value={q.screenOutAnswer ?? ''}
+                                onChange={(e) => updateQuestion(q.id, { screenOutAnswer: e.target.value || undefined })}
+                                className="min-w-56 bg-surface-background border border-border-subtle rounded-lg px-3 py-2 text-sm text-text-primary outline-none focus:ring-2 focus:ring-primary/30"
+                              >
+                                <option value="">Không lọc</option>
+                                {(q.options ?? []).map((option, index) => (
+                                  <option key={index} value={option}>{option.replace(/<[^>]*>/g, '').trim() || `Lựa chọn ${index + 1}`}</option>
+                                ))}
+                              </select>
+                              {q.screenOutAnswer && (
+                                <>
+                                  <span className="text-[11px] text-text-secondary">Người chọn đáp án này sẽ dừng và được ghi nhận riêng.</span>
+                                  <textarea
+                                    value={q.screenOutMessage ?? ''}
+                                    onChange={(e) => updateQuestion(q.id, { screenOutMessage: e.target.value })}
+                                    maxLength={500}
+                                    rows={2}
+                                    placeholder="Cảm ơn bạn. Dựa trên câu trả lời, bạn không thuộc đối tượng khảo sát này."
+                                    className="min-w-56 resize-y bg-surface-background border border-border-subtle rounded-lg px-3 py-2 text-sm text-text-primary outline-none focus:ring-2 focus:ring-primary/30"
+                                  />
+                                  <span className="text-[11px] text-text-secondary">Có thể nhập thông báo riêng hoặc để trống để dùng thông báo mặc định.</span>
+                                </>
+                              )}
+                            </label>
+                          )}
                           {q.type === 'text' && (
                             <label className="flex flex-col gap-1.5 sm:mr-auto">
                               <span className="text-sm font-medium text-text-secondary">Thống kê theo nhóm</span>
@@ -1157,5 +1215,3 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError }: { onP
     </div>
   );
 }
-
-

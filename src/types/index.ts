@@ -19,6 +19,9 @@ export interface SurveyQuestion {
   type: QuestionType;
   text: string;
   options?: string[];
+  maxSelections?: number; // Maximum selections for multiple-choice questions
+  screenOutAnswer?: string; // Selecting this single-choice answer ends the survey
+  screenOutMessage?: string;
   required: boolean;
   correctAnswer?: string | string[]; // For quiz mode
   points?: number; // Custom points for quiz mode
@@ -48,6 +51,7 @@ export interface SurveyResponse {
   score?: number;
   totalQuizQuestions?: number;
   submittedAt: string;
+  screenedOut?: boolean;
 }
 
 // ===== API Types =====

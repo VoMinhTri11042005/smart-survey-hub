@@ -57,6 +57,7 @@ export function mapRowToResponse(row: any) {
     score: row.score !== null && row.score !== undefined ? roundQuizScore(parseFloat(row.score)) : null,
     totalQuizQuestions: row.total_quiz_questions !== null && row.total_quiz_questions !== undefined ? roundQuizScore(parseFloat(row.total_quiz_questions)) : null,
     submittedAt: row.submitted_at,
+    screenedOut: Boolean(row.screened_out),
   };
 }
 
@@ -104,6 +105,28 @@ function assertIntegerStarRatings(questions: any[], answers: Record<string, unkn
   }
 }
 
+function assertMultipleChoiceLimits(questions: any[], answers: Record<string, unknown> | undefined) {
+  for (const question of questions || []) {
+    if (question.type !== 'multiple_choice') continue;
+    const answer = answers?.[question.id];
+    if (answer === undefined || answer === null) continue;
+    if (!Array.isArray(answer)) {
+      throw Object.assign(new Error(`Câu hỏi "${question.text}" cần có danh sách đáp án.`), { status: 400 });
+    }
+    if (question.maxSelections && answer.length > question.maxSelections) {
+      throw Object.assign(new Error(`Câu hỏi "${question.text}" chỉ được chọn tối đa ${question.maxSelections} đáp án.`), { status: 400 });
+    }
+  }
+}
+
+function isScreenedOut(questions: any[], answers: Record<string, unknown> | undefined) {
+  return (questions || []).some(question =>
+    question.type === 'single_choice'
+    && typeof question.screenOutAnswer === 'string'
+    && answers?.[question.id] === question.screenOutAnswer
+  );
+}
+
 // ─── Survey CRUD ───
 
 export async function createSurvey(data: any) {
@@ -135,7 +158,7 @@ export async function createSurvey(data: any) {
 export async function listSurveys() {
   if (!process.env.DATABASE_URL) return Object.values(inMemorySurveys);
   const result = await pool.query(`
-    SELECT s.*, (SELECT COUNT(*) FROM responses r WHERE r.survey_id = s.id) as "responseCount"
+    SELECT s.*, (SELECT COUNT(*) FROM responses r WHERE r.survey_id = s.id AND r.screened_out = FALSE) as "responseCount"
     FROM surveys s ORDER BY s.created_at DESC
   `);
   return result.rows.map(mapRowToSurvey);
@@ -146,7 +169,7 @@ export async function getSurveyById(id: string) {
     return inMemorySurveys[id] || null;
   }
   const result = await pool.query(`
-    SELECT s.*, (SELECT COUNT(*) FROM responses r WHERE r.survey_id = s.id) as "responseCount"
+    SELECT s.*, (SELECT COUNT(*) FROM responses r WHERE r.survey_id = s.id AND r.screened_out = FALSE) as "responseCount"
     FROM surveys s WHERE s.id = $1
   `, [id]);
   if (result.rows.length === 0) return null;
@@ -219,24 +242,26 @@ export async function submitResponse(surveyId: string, data: any) {
     const survey = inMemorySurveys[surveyId];
     if (!survey) return null;
     assertIntegerStarRatings(survey.questions, answers);
+    assertMultipleChoiceLimits(survey.questions, answers);
+    const screenedOut = isScreenedOut(survey.questions, answers);
     let finalScore: number | null = null;
     let finalTotal: number | null = null;
-    if (survey?.isQuiz) {
+    if (survey?.isQuiz && !screenedOut) {
       const computed = computeServerQuizScore(survey.questions, answers || {});
       finalScore = computed.score; finalTotal = computed.totalPossible;
-    } else if (score !== undefined && score !== null && Number.isFinite(Number(score))) {
+    } else if (!survey?.isQuiz && score !== undefined && score !== null && Number.isFinite(Number(score))) {
       finalScore = roundQuizScore(Number(score));
       finalTotal = totalQuizQuestions !== undefined && totalQuizQuestions !== null && Number.isFinite(Number(totalQuizQuestions)) ? roundQuizScore(Number(totalQuizQuestions)) : null;
     }
     inMemoryResponses[surveyId] = inMemoryResponses[surveyId] || [];
     const existing = inMemoryResponses[surveyId].find((r: any) => r.respondentId === respondentId);
     if (existing) {
-      existing.answers = answers; existing.score = finalScore;
+      existing.answers = answers; existing.score = finalScore; existing.screenedOut = screenedOut;
       existing.totalQuizQuestions = finalTotal; existing.submittedAt = new Date().toISOString();
       return existing;
     }
     const id = generateId();
-    const obj = { id, surveyId, respondentId, answers, score: finalScore, totalQuizQuestions: finalTotal, submittedAt: new Date().toISOString() };
+    const obj = { id, surveyId, respondentId, answers, score: finalScore, totalQuizQuestions: finalTotal, submittedAt: new Date().toISOString(), screenedOut };
     inMemoryResponses[surveyId].push(obj);
     return obj;
   }
@@ -248,12 +273,14 @@ export async function submitResponse(surveyId: string, data: any) {
   const survey = surveyResult.rows[0];
   const questions = typeof survey.questions === 'string' ? JSON.parse(survey.questions) : survey.questions;
   assertIntegerStarRatings(questions, answers);
+  assertMultipleChoiceLimits(questions, answers);
+  const screenedOut = isScreenedOut(questions, answers);
   let finalScore: number | null = null;
   let finalTotal: number | null = null;
-  if (survey.is_quiz) {
+  if (survey.is_quiz && !screenedOut) {
     const computed = computeServerQuizScore(questions, answers || {});
     finalScore = computed.score; finalTotal = computed.totalPossible;
-  } else if (score !== undefined && score !== null && Number.isFinite(Number(score))) {
+  } else if (!survey.is_quiz && score !== undefined && score !== null && Number.isFinite(Number(score))) {
     finalScore = roundQuizScore(Number(score));
     finalTotal = totalQuizQuestions !== undefined && totalQuizQuestions !== null && Number.isFinite(Number(totalQuizQuestions)) ? roundQuizScore(Number(totalQuizQuestions)) : null;
   }
@@ -262,16 +289,16 @@ export async function submitResponse(surveyId: string, data: any) {
   let row;
   if (existingCheck.rows.length > 0) {
     const result = await pool.query(
-      `UPDATE responses SET answers = $3, score = $4, total_quiz_questions = $5, submitted_at = CURRENT_TIMESTAMP
+      `UPDATE responses SET answers = $3, score = $4, total_quiz_questions = $5, screened_out = $6, submitted_at = CURRENT_TIMESTAMP
        WHERE survey_id = $1 AND respondent_id = $2 RETURNING *`,
-      [surveyId, respondentId, JSON.stringify(answers || {}), finalScore, finalTotal]
+      [surveyId, respondentId, JSON.stringify(answers || {}), finalScore, finalTotal, screenedOut]
     );
     row = result.rows[0];
   } else {
     const id = generateId();
     const result = await pool.query(
-      `INSERT INTO responses (id, survey_id, respondent_id, answers, score, total_quiz_questions) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-      [id, surveyId, respondentId, JSON.stringify(answers || {}), finalScore, finalTotal]
+      `INSERT INTO responses (id, survey_id, respondent_id, answers, score, total_quiz_questions, screened_out) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+      [id, surveyId, respondentId, JSON.stringify(answers || {}), finalScore, finalTotal, screenedOut]
     );
     row = result.rows[0];
   }
@@ -309,6 +336,9 @@ function validateImportedAnswers(questions: any[], answers: Record<string, unkno
     if (question.type === 'multiple_choice') {
       if (!Array.isArray(answer) || answer.some(item => typeof item !== 'string' || !(question.options || []).includes(item))) {
         throw Object.assign(new Error(`Câu trả lời không khớp lựa chọn của câu hỏi "${question.text}".`), { status: 400 });
+      }
+      if (question.maxSelections && answer.length > question.maxSelections) {
+        throw Object.assign(new Error(`Câu hỏi "${question.text}" chỉ được chọn tối đa ${question.maxSelections} đáp án.`), { status: 400 });
       }
     }
   }
@@ -376,11 +406,12 @@ export async function importResponses(data: any) {
       const respondentId = `import-${createHash('sha256')
         .update(`${data.idempotencyKey}:${index}`)
         .digest('hex')}`;
+      const screenedOut = isScreenedOut(questions, response.answers);
       const inserted = await client.query(
-        `INSERT INTO responses (id, survey_id, respondent_id, answers, submitted_at)
-         VALUES ($1, $2, $3, $4, COALESCE($5::timestamp, CURRENT_TIMESTAMP))
+        `INSERT INTO responses (id, survey_id, respondent_id, answers, submitted_at, screened_out)
+         VALUES ($1, $2, $3, $4, COALESCE($5::timestamp, CURRENT_TIMESTAMP), $6)
          RETURNING id`,
-        [generateId(), surveyId, respondentId, JSON.stringify(response.answers), response.submittedAt || null],
+        [generateId(), surveyId, respondentId, JSON.stringify(response.answers), response.submittedAt || null, screenedOut],
       );
       if (inserted.rowCount) imported++;
     }
@@ -518,9 +549,9 @@ export async function importBackup(data: any) {
   }
   for (const row of responses) {
     await client.query(
-      `INSERT INTO responses (id, survey_id, respondent_id, answers, score, total_quiz_questions, submitted_at) VALUES ($1,$2,$3,$4,$5,$6,$7)
+      `INSERT INTO responses (id, survey_id, respondent_id, answers, score, total_quiz_questions, submitted_at, screened_out) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
        ON CONFLICT (id) DO NOTHING`,
-      [row.id, row.survey_id, row.respondent_id, JSON.stringify(row.answers || {}), row.score ?? null, row.total_quiz_questions ?? null, row.submitted_at || new Date().toISOString()]
+      [row.id, row.survey_id, row.respondent_id, JSON.stringify(row.answers || {}), row.score ?? null, row.total_quiz_questions ?? null, row.submitted_at || new Date().toISOString(), Boolean(row.screened_out)]
     );
   }
   for (const row of teams) {

@@ -212,7 +212,12 @@ export function ImportResponsesDialog({ surveys, onClose, onImported }: Props) {
           if (matched.some(option => !option)) {
             addIssue(`Dòng ${rowIndex + 2}, “${column.header}”: đáp án “${value}” không khớp lựa chọn.`);
           } else if (question.type === 'multiple_choice') {
-            answers[question.id] = [...new Set(matched as string[])];
+            const multipleAnswers = [...new Set(matched as string[])];
+            if (question.maxSelections && multipleAnswers.length > question.maxSelections) {
+              addIssue(`Dòng ${rowIndex + 2}, “${column.header}”: chỉ được chọn tối đa ${question.maxSelections} đáp án.`);
+            } else {
+              answers[question.id] = multipleAnswers;
+            }
           } else if (matched[0]) {
             answers[question.id] = matched[0];
           }
