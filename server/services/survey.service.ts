@@ -3,6 +3,7 @@
  * Extracted from survey.routes.ts for clean separation of concerns.
  */
 import pool from '../db';
+import { createHash } from 'node:crypto';
 import { generateId } from '../utils/helpers';
 import { isIntegerStarRating } from '../../shared/starRating';
 
@@ -277,6 +278,128 @@ export async function submitResponse(surveyId: string, data: any) {
   return mapRowToResponse(row);
 }
 
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
+  if (value && typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b));
+    return `{${entries.map(([key, item]) => `${JSON.stringify(key)}:${canonicalJson(item)}`).join(',')}}`;
+  }
+  return JSON.stringify(value) ?? 'null';
+}
+
+function validateImportedAnswers(questions: any[], answers: Record<string, unknown>) {
+  const byId = new Map(questions.map(question => [question.id, question]));
+  for (const [questionId, answer] of Object.entries(answers)) {
+    const question = byId.get(questionId);
+    if (!question) throw Object.assign(new Error(`Câu trả lời tham chiếu câu hỏi không tồn tại: ${questionId}.`), { status: 400 });
+    if (question.type === 'text' && typeof answer !== 'string') {
+      throw Object.assign(new Error(`Câu hỏi "${question.text}" chỉ nhận câu trả lời dạng văn bản.`), { status: 400 });
+    }
+    if (question.type === 'star_rating' && !isIntegerStarRating(answer)) {
+      throw Object.assign(new Error(`Câu hỏi "${question.text}" chỉ nhận mức sao nguyên từ 1 đến 5.`), { status: 400 });
+    }
+    if (question.type === 'nps' && (typeof answer !== 'number' || !Number.isInteger(answer) || answer < 0 || answer > 10)) {
+      throw Object.assign(new Error(`Câu hỏi "${question.text}" chỉ nhận điểm NPS nguyên từ 0 đến 10.`), { status: 400 });
+    }
+    if (question.type === 'single_choice') {
+      if (typeof answer !== 'string' || !(question.options || []).includes(answer)) {
+        throw Object.assign(new Error(`Câu trả lời không khớp lựa chọn của câu hỏi "${question.text}".`), { status: 400 });
+      }
+    }
+    if (question.type === 'multiple_choice') {
+      if (!Array.isArray(answer) || answer.some(item => typeof item !== 'string' || !(question.options || []).includes(item))) {
+        throw Object.assign(new Error(`Câu trả lời không khớp lựa chọn của câu hỏi "${question.text}".`), { status: 400 });
+      }
+    }
+  }
+}
+
+export async function importResponses(data: any) {
+  if (!process.env.DATABASE_URL) {
+    throw Object.assign(new Error('Cần kết nối cơ sở dữ liệu để nhập dữ liệu an toàn.'), { status: 503 });
+  }
+
+  const client = await pool.connect();
+  const requestHash = createHash('sha256').update(canonicalJson({
+    mode: data.mode,
+    surveyId: data.surveyId || null,
+    newSurvey: data.newSurvey || null,
+    responses: data.responses,
+  })).digest('hex');
+
+  try {
+    await client.query('BEGIN');
+    await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [data.idempotencyKey]);
+    const previousBatch = await client.query(
+      'SELECT request_hash, survey_id, imported_count, skipped_count FROM survey_import_batches WHERE idempotency_key = $1',
+      [data.idempotencyKey],
+    );
+    if (previousBatch.rows.length) {
+      const previous = previousBatch.rows[0];
+      if (previous.request_hash !== requestHash) {
+        throw Object.assign(new Error('Mã nhập này đã được dùng cho một nội dung khác. Hãy tải lại file để tạo lượt nhập mới.'), { status: 409 });
+      }
+      await client.query('COMMIT');
+      return {
+        surveyId: previous.survey_id,
+        imported: previous.imported_count,
+        skipped: previous.skipped_count,
+        replayed: true,
+      };
+    }
+
+    let surveyId = data.surveyId;
+    let questions = data.newSurvey?.questions;
+    if (data.mode === 'create') {
+      surveyId = generateId();
+      const survey = data.newSurvey;
+      await client.query(
+        `INSERT INTO surveys (id, title, description, questions, is_quiz, display_mode, show_score, status)
+         VALUES ($1, $2, $3, $4, FALSE, 'single', TRUE, 'live')`,
+        [surveyId, survey.title, survey.description || '', JSON.stringify(survey.questions)],
+      );
+    } else {
+      const surveyResult = await client.query('SELECT questions FROM surveys WHERE id = $1 FOR SHARE', [surveyId]);
+      if (!surveyResult.rows.length) {
+        await client.query('ROLLBACK');
+        return null;
+      }
+      questions = typeof surveyResult.rows[0].questions === 'string'
+        ? JSON.parse(surveyResult.rows[0].questions)
+        : surveyResult.rows[0].questions;
+    }
+
+    let imported = 0;
+    let skipped = 0;
+    for (const [index, response] of data.responses.entries()) {
+      validateImportedAnswers(questions, response.answers);
+      const respondentId = `import-${createHash('sha256')
+        .update(`${data.idempotencyKey}:${index}`)
+        .digest('hex')}`;
+      const inserted = await client.query(
+        `INSERT INTO responses (id, survey_id, respondent_id, answers, submitted_at)
+         VALUES ($1, $2, $3, $4, COALESCE($5::timestamp, CURRENT_TIMESTAMP))
+         RETURNING id`,
+        [generateId(), surveyId, respondentId, JSON.stringify(response.answers), response.submittedAt || null],
+      );
+      if (inserted.rowCount) imported++;
+    }
+
+    await client.query(
+      `INSERT INTO survey_import_batches (idempotency_key, request_hash, survey_id, imported_count, skipped_count)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [data.idempotencyKey, requestHash, surveyId, imported, skipped],
+    );
+    await client.query('COMMIT');
+    return { surveyId, imported, skipped, replayed: false };
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => undefined);
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 export async function getResponses(surveyId: string) {
   if (!process.env.DATABASE_URL) return inMemoryResponses[surveyId] || [];
   const result = await pool.query('SELECT * FROM responses WHERE survey_id = $1 ORDER BY submitted_at DESC', [surveyId]);
@@ -354,21 +477,30 @@ export async function deleteDraft(id: string) {
 
 export async function exportBackup() {
   if (!process.env.DATABASE_URL) throw Object.assign(new Error('Database not configured'), { status: 503 });
-  const [surveys, responses, teams, users, drafts] = await Promise.all([
+  const [surveys, responses, teams, users, drafts, surveyImportBatches] = await Promise.all([
     pool.query('SELECT * FROM surveys ORDER BY created_at DESC'),
     pool.query('SELECT * FROM responses ORDER BY submitted_at DESC'),
     pool.query('SELECT * FROM teams ORDER BY joined_at DESC'),
     pool.query('SELECT * FROM users ORDER BY created_at DESC'),
     pool.query('SELECT * FROM survey_drafts WHERE user_id = $1 ORDER BY updated_at DESC', ['admin']),
+    pool.query('SELECT * FROM survey_import_batches ORDER BY created_at DESC'),
   ]);
-  return { exportedAt: new Date().toISOString(), surveys: surveys.rows, responses: responses.rows, teams: teams.rows, users: users.rows, drafts: drafts.rows };
+  return {
+    exportedAt: new Date().toISOString(),
+    surveys: surveys.rows,
+    responses: responses.rows,
+    teams: teams.rows,
+    users: users.rows,
+    drafts: drafts.rows,
+    surveyImportBatches: surveyImportBatches.rows,
+  };
 }
 
 export async function importBackup(data: any) {
   if (!process.env.DATABASE_URL) throw Object.assign(new Error('Database not configured'), { status: 503 });
-  const { surveys = [], responses = [], teams = [], users = [], drafts = [] } = data ?? {};
+  const { surveys = [], responses = [], teams = [], users = [], drafts = [], surveyImportBatches = [] } = data ?? {};
 
-  if (![surveys, responses, teams, users, drafts].every(Array.isArray)) {
+  if (![surveys, responses, teams, users, drafts, surveyImportBatches].every(Array.isArray)) {
     throw Object.assign(new Error('Tệp sao lưu không đúng định dạng.'), { status: 400 });
   }
 
@@ -412,8 +544,23 @@ export async function importBackup(data: any) {
       [row.id, row.user_id || 'admin', row.title || 'Khảo sát nháp', row.description || '', JSON.stringify(row.questions || []), Boolean(row.is_quiz), row.show_score !== false, row.display_mode || 'single', row.closes_at ? new Date(row.closes_at).toISOString() : null, row.max_attempts_per_device ?? null, row.time_limit_minutes ?? null, row.updated_at || new Date().toISOString()]
     );
   }
+  for (const batch of surveyImportBatches) {
+    await client.query(
+      `INSERT INTO survey_import_batches (idempotency_key, request_hash, survey_id, imported_count, skipped_count, created_at)
+       VALUES ($1, $2, $3, $4, $5, COALESCE($6, CURRENT_TIMESTAMP))
+       ON CONFLICT (idempotency_key) DO NOTHING`,
+      [batch.idempotency_key, batch.request_hash, batch.survey_id, batch.imported_count, batch.skipped_count || 0, batch.created_at],
+    );
+  }
   await client.query('COMMIT');
-  return { surveys: surveys.length, responses: responses.length, teams: teams.length, users: users.length, drafts: drafts.length };
+  return {
+    surveys: surveys.length,
+    responses: responses.length,
+    teams: teams.length,
+    users: users.length,
+    drafts: drafts.length,
+    surveyImportBatches: surveyImportBatches.length,
+  };
   } catch (error) {
     await client.query('ROLLBACK');
     throw error;

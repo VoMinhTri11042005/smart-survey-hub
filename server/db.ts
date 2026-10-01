@@ -101,6 +101,17 @@ export const initDB = async () => {
       );
     `);
 
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS survey_import_batches (
+        idempotency_key VARCHAR(128) PRIMARY KEY,
+        request_hash CHAR(64) NOT NULL,
+        survey_id VARCHAR(255) NOT NULL REFERENCES surveys(id) ON DELETE CASCADE,
+        imported_count INTEGER NOT NULL,
+        skipped_count INTEGER NOT NULL DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
     // In case table already exists without respondent_id or quiz columns.
     // Any unexpected conversion failure aborts startup and rolls back safely.
     {

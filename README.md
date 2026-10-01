@@ -109,7 +109,12 @@ docker-compose up --build -d
 | DELETE | `/api/surveys/:id` | Xóa khảo sát |
 | POST | `/api/surveys/:id/responses` | Gửi phản hồi |
 | GET | `/api/surveys/:id/responses` | Lấy phản hồi |
+| POST | `/api/surveys/import-responses` | Tạo khảo sát mới hoặc thêm phản hồi từ bảng tính |
 | POST | `/api/chat` | AI chatbot |
+
+## Nhập phản hồi từ Google Forms
+
+Trong trang **Phân tích**, chọn **Nhập file** rồi tải lên file `.xlsx` hoặc `.csv` (tối đa 5 MB). Hệ thống nhận diện cột thời gian nếu có, đề xuất loại câu hỏi, cho xem trước dữ liệu và ghép cột trước khi xác nhận. Có thể tạo khảo sát mới hoặc chỉ thêm phản hồi vào khảo sát đã có; với khảo sát hiện tại, câu hỏi và phản hồi cũ không bị sửa hoặc xóa. Mỗi lần nhập được thực hiện trong một transaction và có mã chống tạo bản ghi lặp khi yêu cầu phải thử lại. Nên xuất bản sao lưu trước lần nhập đầu tiên. Cần PostgreSQL đã cấu hình để sử dụng chức năng này.
 
 ## 🔧 Tech Stack
 

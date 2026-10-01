@@ -2,9 +2,9 @@ import { Info, Sparkles, Timer, CheckCircle, TrendingUp, Download, ChevronDown, 
 import { useEffect, useState, type ReactNode } from 'react';
 import { useSurvey } from '../../context/SurveyContext';
 import { computeSurveyAnalytics, exportResponsesToCsv, type TextCategoryDistribution } from '../../utils/analytics';
-import { exportSurveyAnalysisToExcel } from '../../utils/excelExport';
 import { cleanHtmlWhitespace, stripHtml, toUnaccented } from '../../utils/stringUtils';
 import { getTextAnalyticsEligibility, isPersonalIdentifierQuestion } from '../../utils/textAnalytics';
+import { ImportResponsesDialog } from './ImportResponsesDialog';
 import type { Survey, SurveyResponse } from '../../types';
 
 const QUESTION_CHART_COLORS = ['#3730a3', '#006591', '#89ceff', '#c3c0ff', '#94a3b8', '#10b981', '#f59e0b', '#ef4444'];
@@ -16,12 +16,13 @@ const hasAnswer = (value: unknown) => {
 const getRatingLevels = (distribution: Record<number, number>) => Object.keys(distribution).map(Number).sort((a, b) => a - b);
 
 export function Analytics() {
-  const { surveys, currentSurvey, setCurrentSurvey, fetchSurveys, fetchResponses, resetResponses } = useSurvey();
+  const { surveys, currentSurvey, setCurrentSurvey, fetchSurveys, fetchSurveyById, fetchResponses, resetResponses } = useSurvey();
   const [selectedSurvey, setSelectedSurvey] = useState<Survey | null>(currentSurvey);
   const [responses, setResponses] = useState<SurveyResponse[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [showImportDialog, setShowImportDialog] = useState(false);
   const [analysisSearch, setAnalysisSearch] = useState('');
   const [questionFilter, setQuestionFilter] = useState<'all' | 'choice' | 'rating' | 'nps' | 'text'>('all');
 
@@ -93,6 +94,7 @@ export function Analytics() {
   const handleExcelExport = async () => {
     if (!selectedSurvey || responses.length === 0) return;
     try {
+      const { exportSurveyAnalysisToExcel } = await import('../../utils/excelExport');
       await exportSurveyAnalysisToExcel(selectedSurvey, responses);
     } catch (error) {
       console.error('Excel export failed:', error);
@@ -103,6 +105,14 @@ export function Analytics() {
   const handleSelectSurvey = (survey: Survey) => {
     setSelectedSurvey(survey);
     setCurrentSurvey(survey);
+  };
+
+  const handleImportComplete = async (surveyId: string) => {
+    await fetchSurveys();
+    const importedSurvey = await fetchSurveyById(surveyId);
+    if (!importedSurvey) throw new Error('Dữ liệu đã được nhập nhưng không tải lại được khảo sát.');
+    handleSelectSurvey(importedSurvey);
+    setResponses(await fetchResponses(surveyId));
   };
 
   const handleResetResponses = async () => {
@@ -127,6 +137,10 @@ export function Analytics() {
         <BarChart3 size={48} className="text-text-secondary mb-4" />
         <h2 className="font-display text-2xl font-bold text-text-primary mb-2">Chưa có dữ liệu phân tích</h2>
         <p className="text-text-secondary text-sm text-center max-w-md">Tạo và xuất bản khảo sát, sau đó thu thập phản hồi để xem phân tích tại đây.</p>
+        <button onClick={() => setShowImportDialog(true)} className="mt-5 inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-white hover:bg-primary/90">
+          <FileSpreadsheet size={18} /> Nhập phản hồi từ Excel
+        </button>
+        {showImportDialog && <ImportResponsesDialog surveys={surveys} onClose={() => setShowImportDialog(false)} onImported={handleImportComplete} />}
       </div>
     );
   }
@@ -186,6 +200,14 @@ export function Analytics() {
             title="Làm mới"
           >
             <RefreshCw size={18} className={isLoading ? 'animate-spin' : ''} />
+          </button>
+          <button
+            onClick={() => setShowImportDialog(true)}
+            className="flex items-center gap-2 px-3 sm:px-4 py-2.5 bg-white border border-border-subtle rounded-xl text-sm font-bold text-text-primary hover:bg-surface-container-low transition-colors shadow-sm cursor-pointer"
+            title="Nhập phản hồi từ Excel hoặc CSV"
+          >
+            <FileSpreadsheet size={18} />
+            <span className="hidden sm:inline">Nhập file</span>
           </button>
           <button
             onClick={handleExport}
@@ -624,6 +646,7 @@ export function Analytics() {
           </div>
         </div>
       )}
+      {showImportDialog && <ImportResponsesDialog surveys={surveys} onClose={() => setShowImportDialog(false)} onImported={handleImportComplete} />}
     </div>
   );
 }

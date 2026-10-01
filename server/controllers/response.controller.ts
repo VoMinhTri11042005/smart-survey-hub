@@ -12,6 +12,14 @@ export async function submit(req: Request<{ id: string }>, res: Response, next: 
   } catch (err) { next(err); }
 }
 
+export async function importBatch(req: Request, res: Response, next: NextFunction) {
+  try {
+    const result = await surveyService.importResponses(req.body);
+    if (result === null) return res.status(404).json({ error: 'Không tìm thấy khảo sát.' });
+    res.status(result.replayed ? 200 : 201).json(result);
+  } catch (err) { next(err); }
+}
+
 export async function list(req: Request<{ id: string }>, res: Response, next: NextFunction) {
   try {
     const responses = await surveyService.getResponses(req.params.id);
