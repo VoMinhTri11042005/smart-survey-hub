@@ -26,6 +26,7 @@ export function Analytics() {
   const [showImportDialog, setShowImportDialog] = useState(false);
   const [analysisSearch, setAnalysisSearch] = useState('');
   const [questionFilter, setQuestionFilter] = useState<'all' | 'choice' | 'rating' | 'nps' | 'text'>('all');
+  const [sectionPages, setSectionPages] = useState<Record<string, number>>({});
 
   useEffect(() => { fetchSurveys(); }, [fetchSurveys]);
 
@@ -94,6 +95,25 @@ export function Analytics() {
     if (questionFilter === 'rating') return question.type === 'star_rating' || question.type === 'linear_scale';
     return question.type === questionFilter;
   });
+  const getPage = <T,>(items: T[], section: string, pageSize: number) => {
+    const totalPages = Math.ceil(items.length / pageSize);
+    const page = Math.min(sectionPages[section] ?? 0, Math.max(totalPages - 1, 0));
+    const start = page * pageSize;
+    return { items: items.slice(start, start + pageSize), page, pageSize, totalItems: items.length, totalPages };
+  };
+  const updatePage = (section: string, page: number) => {
+    setSectionPages(previous => ({ ...previous, [section]: page }));
+  };
+
+  useEffect(() => {
+    setSectionPages({});
+  }, [analysisSearch, questionFilter, selectedSurvey?.id]);
+  const qualityPage = getPage(filteredQuestionMetrics, 'quality', 10);
+  const detailPage = getPage(visibleQuestionMetrics, 'details', 6);
+  const choicePage = getPage(filteredChoiceDistributions, 'choices', 6);
+  const gridPage = getPage(filteredGridDistributions, 'grids', 4);
+  const ratingPage = getPage(filteredRatings, 'ratings', 6);
+  const scalePage = getPage(filteredScales, 'scales', 6);
 
   const handleExport = () => {
     if (!selectedSurvey || responses.length === 0) return;
@@ -308,15 +328,16 @@ export function Analytics() {
 
           <section className="bg-surface-container-lowest rounded-3xl border border-border-subtle shadow-sm overflow-hidden">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-6 py-5 border-b border-border-subtle">
-              <div><h3 className="font-display text-lg font-bold text-text-primary">Chất lượng dữ liệu theo câu hỏi</h3><p className="text-xs text-text-secondary mt-1">Hiển thị toàn bộ {selectedSurvey?.questions.length ?? 0} câu hỏi và mức độ được trả lời.</p></div>
+              <div><h3 className="font-display text-lg font-bold text-text-primary">Chất lượng dữ liệu theo câu hỏi</h3><p className="text-xs text-text-secondary mt-1">{filteredQuestionMetrics.length} câu hỏi · hiển thị 10 câu mỗi trang.</p></div>
               <span className="text-xs font-bold text-primary bg-primary-fixed px-3 py-1.5 rounded-full">{filteredQuestionMetrics.length} mục</span>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full min-w-[720px] text-left">
                 <thead className="bg-surface-container-low text-[11px] uppercase tracking-wider text-text-secondary"><tr><th className="px-6 py-3 font-bold">Câu hỏi</th><th className="px-4 py-3 font-bold">Loại</th><th className="px-4 py-3 font-bold">Bắt buộc</th><th className="px-4 py-3 font-bold">Đã trả lời</th><th className="px-6 py-3 font-bold">Độ phủ dữ liệu</th></tr></thead>
-                <tbody>{filteredQuestionMetrics.map(({ question, answered, missing, rate }, index) => <tr key={question.id} className="border-t border-border-subtle text-sm"><td className="px-6 py-4"><span className="mr-2 text-text-secondary font-mono text-xs">{index + 1}.</span><span className="font-semibold text-text-primary">{stripHtml(question.text) || question.label || 'Chưa đặt nội dung'}</span></td><td className="px-4 py-4 text-text-secondary">{question.type.replace('_', ' ')}</td><td className="px-4 py-4">{question.required ? <span className="text-sentiment-negative font-bold">Có</span> : <span className="text-text-secondary">Không</span>}</td><td className="px-4 py-4 font-semibold">{answered} <span className="text-text-secondary font-normal">/ {analytics.totalResponses}</span></td><td className="px-6 py-4 min-w-48"><div className="flex items-center gap-3"><div className="h-2 flex-1 bg-surface-container rounded-full overflow-hidden"><div className="h-full bg-primary rounded-full" style={{ width: `${rate}%` }} /></div><span className="w-16 text-right font-bold text-primary">{rate}%</span><span className="text-xs text-text-secondary">thiếu {missing}</span></div></td></tr>)}</tbody>
+                <tbody>{qualityPage.items.map(({ question, answered, missing, rate }, index) => <tr key={question.id} className="border-t border-border-subtle text-sm"><td className="px-6 py-4"><span className="mr-2 text-text-secondary font-mono text-xs">{qualityPage.page * qualityPage.pageSize + index + 1}.</span><span className="font-semibold text-text-primary">{stripHtml(question.text) || question.label || 'Chưa đặt nội dung'}</span></td><td className="px-4 py-4 text-text-secondary">{question.type.replace('_', ' ')}</td><td className="px-4 py-4">{question.required ? <span className="text-sentiment-negative font-bold">Có</span> : <span className="text-text-secondary">Không</span>}</td><td className="px-4 py-4 font-semibold">{answered} <span className="text-text-secondary font-normal">/ {analytics.totalResponses}</span></td><td className="px-6 py-4 min-w-48"><div className="flex items-center gap-3"><div className="h-2 flex-1 bg-surface-container rounded-full overflow-hidden"><div className="h-full bg-primary rounded-full" style={{ width: `${rate}%` }} /></div><span className="w-16 text-right font-bold text-primary">{rate}%</span><span className="text-xs text-text-secondary">thiếu {missing}</span></div></td></tr>)}</tbody>
               </table>
             </div>
+            <PaginationControls page={qualityPage.page} totalPages={qualityPage.totalPages} totalItems={qualityPage.totalItems} pageSize={qualityPage.pageSize} onPageChange={page => updatePage('quality', page)} />
           </section>
 
           <section className="grid grid-cols-1 xl:grid-cols-3 gap-6">
@@ -379,10 +400,10 @@ export function Analytics() {
                 <h3 className="font-display text-xl font-bold text-text-primary">Phân tích từng câu hỏi</h3>
                 <p className="text-sm text-text-secondary mt-1">Mỗi câu dùng cách trực quan hóa phù hợp với loại dữ liệu.</p>
               </div>
-              <span className="text-xs font-bold text-primary bg-primary-fixed px-3 py-1.5 rounded-full">{visibleQuestionMetrics.length} biểu đồ</span>
+              <span className="text-xs font-bold text-primary bg-primary-fixed px-3 py-1.5 rounded-full">{visibleQuestionMetrics.length} câu hỏi</span>
             </div>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-              {visibleQuestionMetrics.map(({ question, answered, missing, rate }, index) => {
+              {detailPage.items.map(({ question, answered, missing, rate }, index) => {
                 const choice = analytics.choiceDistributions.find(item => item.questionId === question.id);
                 const rating = analytics.starRatings.find(item => item.questionId === question.id);
                 const ratingLevels = rating ? getRatingLevels(rating.distribution) : [];
@@ -396,7 +417,7 @@ export function Analytics() {
                   <article key={question.id} className="bg-surface-container-lowest rounded-3xl border border-border-subtle shadow-sm p-5 min-w-0">
                     <div className="flex items-start justify-between gap-4 mb-4">
                       <div className="min-w-0">
-                        <p className="text-[11px] uppercase tracking-wider text-text-secondary font-bold">Câu {index + 1} · {question.type.replace('_', ' ')}</p>
+                        <p className="text-[11px] uppercase tracking-wider text-text-secondary font-bold">Câu {detailPage.page * detailPage.pageSize + index + 1} · {question.type.replace('_', ' ')}</p>
                         <h4 className="font-display font-bold text-text-primary mt-1 line-clamp-2">{stripHtml(question.text) || question.label || 'Chưa đặt nội dung'}</h4>
                       </div>
                       <span className="shrink-0 text-xs font-bold text-primary bg-primary-fixed px-2.5 py-1 rounded-full">{rate}%</span>
@@ -455,6 +476,7 @@ export function Analytics() {
                 );
               })}
             </div>
+            <PaginationControls page={detailPage.page} totalPages={detailPage.totalPages} totalItems={detailPage.totalItems} pageSize={detailPage.pageSize} onPageChange={page => updatePage('details', page)} />
           </section>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -504,7 +526,7 @@ export function Analytics() {
             <div className={`${analytics.nps ? 'lg:col-span-8' : 'lg:col-span-12'} bg-surface-container-lowest p-6 rounded-3xl border border-border-subtle shadow-sm flex flex-col`}>
               <span className="text-sm font-semibold text-text-primary mb-6">Phân bố câu trả lời</span>
               <div className="flex-1 flex flex-col justify-center space-y-6">
-                {filteredChoiceDistributions.map(dist => (
+                {choicePage.items.map(dist => (
                   <div key={dist.questionId} className="space-y-3">
                     <p className="text-xs font-semibold text-text-secondary">{stripHtml(dist.questionText)}</p>
                     {dist.options.map((opt, i) => (
@@ -520,10 +542,11 @@ export function Analytics() {
                   </div>
                 ))}
               </div>
+              <PaginationControls page={choicePage.page} totalPages={choicePage.totalPages} totalItems={choicePage.totalItems} pageSize={choicePage.pageSize} onPageChange={page => updatePage('choices', page)} />
             </div>
           )}
 
-          {filteredGridDistributions.map(grid => (
+          {gridPage.items.map(grid => (
             <div key={grid.questionId} className="lg:col-span-12 bg-surface-container-lowest p-6 rounded-3xl border border-border-subtle shadow-sm">
               <span className="mb-5 block text-sm font-semibold text-text-primary">{stripHtml(grid.questionText)}</span>
               <div className="grid gap-6 md:grid-cols-2">
@@ -544,11 +567,13 @@ export function Analytics() {
               </div>
             </div>
           ))}
+          {gridPage.totalPages > 1 && <div className="lg:col-span-12"><PaginationControls page={gridPage.page} totalPages={gridPage.totalPages} totalItems={gridPage.totalItems} pageSize={gridPage.pageSize} onPageChange={page => updatePage('grids', page)} /></div>}
 
           {/* Star Ratings */}
           {filteredRatings.length > 0 && (
-            <div className="lg:col-span-5 grid grid-cols-1 gap-4">
-              {filteredRatings.map(sr => (
+            <div className="lg:col-span-12">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+              {ratingPage.items.map(sr => (
                 <div key={sr.questionId} className="bg-surface-container-lowest p-6 rounded-3xl border border-border-subtle shadow-sm">
                   <p className="text-xs font-semibold text-text-secondary mb-2 line-clamp-2">{stripHtml(sr.questionText)}</p>
                   <div className="flex items-end gap-2">
@@ -570,13 +595,16 @@ export function Analytics() {
                   </div>
                 </div>
               ))}
+              </div>
+              <PaginationControls page={ratingPage.page} totalPages={ratingPage.totalPages} totalItems={ratingPage.totalItems} pageSize={ratingPage.pageSize} onPageChange={page => updatePage('ratings', page)} />
             </div>
           )}
 
           {filteredScales.length > 0 && (
-            <div className="lg:col-span-12 grid grid-cols-1 gap-4 md:grid-cols-2">
-              {filteredScales.map(scale => (
-                <div key={scale.questionId} className="bg-surface-container-lowest p-6 rounded-3xl border border-border-subtle shadow-sm">
+            <div className="lg:col-span-12">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                {scalePage.items.map(scale => (
+                  <div key={scale.questionId} className="bg-surface-container-lowest p-6 rounded-3xl border border-border-subtle shadow-sm">
                   <p className="mb-2 line-clamp-2 text-xs font-semibold text-text-secondary">{stripHtml(scale.questionText)}</p>
                   <div className="flex items-end gap-2">
                     <span className="font-display text-4xl font-bold text-primary">{scale.average}</span>
@@ -593,8 +621,10 @@ export function Analytics() {
                     ))}
                   </div>
                   <div className="mt-2 flex justify-between text-xs text-text-secondary"><span>{scale.minLabel || scale.min}</span><span>{scale.maxLabel || scale.max}</span></div>
-                </div>
-              ))}
+                  </div>
+                ))}
+              </div>
+              <PaginationControls page={scalePage.page} totalPages={scalePage.totalPages} totalItems={scalePage.totalItems} pageSize={scalePage.pageSize} onPageChange={page => updatePage('scales', page)} />
             </div>
           )}
 
@@ -842,5 +872,43 @@ function InsightCard({ icon, label, value, detail, tone }: { icon: ReactNode; la
       <p className="font-display text-2xl font-bold text-text-primary leading-none">{value}</p>
       <p className="text-[11px] text-text-secondary mt-2 truncate" title={detail}>{detail}</p>
     </div>
+  );
+}
+
+function PaginationControls({ page, totalPages, totalItems, pageSize, onPageChange }: {
+  page: number;
+  totalPages: number;
+  totalItems: number;
+  pageSize: number;
+  onPageChange: (page: number) => void;
+}) {
+  if (totalPages <= 1) return null;
+
+  const firstItem = page * pageSize + 1;
+  const lastItem = Math.min(firstItem + pageSize - 1, totalItems);
+
+  return (
+    <nav className="flex flex-wrap items-center justify-between gap-3 border-t border-border-subtle px-4 py-3" aria-label="Phân trang">
+      <span className="text-xs text-text-secondary">{firstItem}-{lastItem} / {totalItems}</span>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => onPageChange(page - 1)}
+          disabled={page === 0}
+          className="rounded-lg border border-border-subtle bg-white px-3 py-2 text-sm font-semibold text-text-primary hover:bg-surface-container-low disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Trước
+        </button>
+        <span className="min-w-16 text-center text-xs font-semibold text-text-secondary">{page + 1} / {totalPages}</span>
+        <button
+          type="button"
+          onClick={() => onPageChange(page + 1)}
+          disabled={page >= totalPages - 1}
+          className="rounded-lg border border-border-subtle bg-white px-3 py-2 text-sm font-semibold text-text-primary hover:bg-surface-container-low disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Tiếp
+        </button>
+      </div>
+    </nav>
   );
 }
