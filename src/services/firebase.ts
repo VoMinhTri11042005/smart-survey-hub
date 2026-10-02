@@ -8,8 +8,7 @@ import { initializeApp } from 'firebase/app';
 import { getDatabase } from 'firebase/database';
 import {
   getAuth,
-  signInWithPopup,
-  GoogleAuthProvider,
+  signInWithEmailAndPassword,
   signOut,
   onAuthStateChanged,
   type User,
@@ -28,13 +27,9 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getDatabase(app);
-const googleProvider = new GoogleAuthProvider();
-googleProvider.setCustomParameters({
-  prompt: 'select_account'
-});
 
-export async function signInWithGoogle(): Promise<User> {
-  const result = await signInWithPopup(auth, googleProvider);
+export async function signInWithEmail(email: string, password: string): Promise<User> {
+  const result = await signInWithEmailAndPassword(auth, email, password);
   return result.user;
 }
 

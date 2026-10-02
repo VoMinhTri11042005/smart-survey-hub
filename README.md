@@ -83,7 +83,7 @@ Import chỉ thêm phản hồi; không cập nhật hay xóa response hiện c�
    - `CORS_ORIGIN=https://your-app.vercel.app` (origin frontend; nhiều origin phân tách bằng dấu phẩy)
 8. Render sẽ chạy cả frontend + backend trên cùng 1 service; app sẽ phục vụ static build từ `dist/` và API từ `/api`.
 
-Trong production, server từ chối khởi động nếu thiếu Firebase service account, danh sách email quản trị hoặc CORS origin. Không commit service-account JSON vào Git. API quản trị yêu cầu đăng nhập Google và email thuộc allowlist; đọc khảo sát và gửi phản hồi vẫn công khai.
+Trong Firebase Console, bật phương thức **Email/Password** và tạo tài khoản quản trị với email/mật khẩu bạn muốn dùng. Thêm email đó vào cả `ADMIN_EMAILS` và `VITE_ADMIN_EMAILS`. Mật khẩu được Firebase xác thực, không lưu trong source code. Trong production, server từ chối khởi động nếu thiếu Firebase service account, danh sách email quản trị hoặc CORS origin. Không commit service-account JSON vào Git. API quản trị yêu cầu đăng nhập Firebase và email thuộc allowlist; đọc khảo sát và gửi phản hồi vẫn công khai.
 
 ## 🌐 Deploy lên Vercel
 
