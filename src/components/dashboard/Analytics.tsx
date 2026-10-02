@@ -10,6 +10,7 @@ import type { Survey, SurveyResponse } from '../../types';
 const QUESTION_CHART_COLORS = ['#3730a3', '#006591', '#89ceff', '#c3c0ff', '#94a3b8', '#10b981', '#f59e0b', '#ef4444'];
 const hasAnswer = (value: unknown) => {
   if (Array.isArray(value)) return value.length > 0;
+  if (value && typeof value === 'object') return Object.values(value).some(hasAnswer);
   if (typeof value === 'string') return stripHtml(cleanHtmlWhitespace(value)).trim().length > 0;
   return value !== undefined && value !== null;
 };
@@ -50,12 +51,22 @@ export function Analytics() {
   const questionMetrics = (selectedSurvey?.questions || []).map(question => {
     const answered = responses.filter(response => {
       const answer = response.answers[question.id];
+      if (question.type === 'multiple_choice_grid' || question.type === 'checkbox_grid') {
+        return !!answer
+          && typeof answer === 'object'
+          && !Array.isArray(answer)
+          && (question.options ?? []).every(row => hasAnswer((answer as Record<string, unknown>)[row]));
+      }
       return hasAnswer(answer);
     }).length;
     return { question, answered, missing: responses.length - answered, rate: responses.length ? Math.round((answered / responses.length) * 100) : 0 };
   });
   const filteredChoiceDistributions = analytics?.choiceDistributions.filter(item => matchesSearch(stripHtml(item.questionText), ...item.options.map(option => option.label))) || [];
   const filteredRatings = analytics?.starRatings.filter(item => matchesSearch(stripHtml(item.questionText))) || [];
+  const filteredScales = analytics?.linearScales.filter(item => matchesSearch(stripHtml(item.questionText))) || [];
+  const filteredGridDistributions = analytics?.gridDistributions.filter(item =>
+    matchesSearch(stripHtml(item.questionText), ...item.rows.flatMap(row => [stripHtml(row.label), ...row.options.map(option => stripHtml(option.label))]))
+  ) || [];
   const filteredTextResponses = analytics?.textResponses.filter(item => {
     const question = selectedSurvey?.questions.find(candidate => candidate.id === item.questionId);
     return (!question || !isPersonalIdentifierQuestion(question)) && matchesSearch(stripHtml(item.questionText), ...item.responses);
@@ -73,10 +84,14 @@ export function Analytics() {
   const maxTimelineResponses = Math.max(...timelineEntries.map(([, count]) => Number(count)), 1);
   const visibleQuestionMetrics = filteredQuestionMetrics.filter(({ question }) => {
     if (questionFilter === 'all') return true;
-    if (questionFilter === 'choice') return question.type === 'single_choice' || question.type === 'multiple_choice';
+    if (questionFilter === 'choice') return question.type === 'single_choice'
+      || question.type === 'multiple_choice'
+      || question.type === 'dropdown'
+      || question.type === 'multiple_choice_grid'
+      || question.type === 'checkbox_grid';
     // The filter uses the reader-facing label "rating", while the data model
     // stores star-scale questions as "star_rating".
-    if (questionFilter === 'rating') return question.type === 'star_rating';
+    if (questionFilter === 'rating') return question.type === 'star_rating' || question.type === 'linear_scale';
     return question.type === questionFilter;
   });
 
@@ -501,6 +516,28 @@ export function Analytics() {
             </div>
           )}
 
+          {filteredGridDistributions.map(grid => (
+            <div key={grid.questionId} className="lg:col-span-12 bg-surface-container-lowest p-6 rounded-3xl border border-border-subtle shadow-sm">
+              <span className="mb-5 block text-sm font-semibold text-text-primary">{stripHtml(grid.questionText)}</span>
+              <div className="grid gap-6 md:grid-cols-2">
+                {grid.rows.map(row => (
+                  <div key={row.label} className="space-y-3">
+                    <p className="text-xs font-semibold text-text-secondary">{stripHtml(row.label)} <span className="font-normal">· {row.totalAnswered} đã trả lời</span></p>
+                    {row.options.map((option, index) => (
+                      <ProgressBar
+                        key={option.label}
+                        label={stripHtml(option.label)}
+                        count={`${option.count} phản hồi`}
+                        percent={option.percent}
+                        color={['bg-primary-container', 'bg-secondary-container', 'bg-primary-fixed-dim', 'bg-surface-container-highest'][index % 4]}
+                      />
+                    ))}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+
           {/* Star Ratings */}
           {filteredRatings.length > 0 && (
             <div className="lg:col-span-5 grid grid-cols-1 gap-4">
@@ -529,8 +566,33 @@ export function Analytics() {
             </div>
           )}
 
+          {filteredScales.length > 0 && (
+            <div className="lg:col-span-12 grid grid-cols-1 gap-4 md:grid-cols-2">
+              {filteredScales.map(scale => (
+                <div key={scale.questionId} className="bg-surface-container-lowest p-6 rounded-3xl border border-border-subtle shadow-sm">
+                  <p className="mb-2 line-clamp-2 text-xs font-semibold text-text-secondary">{stripHtml(scale.questionText)}</p>
+                  <div className="flex items-end gap-2">
+                    <span className="font-display text-4xl font-bold text-primary">{scale.average}</span>
+                    <span className="mb-1 text-sm text-text-secondary">trung bình · {scale.totalAnswered} phản hồi</span>
+                  </div>
+                  <div className="mt-4 grid gap-2" style={{ gridTemplateColumns: `repeat(${scale.max - scale.min + 1}, minmax(0, 1fr))` }}>
+                    {Array.from({ length: scale.max - scale.min + 1 }, (_, index) => scale.min + index).map(value => (
+                      <div key={value} className="min-w-0 text-center">
+                        <div className="flex h-20 items-end justify-center overflow-hidden rounded-md bg-surface-container">
+                          <div className="w-full rounded-t-md bg-primary transition-all" style={{ height: `${scale.totalAnswered ? scale.distribution[value] / scale.totalAnswered * 100 : 0}%`, minHeight: scale.distribution[value] ? '4px' : 0 }} />
+                        </div>
+                        <span className="mt-1 block text-[10px] font-bold text-text-secondary">{value}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-2 flex justify-between text-xs text-text-secondary"><span>{scale.minLabel || scale.min}</span><span>{scale.maxLabel || scale.max}</span></div>
+                </div>
+              ))}
+            </div>
+          )}
+
           {/* KPIs */}
-          <div className={`${filteredRatings.length > 0 ? 'lg:col-span-7' : 'lg:col-span-12'} grid grid-cols-2 gap-6`}>
+          <div className={`${filteredRatings.length > 0 || filteredScales.length > 0 ? 'lg:col-span-7' : 'lg:col-span-12'} grid grid-cols-2 gap-6`}>
             <div className="bg-surface-container-lowest p-6 rounded-3xl border border-border-subtle shadow-sm flex flex-col justify-between">
               <Timer className="text-primary mb-4" size={24} />
               <div>

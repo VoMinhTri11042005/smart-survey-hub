@@ -120,6 +120,8 @@ Với câu hỏi **Nhiều lựa chọn**, người tạo có thể đặt giớ
 
 Với câu hỏi **Một lựa chọn**, người tạo có thể chọn một đáp án kết thúc khảo sát và tùy chỉnh thông báo. Khi người tham gia chọn đáp án đó, khảo sát dừng ngay; phản hồi được lưu riêng với nhãn sàng lọc và không tính vào thống kê chính.
 
+Trình tạo khảo sát cũng hỗ trợ **Menu thả xuống**, **Ngày**, **Thang tuyến tính** (tùy chỉnh mức và nhãn hai đầu), **Lưới trắc nghiệm** và **Lưới hộp kiểm**. Với câu hỏi lưới, người tạo cấu hình hàng và cột; phản hồi được lưu theo từng hàng, được kiểm tra ở máy chủ và có phân tích riêng cho từng hàng. Các kiểu câu hỏi cũ và dữ liệu phản hồi hiện có vẫn được giữ nguyên.
+
 ## 🔧 Tech Stack
 
 - **Frontend**: React 19 + TypeScript + Vite 6 + Tailwind CSS v4

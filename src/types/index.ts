@@ -10,15 +10,31 @@ export interface UserProfile {
 
 // ===== Survey Data Model =====
 
-export type QuestionType = 'single_choice' | 'multiple_choice' | 'star_rating' | 'text' | 'nps';
+export type QuestionType =
+  | 'single_choice'
+  | 'multiple_choice'
+  | 'dropdown'
+  | 'date'
+  | 'linear_scale'
+  | 'multiple_choice_grid'
+  | 'checkbox_grid'
+  | 'star_rating'
+  | 'text'
+  | 'nps';
 export type SurveyDisplayMode = 'single' | 'all';
 export type TextAnalysisMode = 'auto' | 'include' | 'exclude';
+export type SurveyAnswer = string | string[] | number | Record<string, string | string[]>;
 
 export interface SurveyQuestion {
   id: string;
   type: QuestionType;
   text: string;
   options?: string[];
+  gridColumns?: string[];
+  scaleMin?: number;
+  scaleMax?: number;
+  scaleMinLabel?: string;
+  scaleMaxLabel?: string;
   maxSelections?: number; // Maximum selections for multiple-choice questions
   screenOutAnswer?: string; // Selecting this single-choice answer ends the survey
   screenOutMessage?: string;
@@ -47,7 +63,7 @@ export interface Survey {
 export interface SurveyResponse {
   id: string;
   surveyId: string;
-  answers: Record<string, string | string[] | number>;
+  answers: Record<string, SurveyAnswer>;
   score?: number;
   totalQuizQuestions?: number;
   submittedAt: string;

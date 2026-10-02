@@ -1,10 +1,10 @@
 import { useMemo, useState } from 'react';
 import { AlertTriangle, CheckCircle2, FileSpreadsheet, Loader2, Upload, X } from 'lucide-react';
-import type { QuestionType, Survey, SurveyQuestion } from '../../types';
+import type { QuestionType, Survey, SurveyAnswer, SurveyQuestion } from '../../types';
 import { stripHtml, toUnaccented } from '../../utils/stringUtils';
 
 interface ImportedResponse {
-  answers: Record<string, string | string[] | number>;
+  answers: Record<string, SurveyAnswer>;
   submittedAt?: string;
 }
 
@@ -17,6 +17,9 @@ interface Props {
 const QUESTION_TYPES: { value: QuestionType; label: string }[] = [
   { value: 'single_choice', label: 'Một lựa chọn' },
   { value: 'multiple_choice', label: 'Nhiều lựa chọn' },
+  { value: 'dropdown', label: 'Menu thả xuống' },
+  { value: 'date', label: 'Ngày' },
+  { value: 'linear_scale', label: 'Thang tuyến tính' },
   { value: 'star_rating', label: 'Đánh giá sao (1–5)' },
   { value: 'nps', label: 'NPS (0–10)' },
   { value: 'text', label: 'Văn bản' },
@@ -117,6 +120,25 @@ function splitMultipleAnswer(value: string, options: string[]) {
   return exact ? [exact] : value.split(/[,;\n]+/).map(part => part.trim()).filter(Boolean);
 }
 
+function parseGridAnswer(value: string, question: SurveyQuestion): Record<string, string | string[]> | null {
+  const rows = question.options ?? [];
+  const columns = question.gridColumns ?? [];
+  const result: Record<string, string | string[]> = {};
+  for (const entry of value.split(/;\s*/).filter(Boolean)) {
+    const separator = entry.indexOf(':');
+    if (separator < 1) return null;
+    const rowText = entry.slice(0, separator).trim();
+    const answerText = entry.slice(separator + 1).trim();
+    const row = rows.find(option => normalize(option) === normalize(rowText));
+    const selections = splitMultipleAnswer(answerText, columns)
+      .map(label => columns.find(option => normalize(option) === normalize(label)))
+      .filter((option): option is string => Boolean(option));
+    if (!row || !selections.length || (question.type === 'multiple_choice_grid' && selections.length !== 1)) return null;
+    result[row] = question.type === 'checkbox_grid' ? [...new Set(selections)] : selections[0];
+  }
+  return Object.keys(result).length ? result : null;
+}
+
 export function ImportResponsesDialog({ surveys, onClose, onImported }: Props) {
   const [headers, setHeaders] = useState<string[]>([]);
   const [rows, setRows] = useState<unknown[][]>([]);
@@ -154,9 +176,9 @@ export function ImportResponsesDialog({ surveys, onClose, onImported }: Props) {
       text: header || `Câu hỏi ${index + 1}`,
       type,
       required: false,
-      ...(type === 'single_choice' || type === 'multiple_choice'
+      ...(type === 'single_choice' || type === 'multiple_choice' || type === 'dropdown'
         ? { options: getOptions(rows.map(row => cellText(row[index])), type) }
-        : {}),
+        : type === 'linear_scale' ? { scaleMin: 1, scaleMax: 10 } : {}),
     };
   }), [dataColumns, initializedTypes, rows]);
 
@@ -181,7 +203,7 @@ export function ImportResponsesDialog({ surveys, onClose, onImported }: Props) {
     };
     if (!dataColumns.length) addIssue('Không tìm thấy cột câu hỏi trong file.');
     if (mode === 'create' && questions.some(question =>
-      (question.type === 'single_choice' || question.type === 'multiple_choice') && !question.options?.length
+      (question.type === 'single_choice' || question.type === 'multiple_choice' || question.type === 'dropdown') && !question.options?.length
     )) {
       addIssue('Có câu hỏi lựa chọn chưa có đáp án trong file; hãy đổi loại câu hỏi hoặc kiểm tra dữ liệu.');
     }
@@ -199,12 +221,26 @@ export function ImportResponsesDialog({ surveys, onClose, onImported }: Props) {
         const question = column.question;
         if (question.type === 'text') {
           answers[question.id] = value;
-        } else if (question.type === 'star_rating' || question.type === 'nps') {
+        } else if (question.type === 'star_rating' || question.type === 'nps' || question.type === 'linear_scale') {
           const numberMatch = value.match(/^-?\d+(?:[.,]\d+)?/);
           const number = numberMatch ? Number(numberMatch[0].replace(',', '.')) : Number.NaN;
-          const valid = Number.isInteger(number) && (question.type === 'nps' ? number >= 0 && number <= 10 : number >= 1 && number <= 5);
+          const valid = Number.isInteger(number) && (
+            question.type === 'nps' ? number >= 0 && number <= 10
+              : question.type === 'linear_scale' ? number >= (question.scaleMin ?? 1) && number <= (question.scaleMax ?? 10)
+                : number >= 1 && number <= 5
+          );
           if (!valid) addIssue(`Dòng ${rowIndex + 2}, “${column.header}”: giá trị điểm không hợp lệ (“${value}”).`);
           else answers[question.id] = number;
+        } else if (question.type === 'date') {
+          const dateValue = /^\d{4}-\d{2}-\d{2}/.test(value) ? value.slice(0, 10) : value;
+          const date = new Date(`${dateValue}T00:00:00.000Z`);
+          const valid = /^\d{4}-\d{2}-\d{2}$/.test(dateValue) && !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === dateValue;
+          if (!valid) addIssue(`Dòng ${rowIndex + 2}, “${column.header}”: ngày không hợp lệ (“${value}”).`);
+          else answers[question.id] = dateValue;
+        } else if (question.type === 'multiple_choice_grid' || question.type === 'checkbox_grid') {
+          const gridAnswer = parseGridAnswer(value, question);
+          if (!gridAnswer) addIssue(`Dòng ${rowIndex + 2}, “${column.header}”: nhập lưới theo định dạng “Hàng: Cột; Hàng khác: Cột”.`);
+          else answers[question.id] = gridAnswer;
         } else {
           const options = question.options || [];
           const labels = question.type === 'multiple_choice' ? splitMultipleAnswer(value, options) : [value];

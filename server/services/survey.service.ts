@@ -65,7 +65,7 @@ export function computeServerQuizScore(questions: any[], answers: Record<string,
   let score = 0;
   let totalPossible = 0;
   for (const q of questions || []) {
-    if (q.type === 'single_choice') {
+    if (q.type === 'single_choice' || q.type === 'dropdown') {
       const hasCorrect = typeof q.correctAnswer === 'string' && q.correctAnswer.trim().length > 0;
       if (hasCorrect) {
         const pts = typeof q.points === 'number' && q.points > 0 ? q.points : 1;
@@ -115,6 +115,52 @@ function assertMultipleChoiceLimits(questions: any[], answers: Record<string, un
     }
     if (question.maxSelections && answer.length > question.maxSelections) {
       throw Object.assign(new Error(`Câu hỏi "${question.text}" chỉ được chọn tối đa ${question.maxSelections} đáp án.`), { status: 400 });
+    }
+  }
+}
+
+function assertAdditionalQuestionAnswers(questions: any[], answers: Record<string, unknown> | undefined) {
+  for (const question of questions || []) {
+    const answer = answers?.[question.id];
+    if (answer === undefined || answer === null || answer === '') continue;
+    const options: string[] = question.options || [];
+
+    if (question.type === 'dropdown' && (typeof answer !== 'string' || !options.includes(answer))) {
+      throw Object.assign(new Error(`Câu trả lời không khớp lựa chọn của câu hỏi "${question.text}".`), { status: 400 });
+    }
+    if (question.type === 'date') {
+      const date = typeof answer === 'string' ? new Date(`${answer}T00:00:00.000Z`) : null;
+      if (!date || Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== answer) {
+        throw Object.assign(new Error(`Câu hỏi "${question.text}" cần ngày hợp lệ theo định dạng YYYY-MM-DD.`), { status: 400 });
+      }
+    }
+    if (question.type === 'linear_scale' && (
+      typeof answer !== 'number'
+      || !Number.isInteger(answer)
+      || answer < (question.scaleMin ?? 1)
+      || answer > (question.scaleMax ?? 5)
+    )) {
+      throw Object.assign(new Error(`Câu trả lời của "${question.text}" nằm ngoài thang điểm đã cấu hình.`), { status: 400 });
+    }
+    if (question.type === 'multiple_choice_grid' || question.type === 'checkbox_grid') {
+      if (!answer || typeof answer !== 'object' || Array.isArray(answer)) {
+        throw Object.assign(new Error(`Câu hỏi lưới "${question.text}" cần câu trả lời theo từng hàng.`), { status: 400 });
+      }
+      const gridAnswers = answer as Record<string, unknown>;
+      const rows: string[] = options;
+      const columns: string[] = question.gridColumns || [];
+      if (Object.keys(gridAnswers).some(row => !rows.includes(row))) {
+        throw Object.assign(new Error(`Câu trả lời của "${question.text}" chứa hàng không tồn tại.`), { status: 400 });
+      }
+      for (const [row, value] of Object.entries(gridAnswers)) {
+        const isValidSelection = (selection: unknown) => typeof selection === 'string' && columns.includes(selection);
+        const valid = question.type === 'checkbox_grid'
+          ? Array.isArray(value) && new Set(value).size === value.length && value.every(isValidSelection)
+          : isValidSelection(value);
+        if (!valid) {
+          throw Object.assign(new Error(`Câu trả lời cho hàng "${row}" không khớp cột của câu hỏi "${question.text}".`), { status: 400 });
+        }
+      }
     }
   }
 }
@@ -243,6 +289,7 @@ export async function submitResponse(surveyId: string, data: any) {
     if (!survey) return null;
     assertIntegerStarRatings(survey.questions, answers);
     assertMultipleChoiceLimits(survey.questions, answers);
+    assertAdditionalQuestionAnswers(survey.questions, answers);
     const screenedOut = isScreenedOut(survey.questions, answers);
     let finalScore: number | null = null;
     let finalTotal: number | null = null;
@@ -274,6 +321,7 @@ export async function submitResponse(surveyId: string, data: any) {
   const questions = typeof survey.questions === 'string' ? JSON.parse(survey.questions) : survey.questions;
   assertIntegerStarRatings(questions, answers);
   assertMultipleChoiceLimits(questions, answers);
+  assertAdditionalQuestionAnswers(questions, answers);
   const screenedOut = isScreenedOut(questions, answers);
   let finalScore: number | null = null;
   let finalTotal: number | null = null;
@@ -339,6 +387,43 @@ function validateImportedAnswers(questions: any[], answers: Record<string, unkno
       }
       if (question.maxSelections && answer.length > question.maxSelections) {
         throw Object.assign(new Error(`Câu hỏi "${question.text}" chỉ được chọn tối đa ${question.maxSelections} đáp án.`), { status: 400 });
+      }
+    }
+    if (question.type === 'dropdown' && (typeof answer !== 'string' || !(question.options || []).includes(answer))) {
+      throw Object.assign(new Error(`Câu trả lời không khớp lựa chọn của câu hỏi "${question.text}".`), { status: 400 });
+    }
+    if (question.type === 'date') {
+      const date = typeof answer === 'string' ? new Date(`${answer}T00:00:00.000Z`) : null;
+      if (!date || Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== answer) {
+        throw Object.assign(new Error(`Câu hỏi "${question.text}" cần ngày hợp lệ theo định dạng YYYY-MM-DD.`), { status: 400 });
+      }
+    }
+    if (question.type === 'linear_scale' && (
+      typeof answer !== 'number'
+      || !Number.isInteger(answer)
+      || answer < (question.scaleMin ?? 1)
+      || answer > (question.scaleMax ?? 5)
+    )) {
+      throw Object.assign(new Error(`Câu trả lời của "${question.text}" nằm ngoài thang điểm đã cấu hình.`), { status: 400 });
+    }
+    if (question.type === 'multiple_choice_grid' || question.type === 'checkbox_grid') {
+      if (!answer || typeof answer !== 'object' || Array.isArray(answer)) {
+        throw Object.assign(new Error(`Câu hỏi lưới "${question.text}" cần câu trả lời theo từng hàng.`), { status: 400 });
+      }
+      const gridAnswers = answer as Record<string, unknown>;
+      const rows: string[] = question.options || [];
+      const columns: string[] = question.gridColumns || [];
+      if (Object.keys(gridAnswers).some(row => !rows.includes(row))) {
+        throw Object.assign(new Error(`Câu trả lời của "${question.text}" chứa hàng không tồn tại.`), { status: 400 });
+      }
+      for (const [row, value] of Object.entries(gridAnswers)) {
+        const isValidSelection = (selection: unknown) => typeof selection === 'string' && columns.includes(selection);
+        const valid = question.type === 'checkbox_grid'
+          ? Array.isArray(value) && new Set(value).size === value.length && value.every(isValidSelection)
+          : isValidSelection(value);
+        if (!valid) {
+          throw Object.assign(new Error(`Câu trả lời cho hàng "${row}" không khớp cột của câu hỏi "${question.text}".`), { status: 400 });
+        }
       }
     }
   }

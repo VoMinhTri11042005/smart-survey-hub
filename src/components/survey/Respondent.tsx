@@ -373,6 +373,16 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
 
   const validateQuestion = (question: SurveyQuestion, answer: any) => {
     if (!question.required) return true;
+    if (question.type === 'multiple_choice_grid' || question.type === 'checkbox_grid') {
+      if (!answer || typeof answer !== 'object' || Array.isArray(answer)) return false;
+      return (question.options ?? []).every(row => {
+        const rowAnswer = answer[row];
+        if (question.type === 'checkbox_grid') {
+          return Array.isArray(rowAnswer) && rowAnswer.length > 0 && rowAnswer.every(value => question.gridColumns?.includes(value));
+        }
+        return typeof rowAnswer === 'string' && question.gridColumns?.includes(rowAnswer);
+      });
+    }
     if (answer === undefined || answer === null || answer === '') return false;
     if (Array.isArray(answer) && answer.length === 0) return false;
     return true;
@@ -409,7 +419,7 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
         score = 0;
         totalQ = 0;
         survey.questions.forEach(q => {
-          if (q.type === 'single_choice') {
+          if (q.type === 'single_choice' || q.type === 'dropdown') {
             const hasCorrect = typeof q.correctAnswer === 'string' && q.correctAnswer.trim().length > 0;
             if (hasCorrect) {
               const qPoints = typeof q.points === 'number' && q.points > 0 ? q.points : 1;
@@ -611,6 +621,108 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
             ))}
           </div>
         );
+      case 'dropdown':
+        return (
+          <select
+            value={typeof answer === 'string' ? answer : ''}
+            onChange={event => setAnswerForQuestion(questionId, event.target.value)}
+            className="w-full rounded-xl border border-border-subtle bg-white px-4 py-4 text-base text-text-primary shadow-sm outline-none transition-all focus:border-primary focus:ring-2 focus:ring-primary/20"
+          >
+            <option value="">Chọn một lựa chọn</option>
+            {(question.options ?? []).map((option, index) => (
+              <option key={`${index}-${option}`} value={option}>{stripHtml(cleanHtmlWhitespace(option))}</option>
+            ))}
+          </select>
+        );
+      case 'date':
+        return (
+          <input
+            type="date"
+            value={typeof answer === 'string' ? answer : ''}
+            onChange={event => setAnswerForQuestion(questionId, event.target.value)}
+            className="w-full rounded-xl border border-border-subtle bg-white px-4 py-4 text-base text-text-primary shadow-sm outline-none transition-all focus:border-primary focus:ring-2 focus:ring-primary/20"
+          />
+        );
+      case 'linear_scale': {
+        const min = question.scaleMin ?? 1;
+        const max = question.scaleMax ?? 5;
+        return (
+          <div className="space-y-3 py-2">
+            <div className="flex flex-wrap justify-center gap-2">
+              {Array.from({ length: max - min + 1 }, (_, index) => min + index).map(value => (
+                <button
+                  key={value}
+                  type="button"
+                  aria-pressed={answer === value}
+                  onClick={() => setAnswerForQuestion(questionId, value)}
+                  className={`h-11 min-w-11 rounded-xl px-3 text-base font-bold transition-all ${answer === value ? 'bg-primary text-white shadow-md' : 'border border-border-subtle bg-white text-text-primary hover:border-primary/40 hover:bg-primary-fixed/40'}`}
+                >
+                  {value}
+                </button>
+              ))}
+            </div>
+            <div className="flex justify-between gap-4 text-sm font-medium text-text-secondary">
+              <span>{question.scaleMinLabel || String(min)}</span>
+              <span className="text-right">{question.scaleMaxLabel || String(max)}</span>
+            </div>
+          </div>
+        );
+      }
+      case 'multiple_choice_grid':
+      case 'checkbox_grid': {
+        const gridAnswers = answer && typeof answer === 'object' && !Array.isArray(answer)
+          ? answer as Record<string, string | string[]>
+          : {};
+        const isCheckboxGrid = question.type === 'checkbox_grid';
+        return (
+          <div className="overflow-x-auto rounded-xl border border-border-subtle bg-white">
+            <table className="w-full min-w-max border-collapse text-sm">
+              <thead>
+                <tr className="bg-surface-container-low">
+                  <th className="sticky left-0 min-w-40 bg-surface-container-low px-4 py-3 text-left font-semibold text-text-secondary">Hàng</th>
+                  {(question.gridColumns ?? []).map((column, index) => (
+                    <th key={`${column}-${index}`} className="min-w-24 px-3 py-3 text-center font-semibold text-text-secondary">{stripHtml(cleanHtmlWhitespace(column))}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {(question.options ?? []).map((row, rowIndex) => (
+                  <tr key={`${row}-${rowIndex}`} className="border-t border-border-subtle">
+                    <th scope="row" className="sticky left-0 bg-white px-4 py-3 text-left font-medium text-text-primary">{stripHtml(cleanHtmlWhitespace(row))}</th>
+                    {(question.gridColumns ?? []).map((column, columnIndex) => {
+                      const current = gridAnswers[row];
+                      const checked = isCheckboxGrid
+                        ? Array.isArray(current) && current.includes(column)
+                        : current === column;
+                      return (
+                        <td key={`${column}-${columnIndex}`} className="px-3 py-3 text-center">
+                          <input
+                            type={isCheckboxGrid ? 'checkbox' : 'radio'}
+                            name={`${questionId}-${rowIndex}`}
+                            aria-label={`${stripHtml(cleanHtmlWhitespace(row))}: ${stripHtml(cleanHtmlWhitespace(column))}`}
+                            checked={checked}
+                            onChange={() => {
+                              const next = { ...gridAnswers };
+                              if (isCheckboxGrid) {
+                                const selected = Array.isArray(current) ? current : [];
+                                next[row] = checked ? selected.filter(value => value !== column) : [...selected, column];
+                              } else {
+                                next[row] = column;
+                              }
+                              setAnswerForQuestion(questionId, next);
+                            }}
+                            className="h-4 w-4 cursor-pointer accent-primary"
+                          />
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        );
+      }
       case 'multiple_choice': {
         const selectedAnswers = Array.isArray(answer) ? answer : [];
         const reachedLimit = Boolean(question.maxSelections && selectedAnswers.length >= question.maxSelections);

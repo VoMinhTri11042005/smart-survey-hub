@@ -1,4 +1,4 @@
-import { FileText, Sparkles, Search, CircleDot, CheckSquare, Star, AlignLeft, Minus } from 'lucide-react';
+import { FileText, Sparkles, Search, CircleDot, CheckSquare, Star, AlignLeft, Minus, ChevronDown, CalendarDays, SlidersHorizontal } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { SURVEY_TEMPLATES, TEMPLATE_CATEGORIES } from '../../data/templates';
 import type { View, QuestionType } from '../../types';
@@ -7,6 +7,11 @@ import { useSurvey } from '../../context/SurveyContext';
 const typeIcons: Record<QuestionType, ReactNode> = {
   single_choice: <CircleDot size={12} />,
   multiple_choice: <CheckSquare size={12} />,
+  dropdown: <ChevronDown size={12} />,
+  date: <CalendarDays size={12} />,
+  linear_scale: <SlidersHorizontal size={12} />,
+  multiple_choice_grid: <CircleDot size={12} />,
+  checkbox_grid: <CheckSquare size={12} />,
   star_rating: <Star size={12} />,
   text: <AlignLeft size={12} />,
   nps: <Minus size={12} />,

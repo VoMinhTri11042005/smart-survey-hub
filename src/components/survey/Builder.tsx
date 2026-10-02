@@ -1,5 +1,5 @@
 import React from 'react';
-import { CircleDot, CheckSquare, Star, AlignLeft, Minus, GripVertical, Copy, Trash2, Plus, GitBranch, Sparkles, RefreshCw, Send, CheckCircle2, Check, Info, UploadCloud, ChevronDown, X, FileText } from 'lucide-react';
+import { CircleDot, CheckSquare, Star, AlignLeft, Minus, GripVertical, Copy, Trash2, Plus, GitBranch, Sparkles, RefreshCw, Send, CheckCircle2, Check, Info, UploadCloud, ChevronDown, X, FileText, CalendarDays, SlidersHorizontal } from 'lucide-react';
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { useSurvey } from '../../context/SurveyContext';
 import { ShareModal } from '../common/ShareModal';
@@ -11,6 +11,11 @@ import type { SurveyQuestion, QuestionType, SurveyDisplayMode } from '../../type
 const questionTypeLabels: Record<QuestionType, { label: string; icon: React.ReactNode }> = {
   single_choice: { label: 'Một lựa chọn', icon: <CircleDot size={16} className="text-primary" /> },
   multiple_choice: { label: 'Nhiều lựa chọn', icon: <CheckSquare size={16} className="text-primary" /> },
+  dropdown: { label: 'Menu thả xuống', icon: <ChevronDown size={16} className="text-primary" /> },
+  date: { label: 'Ngày', icon: <CalendarDays size={16} className="text-primary" /> },
+  linear_scale: { label: 'Thang tuyến tính', icon: <SlidersHorizontal size={16} className="text-primary" /> },
+  multiple_choice_grid: { label: 'Lưới trắc nghiệm', icon: <CircleDot size={16} className="text-primary" /> },
+  checkbox_grid: { label: 'Lưới hộp kiểm', icon: <CheckSquare size={16} className="text-primary" /> },
   star_rating: { label: 'Thang điểm sao', icon: <Star size={16} className="text-primary" /> },
   text: { label: 'Văn bản tự do', icon: <AlignLeft size={16} className="text-primary" /> },
   nps: { label: 'Điểm NPS', icon: <Minus size={16} className="text-primary" /> },
@@ -491,10 +496,39 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError }: { onP
     setActiveQuestionId(newQ.id);
   };
 
+  const supportsOptions = (type: QuestionType) =>
+    type === 'single_choice'
+    || type === 'multiple_choice'
+    || type === 'dropdown'
+    || type === 'multiple_choice_grid'
+    || type === 'checkbox_grid';
+  const isGridQuestion = (type: QuestionType) =>
+    type === 'multiple_choice_grid' || type === 'checkbox_grid';
+
   const addOption = (questionId: string) => {
     const q = questions.find(q => q.id === questionId);
     if (!q || !q.options) return;
     updateQuestion(questionId, { options: [...q.options, `Lựa chọn ${q.options.length + 1}`] });
+  };
+
+  const updateGridColumn = (questionId: string, index: number, value: string) => {
+    const question = questions.find(item => item.id === questionId);
+    if (!question?.gridColumns) return;
+    const gridColumns = [...question.gridColumns];
+    gridColumns[index] = value;
+    updateQuestion(questionId, { gridColumns });
+  };
+
+  const addGridColumn = (questionId: string) => {
+    const question = questions.find(item => item.id === questionId);
+    if (!question?.gridColumns) return;
+    updateQuestion(questionId, { gridColumns: [...question.gridColumns, `Cột ${question.gridColumns.length + 1}`] });
+  };
+
+  const removeGridColumn = (questionId: string, index: number) => {
+    const question = questions.find(item => item.id === questionId);
+    if (!question?.gridColumns || question.gridColumns.length <= 2) return;
+    updateQuestion(questionId, { gridColumns: question.gridColumns.filter((_, columnIndex) => columnIndex !== index) });
   };
 
   const updateOption = (questionId: string, optionIdx: number, value: string) => {
@@ -520,15 +554,21 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError }: { onP
   };
 
   const changeQuestionType = (questionId: string, newType: QuestionType) => {
+    const question = questions.find(item => item.id === questionId);
     const updates: Partial<SurveyQuestion> = {
       type: newType,
       correctAnswer: undefined,
       ...(newType !== 'multiple_choice' ? { maxSelections: undefined } : {}),
       ...(newType !== 'single_choice' ? { screenOutAnswer: undefined, screenOutMessage: undefined } : {}),
+      ...(isGridQuestion(newType)
+        ? { gridColumns: question?.gridColumns?.length ? question.gridColumns : ['Cột 1', 'Cột 2'] }
+        : { gridColumns: undefined }),
+      ...(newType === 'linear_scale'
+        ? { scaleMin: question?.scaleMin ?? 1, scaleMax: question?.scaleMax ?? 5 }
+        : { scaleMin: undefined, scaleMax: undefined, scaleMinLabel: undefined, scaleMaxLabel: undefined }),
     };
-    if (newType === 'single_choice' || newType === 'multiple_choice') {
-      const q = questions.find(q => q.id === questionId);
-      if (!q?.options || q.options.length === 0) {
+    if (supportsOptions(newType)) {
+      if (!question?.options || question.options.length === 0) {
         updates.options = ['Lựa chọn 1', 'Lựa chọn 2'];
       }
     } else {
@@ -540,7 +580,7 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError }: { onP
   const toggleCorrectAnswer = (questionId: string, optionValue: string) => {
     const q = questions.find(q => q.id === questionId);
     if (!q) return;
-    if (q.type === 'single_choice') {
+    if (q.type === 'single_choice' || q.type === 'dropdown') {
       updateQuestion(questionId, { correctAnswer: optionValue });
     } else if (q.type === 'multiple_choice') {
       let current = q.correctAnswer;
@@ -783,8 +823,8 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError }: { onP
                        </div>
                      )}
 
-                     {/* Options (for single_choice / multiple_choice) */}
-                     {(q.type === 'single_choice' || q.type === 'multiple_choice') && q.options && (
+                     {/* Choices or row labels */}
+                     {supportsOptions(q.type) && q.options && (
                        <div className="space-y-2 mt-3">
                          {q.options.map((opt, optIdx) => (
                             <div
@@ -806,31 +846,31 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError }: { onP
                               >
                                 <GripVertical size={16} />
                               </span>
-                              {isQuiz ? (
+                              {isQuiz && (q.type === 'single_choice' || q.type === 'multiple_choice' || q.type === 'dropdown') ? (
                                <button
                                  onClick={(e) => { e.stopPropagation(); toggleCorrectAnswer(q.id, opt); }}
                                  className={`flex-shrink-0 w-5 h-5 ${q.type === 'multiple_choice' ? 'rounded-md' : 'rounded-full'} border-2 flex items-center justify-center transition-colors cursor-pointer ${
-                                   (q.type === 'single_choice' && q.correctAnswer === opt) || (q.type === 'multiple_choice' && Array.isArray(q.correctAnswer) && q.correctAnswer.includes(opt))
+                                   ((q.type === 'single_choice' || q.type === 'dropdown') && q.correctAnswer === opt) || (q.type === 'multiple_choice' && Array.isArray(q.correctAnswer) && q.correctAnswer.includes(opt))
                                      ? 'border-sentiment-positive bg-sentiment-positive text-white' 
                                      : 'border-text-secondary hover:border-sentiment-positive'
                                  }`}
                                  title="Đánh dấu là đáp án đúng"
                                >
-                                 {((q.type === 'single_choice' && q.correctAnswer === opt) || (q.type === 'multiple_choice' && Array.isArray(q.correctAnswer) && q.correctAnswer.includes(opt))) && (
+                                 {(((q.type === 'single_choice' || q.type === 'dropdown') && q.correctAnswer === opt) || (q.type === 'multiple_choice' && Array.isArray(q.correctAnswer) && q.correctAnswer.includes(opt))) && (
                                     q.type === 'multiple_choice' ? <Check size={14} strokeWidth={3} /> : <CheckCircle2 size={12} />
                                  )}
                                </button>
                              ) : (
-                               q.type === 'single_choice'
-                                 ? <CircleDot size={18} className="text-text-secondary flex-shrink-0" />
-                                 : <CheckSquare size={18} className="text-text-secondary flex-shrink-0" />
+                               q.type === 'multiple_choice' || q.type === 'checkbox_grid'
+                                 ? <CheckSquare size={18} className="text-text-secondary flex-shrink-0" />
+                                 : <CircleDot size={18} className="text-text-secondary flex-shrink-0" />
                              )}
                              <div className="flex-1 min-w-0 quill-option quill-smart-toolbar">
                                <ReactQuill
                                  theme="snow"
                                  value={opt}
                                  onChange={(val) => { if (val !== opt) updateOption(q.id, optIdx, val); }}
-                                 placeholder={`Lựa chọn ${optIdx + 1}`}
+                                 placeholder={isGridQuestion(q.type) ? `Hàng ${optIdx + 1}` : `Lựa chọn ${optIdx + 1}`}
                                  modules={quillModules}
                                />
                              </div>
@@ -846,9 +886,45 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError }: { onP
                              onClick={(e) => { e.stopPropagation(); addOption(q.id); }}
                              className="text-primary text-sm font-semibold flex items-center gap-2 mt-2 px-3 py-1.5 hover:bg-primary-fixed rounded-lg transition-colors cursor-pointer"
                            >
-                             <Plus size={16} /> Thêm lựa chọn
+                             <Plus size={16} /> {isGridQuestion(q.type) ? 'Thêm hàng' : 'Thêm lựa chọn'}
                            </button>
                          )}
+                       </div>
+                     )}
+
+                     {isActive && isGridQuestion(q.type) && (
+                       <div className="mt-5 rounded-xl border border-border-subtle bg-surface-background p-4">
+                         <p className="mb-3 text-sm font-semibold text-text-primary">Các cột trả lời</p>
+                         <div className="space-y-2">
+                           {(q.gridColumns ?? []).map((column, columnIndex) => (
+                             <div key={`${q.id}-column-${columnIndex}`} className="flex items-center gap-2">
+                               <input
+                                 value={column}
+                                 onChange={event => updateGridColumn(q.id, columnIndex, event.target.value)}
+                                 aria-label={`Tên cột ${columnIndex + 1}`}
+                                 className="min-w-0 flex-1 rounded-lg border border-border-subtle bg-white px-3 py-2 text-sm text-text-primary outline-none focus:ring-2 focus:ring-primary/30"
+                               />
+                               {(q.gridColumns?.length ?? 0) > 2 && (
+                                 <button
+                                   type="button"
+                                   onClick={() => removeGridColumn(q.id, columnIndex)}
+                                   aria-label={`Xóa cột ${columnIndex + 1}`}
+                                   className="rounded-lg p-2 text-text-secondary hover:bg-sentiment-negative/10 hover:text-sentiment-negative"
+                                 >
+                                   <X size={16} />
+                                 </button>
+                               )}
+                             </div>
+                           ))}
+                         </div>
+                         <button
+                           type="button"
+                           onClick={() => addGridColumn(q.id)}
+                           className="mt-3 inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-semibold text-primary hover:bg-primary-fixed"
+                         >
+                           <Plus size={16} /> Thêm cột
+                         </button>
+                         <p className="mt-2 text-xs text-text-secondary">Mỗi hàng là một ý cần đánh giá; các cột là lựa chọn trả lời.</p>
                        </div>
                      )}
 
@@ -871,6 +947,31 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError }: { onP
                            <div key={i} className="w-8 h-8 rounded-lg bg-surface-container-highest flex items-center justify-center text-xs font-bold text-text-secondary">{i}</div>
                          ))}
                        </div>
+                     )}
+                     {q.type === 'dropdown' && (
+                       <div className="mt-2 flex items-center justify-between rounded-xl border border-border-subtle bg-white px-4 py-3 text-sm text-text-secondary opacity-70">
+                         <span>Chọn một lựa chọn</span><ChevronDown size={18} />
+                       </div>
+                     )}
+                     {q.type === 'date' && (
+                       <div className="mt-2 flex items-center gap-3 rounded-xl border border-border-subtle bg-white px-4 py-3 text-sm text-text-secondary opacity-70">
+                         <CalendarDays size={18} /> Ngày / tháng / năm
+                       </div>
+                     )}
+                     {q.type === 'linear_scale' && (
+                       <div className="mt-3 space-y-2 opacity-70">
+                         <div className="flex flex-wrap gap-2">
+                           {Array.from({ length: (q.scaleMax ?? 5) - (q.scaleMin ?? 1) + 1 }, (_, index) => (q.scaleMin ?? 1) + index).map(value => (
+                             <span key={value} className="flex h-9 min-w-9 items-center justify-center rounded-lg border border-border-subtle bg-white px-2 text-sm">{value}</span>
+                           ))}
+                         </div>
+                         <div className="flex justify-between text-xs text-text-secondary"><span>{q.scaleMinLabel || ' '}</span><span>{q.scaleMaxLabel || ' '}</span></div>
+                       </div>
+                     )}
+                     {isGridQuestion(q.type) && (
+                       <p className="mt-2 rounded-xl border border-border-subtle bg-surface-background p-4 text-sm text-text-secondary">
+                         Bảng trả lời gồm {(q.options ?? []).length} hàng và {(q.gridColumns ?? []).length} cột.
+                       </p>
                      )}
 
                       {/* Footer Settings */}
@@ -921,6 +1022,41 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError }: { onP
                               )}
                             </label>
                           )}
+                          {q.type === 'linear_scale' && (
+                            <div className="grid w-full grid-cols-2 gap-3 sm:mr-auto sm:max-w-xl">
+                              <label className="flex flex-col gap-1.5">
+                                <span className="text-sm font-medium text-text-secondary">Mức thấp nhất</span>
+                                <select
+                                  value={q.scaleMin ?? 1}
+                                  onChange={event => {
+                                    const scaleMin = Number(event.target.value);
+                                    updateQuestion(q.id, { scaleMin, ...(scaleMin >= (q.scaleMax ?? 5) ? { scaleMax: scaleMin + 1 } : {}) });
+                                  }}
+                                  className="rounded-lg border border-border-subtle bg-surface-background px-3 py-2 text-sm"
+                                >
+                                  {[0, 1].map(value => <option key={value} value={value}>{value}</option>)}
+                                </select>
+                              </label>
+                              <label className="flex flex-col gap-1.5">
+                                <span className="text-sm font-medium text-text-secondary">Mức cao nhất</span>
+                                <select
+                                  value={q.scaleMax ?? 5}
+                                  onChange={event => updateQuestion(q.id, { scaleMax: Number(event.target.value) })}
+                                  className="rounded-lg border border-border-subtle bg-surface-background px-3 py-2 text-sm"
+                                >
+                                  {Array.from({ length: 10 - (q.scaleMin ?? 1) }, (_, index) => (q.scaleMin ?? 1) + index + 1).map(value => <option key={value} value={value}>{value}</option>)}
+                                </select>
+                              </label>
+                              <label className="flex flex-col gap-1.5">
+                                <span className="text-sm font-medium text-text-secondary">Nhãn mức thấp (không bắt buộc)</span>
+                                <input value={q.scaleMinLabel ?? ''} maxLength={100} onChange={event => updateQuestion(q.id, { scaleMinLabel: event.target.value })} className="rounded-lg border border-border-subtle bg-surface-background px-3 py-2 text-sm" />
+                              </label>
+                              <label className="flex flex-col gap-1.5">
+                                <span className="text-sm font-medium text-text-secondary">Nhãn mức cao (không bắt buộc)</span>
+                                <input value={q.scaleMaxLabel ?? ''} maxLength={100} onChange={event => updateQuestion(q.id, { scaleMaxLabel: event.target.value })} className="rounded-lg border border-border-subtle bg-surface-background px-3 py-2 text-sm" />
+                              </label>
+                            </div>
+                          )}
                           {q.type === 'text' && (
                             <label className="flex flex-col gap-1.5 sm:mr-auto">
                               <span className="text-sm font-medium text-text-secondary">Thống kê theo nhóm</span>
@@ -936,7 +1072,7 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError }: { onP
                               <span className="text-[11px] text-text-secondary">Họ tên, email, SĐT và mã số cá nhân luôn không được tổng hợp.</span>
                             </label>
                           )}
-                          {isQuiz && (q.type === 'single_choice' || q.type === 'multiple_choice') && (
+                          {isQuiz && (q.type === 'single_choice' || q.type === 'multiple_choice' || q.type === 'dropdown') && (
                            <div className="flex items-center gap-2">
                              <span className="text-sm font-medium text-text-secondary">Điểm:</span>
                              <input

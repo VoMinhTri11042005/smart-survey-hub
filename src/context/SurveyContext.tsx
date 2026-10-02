@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react';
-import type { Survey, SurveyQuestion, SurveyResponse, SurveyTemplateData, TeamMember, TeamRole, SurveyDisplayMode } from '../types';
+import type { Survey, SurveyAnswer, SurveyQuestion, SurveyResponse, SurveyTemplateData, TeamMember, TeamRole, SurveyDisplayMode } from '../types';
 
 interface SurveyDraft {
   id: string;
@@ -35,7 +35,7 @@ interface SurveyContextType {
   saveDraft: (draft: Partial<SurveyDraft> & { title?: string; description?: string; questions?: SurveyQuestion[] }) => Promise<SurveyDraft>;
   deleteDraft: (id: string) => Promise<void>;
 
-  submitResponse: (surveyId: string, respondentId: string, answers: Record<string, string | string[] | number>, score?: number, totalQuizQuestions?: number) => Promise<void>;
+  submitResponse: (surveyId: string, respondentId: string, answers: Record<string, SurveyAnswer>, score?: number, totalQuizQuestions?: number) => Promise<void>;
   fetchResponses: (surveyId: string) => Promise<SurveyResponse[]>;
   fetchMyResponse: (surveyId: string, respondentId: string) => Promise<SurveyResponse | null>;
   resetResponses: (surveyId: string) => Promise<number>;
@@ -391,7 +391,7 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
     if (currentSurvey?.id === id) setCurrentSurvey(null);
   }, [currentSurvey?.id]);
 
-  const submitResponse = useCallback(async (surveyId: string, respondentId: string, answers: Record<string, string | string[] | number>, score?: number, totalQuizQuestions?: number) => {
+  const submitResponse = useCallback(async (surveyId: string, respondentId: string, answers: Record<string, SurveyAnswer>, score?: number, totalQuizQuestions?: number) => {
     try {
       const res = await fetch(`${API_BASE}/surveys/${surveyId}/responses`, {
         method: 'POST',

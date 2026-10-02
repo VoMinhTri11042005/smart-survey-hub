@@ -28,6 +28,30 @@ export interface StarRatingResult {
   distribution: Record<number, number>;
 }
 
+export interface LinearScaleResult {
+  questionId: string;
+  questionText: string;
+  min: number;
+  max: number;
+  minLabel?: string;
+  maxLabel?: string;
+  average: number;
+  totalAnswered: number;
+  distribution: Record<number, number>;
+}
+
+export interface GridRowDistribution {
+  label: string;
+  totalAnswered: number;
+  options: { label: string; count: number; percent: number }[];
+}
+
+export interface GridDistribution {
+  questionId: string;
+  questionText: string;
+  rows: GridRowDistribution[];
+}
+
 export interface TextResponseResult {
   questionId: string;
   questionText: string;
@@ -49,6 +73,8 @@ export interface SurveyAnalytics {
   nps: NpsResult | null;
   choiceDistributions: ChoiceDistribution[];
   starRatings: StarRatingResult[];
+  linearScales: LinearScaleResult[];
+  gridDistributions: GridDistribution[];
   textResponses: TextResponseResult[];
   textCategoryDistributions: TextCategoryDistribution[];
   recentResponses: SurveyResponse[];
@@ -64,8 +90,15 @@ export interface SurveyAnalytics {
 
 function hasAnswer(value: unknown): boolean {
   if (Array.isArray(value)) return value.length > 0;
+  if (value && typeof value === 'object') return Object.values(value).some(hasAnswer);
   if (typeof value === 'string') return stripHtml(cleanHtmlWhitespace(value)).trim().length > 0;
   return value !== undefined && value !== null;
+}
+
+function hasQuestionAnswer(question: Survey['questions'][number], answer: unknown): boolean {
+  if (question.type !== 'multiple_choice_grid' && question.type !== 'checkbox_grid') return hasAnswer(answer);
+  if (!answer || typeof answer !== 'object' || Array.isArray(answer)) return false;
+  return (question.options ?? []).every(row => hasAnswer((answer as Record<string, unknown>)[row]));
 }
 
 export function calculateNps(scores: number[]): NpsResult | null {
@@ -104,7 +137,7 @@ export function computeSurveyAnalytics(survey: Survey, responses: SurveyResponse
   // Calculate maximum possible quiz score directly from survey questions
   const calculatedTotalPossible = survey.isQuiz
     ? Math.round(survey.questions.reduce((sum, q) => {
-        if ((q.type === 'single_choice' || q.type === 'multiple_choice') && q.correctAnswer) {
+        if ((q.type === 'single_choice' || q.type === 'multiple_choice' || q.type === 'dropdown') && q.correctAnswer) {
           const hasCorrect =
             typeof q.correctAnswer === 'string'
               ? q.correctAnswer.trim().length > 0
@@ -143,7 +176,7 @@ export function computeSurveyAnalytics(survey: Survey, responses: SurveyResponse
       .filter(q => q.required)
       .every(q => {
         const ans = resp.answers[q.id];
-        return hasAnswer(ans);
+        return hasQuestionAnswer(q, ans);
       });
     if (answeredRequired) fullyAnswered++;
   }
@@ -166,16 +199,16 @@ export function computeSurveyAnalytics(survey: Survey, responses: SurveyResponse
     let correctCount = 0;
     for (const response of responses) {
       const answer = response.answers[question.id];
-      if (!hasAnswer(answer)) continue;
+      if (!hasQuestionAnswer(question, answer)) continue;
       answered++;
-      if (question.type === 'single_choice' && typeof question.correctAnswer === 'string' && answer === question.correctAnswer) correctCount++;
+      if ((question.type === 'single_choice' || question.type === 'dropdown') && typeof question.correctAnswer === 'string' && answer === question.correctAnswer) correctCount++;
       if (question.type === 'multiple_choice' && Array.isArray(question.correctAnswer) && Array.isArray(answer)) {
         const actual = [...answer].sort();
         const expected = [...question.correctAnswer].sort();
         if (actual.length === expected.length && actual.every((value, index) => value === expected[index])) correctCount++;
       }
     }
-    const canScore = (question.type === 'single_choice' && typeof question.correctAnswer === 'string' && question.correctAnswer.trim()) || (question.type === 'multiple_choice' && Array.isArray(question.correctAnswer) && question.correctAnswer.length > 0);
+    const canScore = ((question.type === 'single_choice' || question.type === 'dropdown') && typeof question.correctAnswer === 'string' && question.correctAnswer.trim()) || (question.type === 'multiple_choice' && Array.isArray(question.correctAnswer) && question.correctAnswer.length > 0);
     return {
       questionId: question.id,
       questionText: question.text,
@@ -206,7 +239,9 @@ export function computeSurveyAnalytics(survey: Survey, responses: SurveyResponse
   ] : undefined;
 
   const choiceDistributions: ChoiceDistribution[] = [];
-  for (const q of survey.questions.filter(q => q.type === 'single_choice' || q.type === 'multiple_choice')) {
+  for (const q of survey.questions.filter(q =>
+    q.type === 'single_choice' || q.type === 'multiple_choice' || q.type === 'dropdown'
+  )) {
     const counts: Record<string, number> = {};
     for (const opt of q.options || []) counts[opt] = 0;
 
@@ -241,6 +276,59 @@ export function computeSurveyAnalytics(survey: Survey, responses: SurveyResponse
         .sort((a, b) => b.count - a.count),
     });
   }
+
+  const linearScales: LinearScaleResult[] = [];
+  for (const question of survey.questions.filter(question => question.type === 'linear_scale')) {
+    const min = question.scaleMin ?? 1;
+    const max = question.scaleMax ?? 5;
+    const distribution: Record<number, number> = {};
+    for (let value = min; value <= max; value++) distribution[value] = 0;
+    const scores = responses
+      .map(response => response.answers[question.id])
+      .filter((value): value is number => typeof value === 'number' && Number.isInteger(value) && value >= min && value <= max);
+    for (const score of scores) distribution[score] = (distribution[score] ?? 0) + 1;
+    linearScales.push({
+      questionId: question.id,
+      questionText: question.text,
+      min,
+      max,
+      minLabel: question.scaleMinLabel,
+      maxLabel: question.scaleMaxLabel,
+      average: scores.length ? Math.round((scores.reduce((sum, score) => sum + score, 0) / scores.length) * 10) / 10 : 0,
+      totalAnswered: scores.length,
+      distribution,
+    });
+  }
+
+  const gridDistributions: GridDistribution[] = survey.questions
+    .filter(question => question.type === 'multiple_choice_grid' || question.type === 'checkbox_grid')
+    .map(question => ({
+      questionId: question.id,
+      questionText: question.text,
+      rows: (question.options ?? []).map(row => {
+        const counts = new Map((question.gridColumns ?? []).map(column => [column, 0]));
+        let totalAnswered = 0;
+        for (const response of responses) {
+          const raw = response.answers[question.id];
+          if (!raw || typeof raw !== 'object' || Array.isArray(raw)) continue;
+          const rowAnswer = (raw as Record<string, unknown>)[row];
+          const selections = Array.isArray(rowAnswer) ? rowAnswer : [rowAnswer];
+          const validSelections = selections.filter((selection): selection is string => typeof selection === 'string' && counts.has(selection));
+          if (!validSelections.length) continue;
+          totalAnswered++;
+          for (const selection of validSelections) counts.set(selection, (counts.get(selection) ?? 0) + 1);
+        }
+        return {
+          label: row,
+          totalAnswered,
+          options: [...counts].map(([label, count]) => ({
+            label,
+            count,
+            percent: totalAnswered ? Math.round((count / totalAnswered) * 100) : 0,
+          })),
+        };
+      }),
+    }));
 
   const starRatings: StarRatingResult[] = [];
   for (const q of survey.questions.filter(q => q.type === 'star_rating')) {
@@ -295,6 +383,8 @@ export function computeSurveyAnalytics(survey: Survey, responses: SurveyResponse
     nps,
     choiceDistributions,
     starRatings,
+    linearScales,
+    gridDistributions,
     textResponses,
     textCategoryDistributions,
     recentResponses: [...responses]
@@ -341,6 +431,11 @@ export function exportResponsesToCsv(survey: Survey, responses: SurveyResponse[]
       ...survey.questions.map(q => {
         const ans = r.answers[q.id];
         if (Array.isArray(ans)) return stripHtml(cleanHtmlWhitespace(ans.join('; ')));
+        if (ans && typeof ans === 'object') {
+          return stripHtml(cleanHtmlWhitespace(Object.entries(ans)
+            .map(([row, selection]) => `${row}: ${Array.isArray(selection) ? selection.join(', ') : selection}`)
+            .join('; ')));
+        }
         return ans !== undefined && ans !== null ? stripHtml(cleanHtmlWhitespace(String(ans))) : '';
       })
     );

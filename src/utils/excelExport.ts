@@ -369,6 +369,57 @@ function buildProfessionalSheets(workbook: ExcelJS.Workbook, survey: Survey, res
     detail.getColumn(4).numFmt = '0.0%'; styleTableBody(detail, detailRow + 2, detailRow + 6, [9, 55, 14, 14, 14]);
     detailChartRows.push({ title: `Câu ${number}`, rows, type: 'bar', row: detailRow }); detailRow += 9;
   });
+  analytics.linearScales.forEach(scale => {
+    const number = survey.questions.findIndex(question => question.id === scale.questionId) + 1;
+    const rows = Array.from({ length: scale.max - scale.min + 1 }, (_, index) => scale.min + index)
+      .map(value => [String(value), scale.distribution[value] ?? 0] as [string, number]);
+    detail.mergeCells(`A${detailRow}:H${detailRow}`);
+    detail.getCell(`A${detailRow}`).value = `Câu ${number}: ${displayText(scale.questionText)} · Trung bình ${scale.average}`;
+    detail.getCell(`A${detailRow}`).font = { bold: true, color: { argb: `FF${BRAND}` } };
+    detail.getCell(`A${detailRow}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEDE9FE' } };
+    detail.getRow(detailRow + 1).values = ['STT', 'Mức điểm', 'Số phản hồi', 'Tỷ lệ', 'Cỡ mẫu (n)', '', '', ''];
+    styleTableHeader(detail.getRow(detailRow + 1));
+    rows.forEach(([label, count], index) => detail.getRow(detailRow + index + 2).values = [
+      index + 1,
+      label,
+      count,
+      scale.totalAnswered ? count / scale.totalAnswered : 0,
+      scale.totalAnswered,
+      '',
+      '',
+      '',
+    ]);
+    detail.getColumn(4).numFmt = '0.0%';
+    styleTableBody(detail, detailRow + 2, detailRow + rows.length + 1, [9, 55, 14, 14, 14]);
+    detailChartRows.push({ title: `Câu ${number}`, rows, type: 'bar', row: detailRow });
+    detailRow += rows.length + 4;
+  });
+  analytics.gridDistributions.forEach(grid => {
+    const number = survey.questions.findIndex(question => question.id === grid.questionId) + 1;
+    grid.rows.forEach(gridRow => {
+      const rows = gridRow.options.map(option => [displayText(option.label), option.count] as [string, number]);
+      detail.mergeCells(`A${detailRow}:H${detailRow}`);
+      detail.getCell(`A${detailRow}`).value = `Câu ${number}: ${displayText(grid.questionText)} · ${displayText(gridRow.label)}`;
+      detail.getCell(`A${detailRow}`).font = { bold: true, color: { argb: `FF${BRAND}` } };
+      detail.getCell(`A${detailRow}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEDE9FE' } };
+      detail.getRow(detailRow + 1).values = ['STT', 'Lựa chọn', 'Số lượt', 'Tỷ lệ', 'Cỡ mẫu (n)', '', '', ''];
+      styleTableHeader(detail.getRow(detailRow + 1));
+      gridRow.options.forEach((option, index) => detail.getRow(detailRow + index + 2).values = [
+        index + 1,
+        displayText(option.label),
+        option.count,
+        option.percent / 100,
+        gridRow.totalAnswered,
+        '',
+        '',
+        '',
+      ]);
+      detail.getColumn(4).numFmt = '0.0%';
+      styleTableBody(detail, detailRow + 2, detailRow + gridRow.options.length + 1, [9, 55, 14, 14, 14]);
+      detailChartRows.push({ title: `Câu ${number} · ${displayText(gridRow.label)}`, rows, type: 'bar', row: detailRow });
+      detailRow += gridRow.options.length + 4;
+    });
+  });
   detailChartRows.slice(0, 12).forEach((chart, index) => {
     const dataStart = chart.row + 2; const dataEnd = dataStart + chart.rows.length - 1;
     nativeCharts.push({ sheetName: 'Chi tiết câu hỏi', type: chart.type, title: chart.title, categoryFormula: `'Chi tiết câu hỏi'!$B$${dataStart}:$B$${dataEnd}`, categories: chart.rows.map(row => row[0]), series: [{ name: 'Số lượt', valueFormula: `'Chi tiết câu hỏi'!$C$${dataStart}:$C$${dataEnd}`, values: chart.rows.map(row => row[1]), color: index % 2 ? '70AD47' : '1F4E78' }], anchor: { from: { col: 7 + (index % 2) * 8, row: chart.row - 1 }, to: { col: 14 + (index % 2) * 8, row: chart.row + 12 } }, showLegend: chart.type === 'doughnut', showValues: chart.type === 'bar', showPercent: chart.type === 'doughnut' });
@@ -573,6 +624,11 @@ export async function exportSurveyAnalysisToExcel(survey: Survey, responses: Sur
       const answer = response.answers[question.id];
       if (question.type === 'star_rating') return roundLegacyStarRating(answer) ?? answer ?? '';
       if (Array.isArray(answer)) return answer.map(item => displayText(String(item))).join('; ');
+      if (answer && typeof answer === 'object') {
+        return Object.entries(answer)
+          .map(([row, selection]) => `${displayText(row)}: ${Array.isArray(selection) ? selection.map(item => displayText(String(item))).join(', ') : displayText(String(selection))}`)
+          .join('; ');
+      }
       return typeof answer === 'string' ? displayText(answer) : answer ?? '';
     }),
   ]));
@@ -633,26 +689,37 @@ export async function exportSurveyAnalysisToExcel(survey: Survey, responses: Sur
 
   const choiceByQuestionId = new Map(analytics.choiceDistributions.map(distribution => [distribution.questionId, distribution]));
   const ratingByQuestionId = new Map(analytics.starRatings.map(rating => [rating.questionId, rating]));
+  const linearScaleByQuestionId = new Map(analytics.linearScales.map(scale => [scale.questionId, scale]));
+  const gridByQuestionId = new Map(analytics.gridDistributions.map(grid => [grid.questionId, grid]));
   const npsByQuestionId = new Map(analytics.npsByQuestion.map(result => [result.questionId, result]));
   const checkSheet = workbook.addWorksheet('Kiểm tra số liệu');
   checkSheet.addRow(['STT', 'Câu hỏi', 'Loại', 'Tổng phản hồi', 'Đã trả lời', 'Bỏ qua', 'Tỷ lệ trả lời', 'Tổng lượt ghi nhận', 'Kết quả đối chiếu']);
   analytics.questionMetrics.forEach((metric, index) => {
     const choice = choiceByQuestionId.get(metric.questionId);
     const rating = ratingByQuestionId.get(metric.questionId);
+    const linearScale = linearScaleByQuestionId.get(metric.questionId);
+    const grid = gridByQuestionId.get(metric.questionId);
     const npsResult = npsByQuestionId.get(metric.questionId);
     const recordedTotal = choice
       ? choice.options.reduce((sum, option) => sum + option.count, 0)
       : rating
       ? Object.values(rating.distribution).reduce((sum, count) => sum + count, 0)
+      : linearScale
+      ? Object.values(linearScale.distribution).reduce((sum, count) => sum + count, 0)
+      : grid
+      ? grid.rows.reduce((sum, row) => sum + row.options.reduce((rowSum, option) => rowSum + option.count, 0), 0)
       : npsResult
       ? npsResult.totalAnswered
       : metric.answered;
     const matchesSource = metric.answered + metric.missing === analytics.totalResponses
       && (!choice || metric.type === 'multiple_choice' || recordedTotal === metric.answered)
       && (!rating || recordedTotal === metric.answered)
+      && (!linearScale || recordedTotal === metric.answered)
       && (!npsResult || recordedTotal === metric.answered);
-    const note = metric.type === 'multiple_choice'
+    const note = metric.type === 'multiple_choice' || metric.type === 'checkbox_grid'
       ? `${matchesSource ? 'Khớp dữ liệu gốc' : 'Cần kiểm tra'}; có thể chọn nhiều đáp án.`
+      : grid
+      ? 'Lượt chọn được đối chiếu riêng theo từng hàng.'
       : matchesSource ? 'Khớp dữ liệu gốc.' : 'Cần kiểm tra.';
     checkSheet.addRow([
       index + 1,
@@ -706,7 +773,7 @@ export async function exportSurveyAnalysisToExcel(survey: Survey, responses: Sur
       distribution.options.map(option => [displayText(option.label), option.count, option.percent / 100]),
       `#${PALETTE[(index + 1) % PALETTE.length]}`,
       {
-        kind: question?.type === 'single_choice' && distribution.options.length <= 6 ? 'doughnut' : 'bar',
+        kind: (question?.type === 'single_choice' || question?.type === 'dropdown') && distribution.options.length <= 6 ? 'doughnut' : 'bar',
         chartTitle: `Câu ${questionNumber}`,
         chartLabels: distribution.options.map((_, optionIndex) => `Lựa chọn ${optionIndex + 1}`),
       },
