@@ -1330,7 +1330,7 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError }: { onP
 
       {/* Right Sidebar: AI Orchestrator */}
       <aside className="w-full md:w-80 bg-white border-t md:border-t-0 md:border-l border-border-subtle md:h-full flex flex-col shrink-0">
-        <div className="p-6 flex items-center gap-2 border-b border-border-subtle bg-surface-background/50">
+        <div className="p-6 flex items-center gap-2 border-b border-border-subtle bg-white">
            <Sparkles size={20} className="text-secondary-container" />
            <h2 className="font-display text-lg font-bold">Bộ điều phối AI</h2>
         </div>
@@ -1338,7 +1338,7 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError }: { onP
         <div className="flex-1 p-6 space-y-8 overflow-y-auto">
            {/* Stats */}
            {showSurvey && questions.length > 0 && (
-             <div className="rounded-2xl p-5 bg-gradient-to-br from-surface-background to-secondary-fixed/30 border border-secondary-container/30 shadow-[0_0_15px_rgba(57,184,253,0.1)]">
+             <div className="rounded-2xl p-5 bg-white border border-secondary-container/30 shadow-[0_0_15px_rgba(57,184,253,0.1)]">
                 <div className="flex items-center justify-between mb-3">
                    <span className="text-sm font-bold text-secondary">Tổng quan khảo sát</span>
                    <span className="text-[10px] uppercase font-bold text-sentiment-positive bg-sentiment-positive/10 px-1.5 py-0.5 rounded">Sẵn sàng</span>
