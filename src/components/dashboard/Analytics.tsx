@@ -163,11 +163,11 @@ export function Analytics() {
   }
 
   return (
-    <div className="p-4 sm:p-8 max-w-7xl mx-auto space-y-6 md:space-y-8 animate-in fade-in duration-500">
+    <div className="mx-auto w-full min-w-0 max-w-7xl p-4 sm:p-8 space-y-6 md:space-y-8 animate-in fade-in duration-500">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-        <div className="flex-1">
-          <div className="flex items-center gap-2 mb-2">
+      <div className="flex min-w-0 flex-col gap-5">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2 mb-2">
             {selectedSurvey?.status === 'live' && (
               <span className="px-2.5 py-1 bg-sentiment-positive/10 text-sentiment-positive text-xs font-bold rounded-full flex items-center gap-1.5 uppercase tracking-wide">
                 <span className="w-1.5 h-1.5 bg-sentiment-positive rounded-full animate-pulse"></span> Trực tiếp
@@ -182,14 +182,14 @@ export function Analytics() {
           </div>
 
           {/* Survey Selector */}
-          <div className="relative inline-block">
+          <div className="relative w-full max-w-full">
             <select
               value={selectedSurvey?.id || ''}
               onChange={(e) => {
                 const s = surveys.find(sv => sv.id === e.target.value);
                 if (s) handleSelectSurvey(s);
               }}
-              className="max-w-full font-display text-2xl md:text-4xl font-bold text-text-primary tracking-tight bg-transparent border-none outline-none cursor-pointer appearance-none pr-8 truncate"
+              className="block w-full max-w-full font-display text-2xl md:text-4xl font-bold text-text-primary tracking-tight bg-transparent border-none outline-none cursor-pointer appearance-none pr-8 truncate"
             >
               {surveys.map(s => (
                 <option key={s.id} value={s.id} className="text-base font-sans font-normal text-text-primary">
@@ -204,62 +204,64 @@ export function Analytics() {
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 sm:gap-4">
-          <label className="hidden xl:flex items-center gap-2 rounded-xl border border-border-subtle bg-white px-3 py-2.5 text-text-secondary shadow-sm">
-            <Search size={17} />
-            <input
-              value={analysisSearch}
-              onChange={(e) => setAnalysisSearch(e.target.value)}
-              placeholder="Tìm câu hỏi, đáp án, phản hồi..."
-              className="w-56 bg-transparent text-sm outline-none placeholder:text-text-secondary"
-            />
-          </label>
-          <button
-            onClick={() => selectedSurvey && fetchResponses(selectedSurvey.id).then(setAllResponses)}
-            className="p-2.5 bg-white border border-border-subtle rounded-xl hover:bg-surface-container-low transition-colors cursor-pointer"
-            title="Làm mới"
-          >
-            <RefreshCw size={18} className={isLoading ? 'animate-spin' : ''} />
-          </button>
-          <button
-            onClick={() => setShowImportDialog(true)}
-            className="flex items-center gap-2 px-3 sm:px-4 py-2.5 bg-white border border-border-subtle rounded-xl text-sm font-bold text-text-primary hover:bg-surface-container-low transition-colors shadow-sm cursor-pointer"
-            title="Nhập phản hồi từ Excel hoặc CSV"
-          >
-            <FileSpreadsheet size={18} />
-            <span className="hidden sm:inline">Nhập file</span>
-          </button>
-          <button
-            onClick={handleExport}
-            disabled={!analytics || analytics.totalResponses === 0}
-            title="Xuất CSV"
-            aria-label="Xuất CSV"
-            className="flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 py-2.5 bg-white border border-border-subtle rounded-xl text-xs sm:text-sm font-bold text-text-primary hover:bg-surface-container-low transition-colors shadow-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <Download size={18} />
-            <span className="hidden sm:inline">Xuất CSV</span>
-          </button>
-          <button
-            onClick={handleExcelExport}
-            disabled={!analytics || analytics.totalResponses === 0}
-            title="Xuất Excel"
-            aria-label="Xuất Excel"
-            className="flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 py-2.5 bg-primary text-white rounded-xl text-xs sm:text-sm font-bold hover:bg-primary/90 transition-colors shadow-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <FileSpreadsheet size={18} />
-            <span className="hidden sm:inline">Xuất Excel</span>
-          </button>
-          <button
-            onClick={() => setShowResetConfirm(true)}
-            disabled={!analytics || analytics.totalResponses === 0}
-            aria-label="Xóa dữ liệu"
-            className="flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 py-2.5 bg-white border border-sentiment-negative/30 rounded-xl text-xs sm:text-sm font-bold text-sentiment-negative hover:bg-sentiment-negative/10 transition-colors shadow-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-            title="Xóa toàn bộ phản hồi để thu thập dữ liệu mới"
-          >
-            <Trash2 size={18} />
-            <span className="hidden sm:inline">Xóa dữ liệu</span>
-          </button>
-          <div className="w-full bg-surface-container-lowest px-4 sm:px-8 py-3 sm:py-5 rounded-2xl shadow-sm border border-border-subtle flex items-center justify-between sm:justify-start gap-4 sm:gap-8">
+        <div className="grid w-full min-w-0 grid-cols-1 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_auto]">
+          <div className="flex min-w-0 flex-wrap items-center gap-2 sm:gap-3">
+            <label className="hidden xl:flex items-center gap-2 rounded-xl border border-border-subtle bg-white px-3 py-2.5 text-text-secondary shadow-sm">
+              <Search size={17} />
+              <input
+                value={analysisSearch}
+                onChange={(e) => setAnalysisSearch(e.target.value)}
+                placeholder="Tìm câu hỏi, đáp án, phản hồi..."
+                className="w-56 bg-transparent text-sm outline-none placeholder:text-text-secondary"
+              />
+            </label>
+            <button
+              onClick={() => selectedSurvey && fetchResponses(selectedSurvey.id).then(setAllResponses)}
+              className="p-2.5 bg-white border border-border-subtle rounded-xl hover:bg-surface-container-low transition-colors cursor-pointer"
+              title="Làm mới"
+            >
+              <RefreshCw size={18} className={isLoading ? 'animate-spin' : ''} />
+            </button>
+            <button
+              onClick={() => setShowImportDialog(true)}
+              className="flex items-center gap-2 px-3 sm:px-4 py-2.5 bg-white border border-border-subtle rounded-xl text-sm font-bold text-text-primary hover:bg-surface-container-low transition-colors shadow-sm cursor-pointer"
+              title="Nhập phản hồi từ Excel hoặc CSV"
+            >
+              <FileSpreadsheet size={18} />
+              <span className="hidden sm:inline">Nhập file</span>
+            </button>
+            <button
+              onClick={handleExport}
+              disabled={!analytics || analytics.totalResponses === 0}
+              title="Xuất CSV"
+              aria-label="Xuất CSV"
+              className="flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 py-2.5 bg-white border border-border-subtle rounded-xl text-xs sm:text-sm font-bold text-text-primary hover:bg-surface-container-low transition-colors shadow-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Download size={18} />
+              <span className="hidden sm:inline">Xuất CSV</span>
+            </button>
+            <button
+              onClick={handleExcelExport}
+              disabled={!analytics || analytics.totalResponses === 0}
+              title="Xuất Excel"
+              aria-label="Xuất Excel"
+              className="flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 py-2.5 bg-primary text-white rounded-xl text-xs sm:text-sm font-bold hover:bg-primary/90 transition-colors shadow-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <FileSpreadsheet size={18} />
+              <span className="hidden sm:inline">Xuất Excel</span>
+            </button>
+            <button
+              onClick={() => setShowResetConfirm(true)}
+              disabled={!analytics || analytics.totalResponses === 0}
+              aria-label="Xóa dữ liệu"
+              className="flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 py-2.5 bg-white border border-sentiment-negative/30 rounded-xl text-xs sm:text-sm font-bold text-sentiment-negative hover:bg-sentiment-negative/10 transition-colors shadow-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Xóa toàn bộ phản hồi để thu thập dữ liệu mới"
+            >
+              <Trash2 size={18} />
+              <span className="hidden sm:inline">Xóa dữ liệu</span>
+            </button>
+          </div>
+          <div className="flex w-full items-center justify-between gap-4 rounded-2xl border border-border-subtle bg-white px-4 py-3 shadow-sm sm:justify-start sm:gap-8 sm:px-8 sm:py-5 xl:w-auto xl:min-w-[320px]">
             <div>
               <p className="text-[10px] text-text-secondary uppercase tracking-widest font-bold mb-1">Tổng phản hồi</p>
               <p className="font-display text-3xl sm:text-4xl font-bold text-secondary-container">{analytics?.totalResponses ?? 0}</p>
