@@ -1,11 +1,12 @@
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react';
-import type { Survey, SurveyAnswer, SurveyQuestion, SurveyResponse, SurveyTemplateData, TeamMember, TeamRole, SurveyDisplayMode } from '../types';
+import type { Survey, SurveyAnswer, SurveyQuestion, SurveyResponse, SurveySection, SurveyTemplateData, TeamMember, TeamRole, SurveyDisplayMode } from '../types';
 
 interface SurveyDraft {
   id: string;
   title: string;
   description: string;
   questions: SurveyQuestion[];
+  sections?: SurveySection[];
   isQuiz?: boolean;
   showScore?: boolean;
   displayMode?: SurveyDisplayMode;
@@ -140,6 +141,7 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
         title: item.title || 'Khảo sát nháp',
         description: item.description || '',
         questions: Array.isArray(item.questions) ? item.questions : [],
+        sections: Array.isArray(item.sections) ? item.sections : [],
         isQuiz: Boolean(item.isQuiz),
         showScore: item.showScore !== false,
         displayMode: item.displayMode || 'single',
@@ -307,6 +309,7 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
       title: draft.title || 'Khảo sát nháp',
       description: draft.description || '',
       questions: draft.questions || [],
+      sections: draft.sections || [],
       isQuiz: Boolean(draft.isQuiz),
       showScore: draft.showScore !== false,
       displayMode: draft.displayMode || 'single',

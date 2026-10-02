@@ -184,6 +184,7 @@ export const initDB = async () => {
         title TEXT,
         description TEXT,
         questions JSONB NOT NULL DEFAULT '[]'::jsonb,
+        sections JSONB NOT NULL DEFAULT '[]'::jsonb,
         is_quiz BOOLEAN DEFAULT FALSE,
         show_score BOOLEAN DEFAULT TRUE,
         display_mode VARCHAR(32) DEFAULT 'single',
@@ -207,6 +208,7 @@ export const initDB = async () => {
       await client.query(`ALTER TABLE surveys ADD COLUMN IF NOT EXISTS max_attempts_per_device INTEGER;`);
       await client.query(`ALTER TABLE surveys ADD COLUMN IF NOT EXISTS time_limit_minutes INTEGER;`);
       await client.query(`ALTER TABLE survey_drafts ADD COLUMN IF NOT EXISTS closes_at TIMESTAMP;`);
+      await client.query(`ALTER TABLE survey_drafts ADD COLUMN IF NOT EXISTS sections JSONB NOT NULL DEFAULT '[]'::jsonb;`);
       await client.query(`ALTER TABLE survey_drafts ADD COLUMN IF NOT EXISTS max_attempts_per_device INTEGER;`);
       await client.query(`ALTER TABLE survey_drafts ADD COLUMN IF NOT EXISTS time_limit_minutes INTEGER;`);
     }

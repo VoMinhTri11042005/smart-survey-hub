@@ -6,7 +6,7 @@ import { ShareModal } from '../common/ShareModal';
 import ReactMarkdown from 'react-markdown';
 import ReactQuill from 'react-quill-new';
 import 'react-quill-new/dist/quill.snow.css';
-import type { SurveyQuestion, QuestionType, SurveyDisplayMode } from '../../types';
+import type { SurveyQuestion, QuestionType, SurveyDisplayMode, SurveySection } from '../../types';
 import { cleanHtmlWhitespace, stripHtml } from '../../utils/stringUtils';
 
 const questionTypeLabels: Record<QuestionType, { label: string; icon: React.ReactNode }> = {
@@ -80,6 +80,7 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError }: { onP
   const [surveyTitle, setSurveyTitle] = useState('');
   const [surveyDescription, setSurveyDescription] = useState('');
   const [questions, setQuestions] = useState<SurveyQuestion[]>([]);
+  const [sections, setSections] = useState<SurveySection[]>([{ id: 'section-1', title: 'Phần 1' }]);
   const [activeQuestionId, setActiveQuestionId] = useState<string | null>(null);
   const [isPublishing, setIsPublishing] = useState(false);
   const [isQuiz, setIsQuiz] = useState(false);
@@ -232,6 +233,7 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError }: { onP
       setSurveyTitle(pendingTemplate.title);
       setSurveyDescription(pendingTemplate.description);
       setQuestions(pendingTemplate.questions.map((q, i) => ({ ...q, id: `q${i + 1}` })));
+      setSections(pendingTemplate.sections?.length ? pendingTemplate.sections : [{ id: 'section-1', title: 'Phần 1' }]);
       setShowSurvey(true);
       if (pendingTemplate.questions.length > 0) {
         setActiveQuestionId('q1');
@@ -271,6 +273,7 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError }: { onP
             surveyTitle?: string;
             surveyDescription?: string;
             questions?: SurveyQuestion[];
+            sections?: SurveySection[];
             isQuiz?: boolean;
             showScore?: boolean;
             displayMode?: SurveyDisplayMode;
@@ -289,6 +292,7 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError }: { onP
             setSurveyTitle(title);
             setSurveyDescription(description);
             setQuestions(extractedQuestions);
+            setSections(draft.sections?.length ? draft.sections : [{ id: 'section-1', title: 'Phần 1' }]);
             setIsQuiz(Boolean(draft.isQuiz));
             setShowScore(draft.showScore !== false);
             setDisplayMode(draft.displayMode || 'single');
@@ -308,6 +312,7 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError }: { onP
       setSurveyTitle(latest.title || '');
       setSurveyDescription(latest.description || '');
       setQuestions(latest.questions || []);
+      setSections(latest.sections?.length ? latest.sections : [{ id: 'section-1', title: 'Phần 1' }]);
       setIsQuiz(Boolean(latest.isQuiz));
       setShowScore(latest.showScore !== false);
       setDisplayMode(latest.displayMode || 'single');
@@ -329,6 +334,7 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError }: { onP
       surveyTitle,
       surveyDescription,
       questions,
+      sections,
       isQuiz,
       showScore,
       displayMode,
@@ -347,13 +353,13 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError }: { onP
     if (draftSyncTimer.current) clearTimeout(draftSyncTimer.current);
     if (!currentSurvey && (surveyTitle.trim() || questions.length > 0)) {
       draftSyncTimer.current = setTimeout(() => {
-        void saveDraft({ id: draftId || undefined, title: surveyTitle || 'Khảo sát nháp', description: surveyDescription, questions, isQuiz, showScore, displayMode, closesAt, maxAttemptsPerDevice, timeLimitMinutes }).then(saved => {
+        void saveDraft({ id: draftId || undefined, title: surveyTitle || 'Khảo sát nháp', description: surveyDescription, questions, sections, isQuiz, showScore, displayMode, closesAt, maxAttemptsPerDevice, timeLimitMinutes }).then(saved => {
           if (!draftId && saved?.id) setDraftId(saved.id);
         }).catch(error => console.warn('Background draft sync failed', error));
       }, 700);
     }
     return () => { if (draftSyncTimer.current) clearTimeout(draftSyncTimer.current); };
-  }, [showSurvey, surveyTitle, surveyDescription, questions, isQuiz, showScore, displayMode, closesAt, maxAttemptsPerDevice, timeLimitMinutes, currentSurvey, draftId, saveDraft]);
+  }, [showSurvey, surveyTitle, surveyDescription, questions, sections, isQuiz, showScore, displayMode, closesAt, maxAttemptsPerDevice, timeLimitMinutes, currentSurvey, draftId, saveDraft]);
 
   const clearDraft = () => {
     localStorage.removeItem(DRAFT_STORAGE_KEY);
@@ -393,6 +399,7 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError }: { onP
       title: surveyTitle || 'Khảo sát nháp',
       description: surveyDescription,
       questions,
+      sections,
       isQuiz,
       showScore,
       displayMode,
@@ -419,6 +426,7 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError }: { onP
       setSurveyTitle(result.title);
       setSurveyDescription(topic);
       setQuestions(result.questions);
+      setSections([{ id: 'section-1', title: 'Phần 1' }]);
       setShowSurvey(true);
       if (result.questions.length > 0) {
         setActiveQuestionId(result.questions[0].id);
@@ -436,6 +444,7 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError }: { onP
         title: surveyTitle,
         description: surveyDescription,
         questions,
+        sections,
         isQuiz,
         showScore,
         displayMode,
@@ -463,6 +472,11 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError }: { onP
   };
 
   const deleteQuestion = (id: string) => {
+    const question = questions.find(item => item.id === id);
+    const sectionId = question?.sectionId || sections[0]?.id;
+    if (sections.length > 1 && question && questions.filter(item => (item.sectionId || sections[0]?.id) === sectionId).length === 1) {
+      setSections(previous => previous.filter(section => section.id !== sectionId));
+    }
     setQuestions(prev => prev.filter(q => q.id !== id));
     if (activeQuestionId === id) {
       setActiveQuestionId(questions.find(q => q.id !== id)?.id || null);
@@ -485,10 +499,12 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError }: { onP
   };
 
   const addQuestion = () => {
+    const activeQuestion = questions.find(question => question.id === activeQuestionId);
     const newQ: SurveyQuestion = {
       id: `q${Date.now()}`,
       type: 'single_choice',
       text: '',
+      ...(sections.length > 1 ? { sectionId: activeQuestion?.sectionId || sections[0].id } : {}),
       options: ['Lựa chọn 1', 'Lựa chọn 2'],
       required: true,
       label: ''
@@ -505,6 +521,48 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError }: { onP
     || type === 'checkbox_grid';
   const isGridQuestion = (type: QuestionType) =>
     type === 'multiple_choice_grid' || type === 'checkbox_grid';
+
+  const addSection = () => {
+    const existingSections = sections.length ? sections : [{ id: 'section-1', title: 'Phần 1' }];
+    const defaultSectionId = existingSections[0].id;
+    const normalizedQuestions: SurveyQuestion[] = questions.map(question => ({
+      ...question,
+      sectionId: question.sectionId && existingSections.some(section => section.id === question.sectionId)
+        ? question.sectionId
+        : defaultSectionId,
+    }));
+    const activeIndex = normalizedQuestions.findIndex(question => question.id === activeQuestionId);
+    const activeSectionId = activeIndex >= 0
+      ? normalizedQuestions[activeIndex].sectionId!
+      : normalizedQuestions[normalizedQuestions.length - 1]?.sectionId || defaultSectionId;
+    const sectionIndex = Math.max(0, existingSections.findIndex(section => section.id === activeSectionId));
+    const nextSection: SurveySection = {
+      id: `section-${Date.now()}`,
+      title: `Phần ${existingSections.length + 1}`,
+    };
+    const insertionIndex = activeIndex >= 0 ? activeIndex + 1 : normalizedQuestions.length;
+    const updatedQuestions = normalizedQuestions.map((question, index) =>
+      index >= insertionIndex && question.sectionId === activeSectionId
+        ? { ...question, sectionId: nextSection.id }
+        : question
+    );
+    const newQuestion: SurveyQuestion = {
+      id: `q${Date.now() + 1}`,
+      type: 'single_choice',
+      text: '',
+      sectionId: nextSection.id,
+      options: ['Lựa chọn 1', 'Lựa chọn 2'],
+      required: true,
+    };
+    updatedQuestions.splice(insertionIndex, 0, newQuestion);
+    setQuestions(updatedQuestions);
+    setSections([
+      ...existingSections.slice(0, sectionIndex + 1),
+      nextSection,
+      ...existingSections.slice(sectionIndex + 1),
+    ]);
+    setActiveQuestionId(newQuestion.id);
+  };
 
   const addOption = (questionId: string) => {
     const q = questions.find(q => q.id === questionId);
@@ -705,6 +763,7 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError }: { onP
                       options: ['Lựa chọn 1', 'Lựa chọn 2'],
                       required: true,
                     }]);
+                    setSections([{ id: 'section-1', title: 'Phần 1' }]);
                     setShowSurvey(true);
                   }}
                   className="px-6 py-3 bg-surface-background border border-border-subtle text-text-secondary font-bold rounded-xl shadow-sm hover:border-primary hover:text-primary hover:bg-white transition-all flex items-center gap-2 cursor-pointer"
@@ -742,21 +801,48 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError }: { onP
                {/* Question Cards */}
                {questions.map((q, idx) => {
                  const isActive = q.id === activeQuestionId;
+                 const sectionId = sections.some(item => item.id === q.sectionId) ? q.sectionId : sections[0]?.id;
+                 const section = sections.find(item => item.id === sectionId);
+                 const startsSection = section && !questions.slice(0, idx).some(question =>
+                   (sections.some(item => item.id === question.sectionId) ? question.sectionId : sections[0]?.id) === sectionId
+                 );
                  return (
-                   <div
-                     key={q.id}
-                     draggable
-                     onDragStart={(e) => handleDragStart(e, q.id)}
-                     onDragOver={(e) => handleDragOver(e, q.id)}
-                     onDragLeave={(e) => handleDragLeave(e, q.id)}
-                     onDrop={(e) => handleDrop(e, q.id)}
-                     onClick={() => setActiveQuestionId(q.id)}
-                     className={`bg-white rounded-2xl p-6 transition-all cursor-pointer ${
-                       isActive
-                         ? 'border-2 border-primary shadow-lg ring-4 ring-primary/5 scale-[1.01]'
-                         : 'border border-border-subtle shadow-sm hover:shadow-md opacity-80 hover:opacity-100'
-                     } ${dragOverId === q.id ? 'ring-2 ring-dashed ring-primary/40' : ''}`}
-                   >
+                   <React.Fragment key={q.id}>
+                     {sections.length > 1 && startsSection && section && (
+                       <section className="bg-white rounded-2xl border-l-4 border-primary border border-border-subtle shadow-sm p-5 md:p-6">
+                         <label className="block text-xs font-bold uppercase tracking-wide text-primary mb-2">{section.title}</label>
+                         <input
+                           value={section.title}
+                           onChange={event => setSections(previous => previous.map(item => item.id === section.id ? { ...item, title: event.target.value } : item))}
+                           onClick={event => event.stopPropagation()}
+                           placeholder="Tên phần"
+                           aria-label="Tên phần khảo sát"
+                           className="w-full text-xl font-bold text-text-primary outline-none border-b border-transparent focus:border-primary pb-2"
+                         />
+                         <textarea
+                           value={section.description || ''}
+                           onChange={event => setSections(previous => previous.map(item => item.id === section.id ? { ...item, description: event.target.value } : item))}
+                           onClick={event => event.stopPropagation()}
+                           placeholder="Mô tả phần (không bắt buộc)"
+                           aria-label="Mô tả phần khảo sát"
+                           rows={2}
+                           className="mt-3 w-full resize-y text-sm text-text-secondary outline-none border-b border-transparent focus:border-primary py-2"
+                         />
+                       </section>
+                     )}
+                     <div
+                         draggable
+                         onDragStart={(e) => handleDragStart(e, q.id)}
+                         onDragOver={(e) => handleDragOver(e, q.id)}
+                         onDragLeave={(e) => handleDragLeave(e, q.id)}
+                         onDrop={(e) => handleDrop(e, q.id)}
+                         onClick={() => setActiveQuestionId(q.id)}
+                         className={`bg-white rounded-2xl p-6 transition-all cursor-pointer ${
+                           isActive
+                             ? 'border-2 border-primary shadow-lg ring-4 ring-primary/5 scale-[1.01]'
+                             : 'border border-border-subtle shadow-sm hover:shadow-md opacity-80 hover:opacity-100'
+                         } ${dragOverId === q.id ? 'ring-2 ring-dashed ring-primary/40' : ''}`}
+                       >
                      {/* Question Header */}
                      <div className="flex justify-between items-center mb-4">
                        <div className="flex items-center gap-3">
@@ -805,22 +891,19 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError }: { onP
 
                      {/* Question Type Selector (active only) */}
                      {isActive && (
-                       <div className="mb-4">
-                         <label className="text-xs font-semibold text-text-secondary mb-2 block">Loại câu hỏi</label>
-                         <div className="flex flex-wrap gap-2">
+                       <div className="mb-4 max-w-xs">
+                         <label htmlFor={`question-type-${q.id}`} className="text-xs font-semibold text-text-secondary mb-2 block">Loại câu hỏi</label>
+                         <select
+                           id={`question-type-${q.id}`}
+                           value={q.type}
+                           onClick={event => event.stopPropagation()}
+                           onChange={event => changeQuestionType(q.id, event.target.value as QuestionType)}
+                           className="w-full rounded-lg border border-border-subtle bg-white px-3 py-2 text-sm font-semibold text-text-primary outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                         >
                            {(Object.keys(questionTypeLabels) as QuestionType[]).map(type => (
-                             <button
-                               key={type}
-                               onClick={(e) => { e.stopPropagation(); changeQuestionType(q.id, type); }}
-                               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                                 q.type === type ? 'bg-primary text-white' : 'bg-surface-container text-text-secondary hover:bg-surface-container-high'
-                               }`}
-                             >
-                               {questionTypeLabels[type].icon}
-                               {questionTypeLabels[type].label}
-                             </button>
+                             <option key={type} value={type}>{questionTypeLabels[type].label}</option>
                            ))}
-                         </div>
+                         </select>
                        </div>
                      )}
 
@@ -1102,17 +1185,29 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError }: { onP
                          </div>
                        </div>
                      )}
-                   </div>
+                     </div>
+                   </React.Fragment>
                  );
                })}
 
                {/* Add New Question */}
-               <div
-                 onClick={addQuestion}
-                 className="border-2 border-dashed border-border-subtle p-8 rounded-2xl flex flex-col items-center justify-center text-text-secondary hover:border-primary hover:text-primary hover:bg-primary-fixed/30 transition-all cursor-pointer group"
-               >
-                 <Plus size={32} className="mb-2 group-hover:scale-110 transition-transform" />
-                 <span className="text-sm font-semibold">Nhấp để thêm câu hỏi mới</span>
+               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                 <button
+                   type="button"
+                   onClick={addQuestion}
+                   className="border-2 border-dashed border-border-subtle p-5 rounded-2xl flex items-center justify-center gap-2 text-text-secondary hover:border-primary hover:text-primary hover:bg-primary-fixed/30 transition-all cursor-pointer group"
+                 >
+                   <Plus size={20} className="group-hover:scale-110 transition-transform" />
+                   <span className="text-sm font-semibold">Thêm câu hỏi</span>
+                 </button>
+                 <button
+                   type="button"
+                   onClick={addSection}
+                   className="border-2 border-dashed border-primary/40 p-5 rounded-2xl flex items-center justify-center gap-2 text-primary hover:border-primary hover:bg-primary-fixed/30 transition-all cursor-pointer group"
+                 >
+                   <Plus size={20} className="group-hover:scale-110 transition-transform" />
+                   <span className="text-sm font-semibold">Thêm phần</span>
+                 </button>
                </div>
 
                {/* Publish Bar */}
@@ -1212,7 +1307,7 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError }: { onP
                    </button>
                    <span className="text-[10px] md:text-xs text-text-secondary">{draftSavedAt ? `Đã lưu ${draftSavedAt}` : 'Chưa lưu'}</span>
                    <button
-                     onClick={() => { setShowSurvey(false); setQuestions([]); setSurveyTitle(''); setSurveyDescription(''); setActiveQuestionId(null); setIsQuiz(false); setShowScore(true); setDisplayMode('single'); setClosesAt(null); setTimeLimitMinutes(null); clearDraft(); }}
+                     onClick={() => { setShowSurvey(false); setQuestions([]); setSections([{ id: 'section-1', title: 'Phần 1' }]); setSurveyTitle(''); setSurveyDescription(''); setActiveQuestionId(null); setIsQuiz(false); setShowScore(true); setDisplayMode('single'); setClosesAt(null); setTimeLimitMinutes(null); clearDraft(); }}
                      className="text-xs md:text-sm font-semibold text-text-secondary hover:text-sentiment-negative transition-colors cursor-pointer"
                    >
                      Tạo lại

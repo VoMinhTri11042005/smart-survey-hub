@@ -85,6 +85,7 @@ const SurveyQuestionSchema = z.object({
   id: z.string(),
   type: QuestionTypeSchema,
   text: z.string(),
+  sectionId: z.string().optional(),
   options: z.array(z.string()).optional(),
   gridColumns: z.array(z.string()).max(100).optional(),
   scaleMin: z.number().int().min(0).max(100).optional(),
@@ -101,12 +102,19 @@ const SurveyQuestionSchema = z.object({
   textAnalysisMode: z.enum(['auto', 'include', 'exclude']).optional(),
 }).superRefine(validateQuestionConfiguration);
 
+const SurveySectionSchema = z.object({
+  id: z.string().min(1),
+  title: z.string().trim().min(1).max(255),
+  description: z.string().max(5000).optional(),
+});
+
 // ─── Survey ───
 export const CreateSurveySchema = z.object({
   id: z.string().optional(),
   title: z.string().min(1, 'Tiêu đề không được để trống.'),
   description: z.string().optional().default(''),
   questions: z.array(SurveyQuestionSchema),
+  sections: z.array(SurveySectionSchema).max(100).optional().default([]),
   isQuiz: z.boolean().optional().default(false),
   displayMode: z.enum(['single', 'all']).optional().default('single'),
   showScore: z.boolean().optional().default(true),
@@ -177,6 +185,7 @@ export const SaveDraftSchema = z.object({
   title: z.string().optional().default('Khảo sát nháp'),
   description: z.string().optional().default(''),
   questions: z.array(z.any()).optional().default([]),
+  sections: z.array(SurveySectionSchema).max(100).optional().default([]),
   isQuiz: z.boolean().optional().default(false),
   showScore: z.boolean().optional().default(true),
   displayMode: z.enum(['single', 'all']).optional().default('single'),

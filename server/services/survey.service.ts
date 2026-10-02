@@ -36,6 +36,7 @@ export function mapRowToSurvey(row: any) {
     title: row.title,
     description: row.description,
     questions: row.questions,
+    sections: row.sections || [],
     createdAt: row.created_at,
     status: row.status,
     closesAt: row.closes_at ? new Date(row.closes_at).toISOString() : null,
@@ -177,14 +178,14 @@ function isScreenedOut(questions: any[], answers: Record<string, unknown> | unde
 
 export async function createSurvey(data: any) {
   const id = data.id || generateId();
-  const { title, description, questions, status, isQuiz, displayMode, showScore, closesAt, maxAttemptsPerDevice, timeLimitMinutes } = data;
+  const { title, description, questions, sections, status, isQuiz, displayMode, showScore, closesAt, maxAttemptsPerDevice, timeLimitMinutes } = data;
   const maxAttempts = Number.isFinite(Number(maxAttemptsPerDevice)) ? Number(maxAttemptsPerDevice) : null;
   const timeLimit = Number.isFinite(Number(timeLimitMinutes)) ? Number(timeLimitMinutes) : null;
 
   if (!process.env.DATABASE_URL) {
     const survey = {
       id, title: title || 'Untitled survey', description: description || '',
-      questions: questions || [], createdAt: new Date().toISOString(),
+      questions: questions || [], sections: sections || [], createdAt: new Date().toISOString(),
       status: status || 'live', closesAt: closesAt || null,
       isQuiz: Boolean(isQuiz), displayMode: displayMode || 'single',
       showScore: showScore !== false, maxAttemptsPerDevice: maxAttempts, timeLimitMinutes: timeLimit,
@@ -194,9 +195,9 @@ export async function createSurvey(data: any) {
   }
 
   const result = await pool.query(
-    `INSERT INTO surveys (id, title, description, questions, is_quiz, display_mode, show_score, closes_at, max_attempts_per_device, time_limit_minutes, status)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
-    [id, title, description, JSON.stringify(questions), Boolean(isQuiz), displayMode || 'single', showScore !== false, closesAt ? new Date(closesAt).toISOString() : null, maxAttempts, timeLimit, status || 'live']
+    `INSERT INTO surveys (id, title, description, questions, sections, is_quiz, display_mode, show_score, closes_at, max_attempts_per_device, time_limit_minutes, status)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *`,
+    [id, title, description, JSON.stringify(questions), JSON.stringify(sections || []), Boolean(isQuiz), displayMode || 'single', showScore !== false, closesAt ? new Date(closesAt).toISOString() : null, maxAttempts, timeLimit, status || 'live']
   );
   return mapRowToSurvey(result.rows[0]);
 }
@@ -231,6 +232,7 @@ export async function updateSurvey(id: string, data: any) {
       title: data.title ?? existing.title,
       description: data.description ?? existing.description,
       questions: data.questions ?? existing.questions,
+      sections: data.sections ?? existing.sections ?? [],
       status: data.status ?? existing.status,
       isQuiz: data.isQuiz ?? existing.isQuiz,
       displayMode: data.displayMode ?? existing.displayMode,
@@ -252,6 +254,7 @@ export async function updateSurvey(id: string, data: any) {
     title: data.title ?? current.title,
     description: data.description ?? current.description,
     questions: data.questions ?? current.questions,
+    sections: data.sections ?? current.sections ?? [],
     status: data.status ?? current.status,
     isQuiz: data.isQuiz ?? current.isQuiz,
     displayMode: data.displayMode ?? current.displayMode,
@@ -264,10 +267,10 @@ export async function updateSurvey(id: string, data: any) {
   const timeLimit = Number.isFinite(Number(merged.timeLimitMinutes)) ? Number(merged.timeLimitMinutes) : null;
 
   const result = await pool.query(
-    `UPDATE surveys SET title = $2, description = $3, questions = $4, is_quiz = $5, display_mode = $6,
-     show_score = $7, closes_at = $8, max_attempts_per_device = $9, time_limit_minutes = $10, status = $11
+    `UPDATE surveys SET title = $2, description = $3, questions = $4, sections = $5, is_quiz = $6, display_mode = $7,
+     show_score = $8, closes_at = $9, max_attempts_per_device = $10, time_limit_minutes = $11, status = $12
      WHERE id = $1 RETURNING *`,
-    [id, merged.title, merged.description, JSON.stringify(merged.questions), Boolean(merged.isQuiz), merged.displayMode || 'single', merged.showScore !== false, merged.closesAt ? new Date(merged.closesAt).toISOString() : null, maxAttempts, timeLimit, merged.status || 'live']
+    [id, merged.title, merged.description, JSON.stringify(merged.questions), JSON.stringify(merged.sections || []), Boolean(merged.isQuiz), merged.displayMode || 'single', merged.showScore !== false, merged.closesAt ? new Date(merged.closesAt).toISOString() : null, maxAttempts, timeLimit, merged.status || 'live']
   );
   if (result.rows.length === 0) return null;
   return mapRowToSurvey(result.rows[0]);
@@ -548,6 +551,7 @@ export async function getDrafts() {
   return result.rows.map(row => ({
     id: row.id, title: row.title, description: row.description,
     questions: row.questions || [], isQuiz: Boolean(row.is_quiz),
+    sections: row.sections || [],
     showScore: row.show_score !== false, displayMode: row.display_mode || 'single',
     closesAt: row.closes_at ? new Date(row.closes_at).toISOString() : null,
     maxAttemptsPerDevice: row.max_attempts_per_device ?? null,
@@ -558,23 +562,24 @@ export async function getDrafts() {
 
 export async function saveDraft(data: any) {
   if (!process.env.DATABASE_URL) throw Object.assign(new Error('Database not configured'), { status: 503 });
-  const { id, title, description, questions, isQuiz, showScore, displayMode, closesAt, maxAttemptsPerDevice, timeLimitMinutes } = data;
+  const { id, title, description, questions, sections, isQuiz, showScore, displayMode, closesAt, maxAttemptsPerDevice, timeLimitMinutes } = data;
   const draftId = id || generateId();
   const maxAttempts = Number.isFinite(Number(maxAttemptsPerDevice)) ? Number(maxAttemptsPerDevice) : null;
   const timeLimit = Number.isFinite(Number(timeLimitMinutes)) ? Number(timeLimitMinutes) : null;
 
   const result = await pool.query(
-    `INSERT INTO survey_drafts (id, user_id, title, description, questions, is_quiz, show_score, display_mode, closes_at, max_attempts_per_device, time_limit_minutes, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, CURRENT_TIMESTAMP)
+    `INSERT INTO survey_drafts (id, user_id, title, description, questions, sections, is_quiz, show_score, display_mode, closes_at, max_attempts_per_device, time_limit_minutes, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, CURRENT_TIMESTAMP)
      ON CONFLICT (id)
-     DO UPDATE SET title = EXCLUDED.title, description = EXCLUDED.description, questions = EXCLUDED.questions, is_quiz = EXCLUDED.is_quiz, show_score = EXCLUDED.show_score, display_mode = EXCLUDED.display_mode, closes_at = EXCLUDED.closes_at, max_attempts_per_device = EXCLUDED.max_attempts_per_device, time_limit_minutes = EXCLUDED.time_limit_minutes, updated_at = CURRENT_TIMESTAMP
+     DO UPDATE SET title = EXCLUDED.title, description = EXCLUDED.description, questions = EXCLUDED.questions, sections = EXCLUDED.sections, is_quiz = EXCLUDED.is_quiz, show_score = EXCLUDED.show_score, display_mode = EXCLUDED.display_mode, closes_at = EXCLUDED.closes_at, max_attempts_per_device = EXCLUDED.max_attempts_per_device, time_limit_minutes = EXCLUDED.time_limit_minutes, updated_at = CURRENT_TIMESTAMP
      RETURNING *`,
-    [draftId, 'admin', title || 'Khảo sát nháp', description || '', JSON.stringify(questions || []), Boolean(isQuiz), showScore !== false, displayMode || 'single', closesAt ? new Date(closesAt).toISOString() : null, maxAttempts, timeLimit]
+    [draftId, 'admin', title || 'Khảo sát nháp', description || '', JSON.stringify(questions || []), JSON.stringify(sections || []), Boolean(isQuiz), showScore !== false, displayMode || 'single', closesAt ? new Date(closesAt).toISOString() : null, maxAttempts, timeLimit]
   );
   const row = result.rows[0];
   return {
     id: row.id, title: row.title, description: row.description,
     questions: row.questions || [], isQuiz: Boolean(row.is_quiz),
+    sections: row.sections || [],
     showScore: row.show_score !== false, displayMode: row.display_mode || 'single',
     closesAt: row.closes_at ? new Date(row.closes_at).toISOString() : null,
     maxAttemptsPerDevice: row.max_attempts_per_device ?? null,
@@ -626,10 +631,10 @@ export async function importBackup(data: any) {
 
   for (const row of surveys) {
     await client.query(
-      `INSERT INTO surveys (id, title, description, questions, is_quiz, display_mode, show_score, closes_at, max_attempts_per_device, time_limit_minutes, status, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, COALESCE($12, CURRENT_TIMESTAMP))
+      `INSERT INTO surveys (id, title, description, questions, sections, is_quiz, display_mode, show_score, closes_at, max_attempts_per_device, time_limit_minutes, status, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, COALESCE($13, CURRENT_TIMESTAMP))
        ON CONFLICT (id) DO NOTHING`,
-      [row.id, row.title, row.description, JSON.stringify(row.questions || []), Boolean(row.is_quiz), row.display_mode || 'single', row.show_score !== false, row.closes_at ? new Date(row.closes_at).toISOString() : null, row.max_attempts_per_device ?? null, row.time_limit_minutes ?? null, row.status || 'live', row.created_at]
+      [row.id, row.title, row.description, JSON.stringify(row.questions || []), JSON.stringify(row.sections || []), Boolean(row.is_quiz), row.display_mode || 'single', row.show_score !== false, row.closes_at ? new Date(row.closes_at).toISOString() : null, row.max_attempts_per_device ?? null, row.time_limit_minutes ?? null, row.status || 'live', row.created_at]
     );
   }
   for (const row of responses) {
@@ -655,9 +660,9 @@ export async function importBackup(data: any) {
   }
   for (const row of drafts) {
     await client.query(
-      `INSERT INTO survey_drafts (id, user_id, title, description, questions, is_quiz, show_score, display_mode, closes_at, max_attempts_per_device, time_limit_minutes, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+      `INSERT INTO survey_drafts (id, user_id, title, description, questions, sections, is_quiz, show_score, display_mode, closes_at, max_attempts_per_device, time_limit_minutes, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
        ON CONFLICT (id) DO NOTHING`,
-      [row.id, row.user_id || 'admin', row.title || 'Khảo sát nháp', row.description || '', JSON.stringify(row.questions || []), Boolean(row.is_quiz), row.show_score !== false, row.display_mode || 'single', row.closes_at ? new Date(row.closes_at).toISOString() : null, row.max_attempts_per_device ?? null, row.time_limit_minutes ?? null, row.updated_at || new Date().toISOString()]
+      [row.id, row.user_id || 'admin', row.title || 'Khảo sát nháp', row.description || '', JSON.stringify(row.questions || []), JSON.stringify(row.sections || []), Boolean(row.is_quiz), row.show_score !== false, row.display_mode || 'single', row.closes_at ? new Date(row.closes_at).toISOString() : null, row.max_attempts_per_device ?? null, row.time_limit_minutes ?? null, row.updated_at || new Date().toISOString()]
     );
   }
   for (const batch of surveyImportBatches) {

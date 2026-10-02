@@ -51,6 +51,12 @@ npm run dev:client   # Frontend: http://localhost:3000
 npm run dev:server   # Backend:  http://localhost:3001
 ```
 
+## Nhập phản hồi Google Forms
+
+Trong mục **Phân tích**, chọn **Nhập Excel** rồi tải file `.xlsx` hoặc `.csv` đã xuất từ Google Forms. Có thể tạo khảo sát mới từ tiêu đề cột hoặc ghép các cột vào khảo sát hiện có. Hệ thống hiển thị xem trước và kiểm tra lựa chọn trước khi xác nhận nhập. File `.xls` cần được lưu lại thành `.xlsx` trước khi tải lên.
+
+Import chỉ thêm phản hồi; không cập nhật hay xóa response hiện có. Việc tạo survey và thêm responses chạy trong cùng transaction PostgreSQL để lỗi sẽ rollback cả lần nhập. Phản hồi trùng được bỏ qua; thời gian gửi được giữ nếu file có cột Timestamp/Thời gian. Mỗi file hỗ trợ tối đa 5 MB, 5000 phản hồi và 100 câu hỏi.
+
 ## 🚀 Deploy lên Render
 
 1. Đẩy repo lên GitHub.

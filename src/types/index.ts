@@ -29,6 +29,7 @@ export interface SurveyQuestion {
   id: string;
   type: QuestionType;
   text: string;
+  sectionId?: string;
   options?: string[];
   gridColumns?: string[];
   scaleMin?: number;
@@ -45,11 +46,18 @@ export interface SurveyQuestion {
   textAnalysisMode?: TextAnalysisMode; // Optional aggregation setting for text questions
 }
 
+export interface SurveySection {
+  id: string;
+  title: string;
+  description?: string;
+}
+
 export interface Survey {
   id: string;
   title: string;
   description: string;
   questions: SurveyQuestion[];
+  sections?: SurveySection[];
   createdAt: string;
   status: 'draft' | 'live' | 'closed';
   closesAt?: string | null;
@@ -96,6 +104,7 @@ export interface SurveyTemplateData {
   title: string;
   description: string;
   questions: SurveyQuestion[];
+  sections?: SurveySection[];
 }
 
 // ===== Team =====

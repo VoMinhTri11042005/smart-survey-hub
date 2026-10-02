@@ -177,15 +177,23 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
   const questions = survey?.questions ?? [];
   const displayMode = survey?.displayMode ?? 'single';
   const showAllQuestions = displayMode === 'all';
-  const totalSteps = showAllQuestions ? 1 : questions.length;
-  const currentQuestion = showAllQuestions ? null : questions[step];
+  const sections = survey?.sections ?? [];
+  const sectionMode = sections.length > 1;
+  const currentSection = sectionMode ? sections[step] : undefined;
+  const currentPageQuestions = sectionMode
+    ? questions.filter(question => (
+        sections.some(section => section.id === question.sectionId) ? question.sectionId : sections[0].id
+      ) === currentSection?.id)
+    : showAllQuestions ? questions : questions[step] ? [questions[step]] : [];
+  const totalSteps = sectionMode ? sections.length : showAllQuestions ? 1 : questions.length;
+  const currentQuestion = showAllQuestions || sectionMode ? null : questions[step];
   const answeredQuestionCount = questions.reduce((count, question) => {
     const value = answers[question.id];
     if (value === undefined || value === null || value === '') return count;
     if (Array.isArray(value) && value.length === 0) return count;
     return count + 1;
   }, 0);
-  const progress = showAllQuestions
+  const progress = showAllQuestions && !sectionMode
     ? Math.round((answeredQuestionCount / Math.max(questions.length, 1)) * 100)
     : Math.round(((step + 1) / totalSteps) * 100);
   const currentAnswer = currentQuestion ? answers[currentQuestion.id] : undefined;
@@ -371,6 +379,15 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
     clearAnswerForQuestion(currentQuestion.id);
   };
 
+  const clearCurrentPageAnswers = () => {
+    setErrorMsg('');
+    setAnswers(previous => {
+      const next = { ...previous };
+      currentPageQuestions.forEach(question => delete next[question.id]);
+      return next;
+    });
+  };
+
   const validateQuestion = (question: SurveyQuestion, answer: any) => {
     if (!question.required) return true;
     if (question.type === 'multiple_choice_grid' || question.type === 'checkbox_grid') {
@@ -397,6 +414,15 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
     const invalid = questions.find(question => !validateQuestion(question, answers[question.id]));
     if (invalid) {
       setErrorMsg('Vui lòng hoàn thành câu hỏi bắt buộc.');
+      return false;
+    }
+    return true;
+  };
+
+  const validateCurrentPage = () => {
+    const invalid = currentPageQuestions.find(question => !validateQuestion(question, answers[question.id]));
+    if (invalid) {
+      setErrorMsg(`Vui lòng hoàn thành câu hỏi bắt buộc: "${stripHtml(invalid.text) || 'Câu hỏi chưa có tiêu đề'}"`);
       return false;
     }
     return true;
@@ -517,7 +543,7 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
       return;
     }
 
-    if (showAllQuestions) {
+    if (showAllQuestions && !sectionMode) {
       const screenOutQuestion = questions.find(question =>
         question.type === 'single_choice'
         && question.screenOutAnswer
@@ -532,8 +558,19 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
       return;
     }
 
-    if (!validateCurrentQuestion()) {
-      setErrorMsg('Vui lòng hoàn thành câu hỏi bắt buộc này để tiếp tục.');
+    const isValid = sectionMode ? validateCurrentPage() : validateCurrentQuestion();
+    if (!isValid) {
+      if (!sectionMode) setErrorMsg('Vui lòng hoàn thành câu hỏi bắt buộc này để tiếp tục.');
+      return;
+    }
+
+    const screenOutQuestion = (sectionMode ? currentPageQuestions : currentQuestion ? [currentQuestion] : []).find(question =>
+      question.type === 'single_choice'
+      && question.screenOutAnswer
+      && answers[question.id] === question.screenOutAnswer
+    );
+    if (screenOutQuestion) {
+      await terminateSurveyForScreening(screenOutQuestion, screenOutQuestion.screenOutAnswer!, answers);
       return;
     }
 
@@ -559,7 +596,7 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
 
   const handlePrev = () => {
     setErrorMsg('');
-    if (showAllQuestions) return;
+    if (showAllQuestions && !sectionMode) return;
     if (step > 0) setStep(prev => prev - 1);
   };
 
@@ -927,7 +964,9 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
           </div>
           <div className="mt-1 md:mt-2">
             <div className="flex justify-between items-end mb-1.5 md:mb-2 gap-3">
-              <span className="text-[11px] sm:text-xs md:text-sm font-bold text-text-primary">{showAllQuestions ? `Tổng cộng ${questions.length} câu hỏi` : `Câu hỏi ${step + 1} / ${totalSteps}`}</span>
+              <span className="text-[11px] sm:text-xs md:text-sm font-bold text-text-primary">
+                {sectionMode ? `${currentSection?.title || `Phần ${step + 1}`} · ${currentPageQuestions.length} câu hỏi` : showAllQuestions ? `Tổng cộng ${questions.length} câu hỏi` : `Câu hỏi ${step + 1} / ${totalSteps}`}
+              </span>
               <span className="text-[10px] sm:text-[11px] md:text-xs font-bold text-text-secondary">Hoàn thành {progress}%</span>
             </div>
             <div className="h-1.5 md:h-2 w-full bg-surface-container-highest rounded-full overflow-hidden">
@@ -936,9 +975,9 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
           </div>
         </nav>
 
-        <main className="flex-grow flex flex-col items-center px-3 sm:px-4 md:px-6 pt-5 sm:pt-8 md:pt-12 pb-32 md:pb-40 w-full" key={showAllQuestions ? 'all-questions' : step}>
+        <main className="flex-grow flex flex-col items-center px-3 sm:px-4 md:px-6 pt-5 sm:pt-8 md:pt-12 pb-32 md:pb-40 w-full" key={`${sectionMode ? 'sections' : showAllQuestions ? 'all-questions' : 'single-question'}-${step}`}>
           <div className="w-full max-w-[720px] space-y-4 sm:space-y-6 md:space-y-8 animate-in slide-in-from-bottom-4 duration-500 fade-in">
-            {!showAllQuestions && step === 0 && (
+            {(!showAllQuestions || sectionMode) && step === 0 && (
               <div className="bg-white border-t-[8px] sm:border-t-[10px] border-t-primary rounded-2xl shadow-sm p-4 sm:p-6 md:p-10 border border-border-subtle mb-5 sm:mb-8">
                 <h1 
                   className="font-display text-2xl sm:text-3xl md:text-4xl font-extrabold text-text-primary mb-3 sm:mb-4 leading-[1.1] sm:leading-tight rendered-html break-words"
@@ -953,8 +992,20 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
               </div>
             )}
 
-            {showAllQuestions ? (
-              questions.map((question, index) => (
+            {sectionMode && currentSection && (
+              <section className="bg-white border-l-4 border-primary rounded-2xl shadow-sm p-4 sm:p-6 md:p-8">
+                <p className="text-xs font-bold uppercase tracking-wide text-primary mb-2">Phần {step + 1}</p>
+                <h2 className="font-display text-xl sm:text-2xl md:text-3xl font-bold text-text-primary break-words">{currentSection.title}</h2>
+                {currentSection.description && (
+                  <p className="mt-3 text-sm sm:text-base text-text-secondary leading-relaxed whitespace-pre-wrap">{currentSection.description}</p>
+                )}
+              </section>
+            )}
+
+            {showAllQuestions || sectionMode ? (
+              (sectionMode ? currentPageQuestions : questions).map((question) => {
+                const index = questions.indexOf(question);
+                return (
                 <section key={question.id} className="bg-white border border-border-subtle rounded-2xl shadow-sm p-4 sm:p-6 md:p-8">
                   <header className="space-y-2 mb-4 sm:mb-5">
                     <div className="flex items-center justify-between gap-3">
@@ -966,7 +1017,8 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
                   {question.screenOutAnswer && <p className="mb-4 text-sm italic text-text-secondary">Nếu chọn “{stripHtml(question.screenOutAnswer)}”, khảo sát sẽ kết thúc tại đây.</p>}
                   {renderQuestionInput(question, answers[question.id], question.id)}
                 </section>
-              ))
+                );
+              })
             ) : (
               <>
                 <header className="space-y-2">
@@ -1001,8 +1053,8 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
                 </span>
                 <span className="text-[10px] sm:text-xs font-bold text-text-secondary truncate">Đang tự động lưu...</span>
               </div>
-              {!showAllQuestions && (
-                <button onClick={clearAnswer} className="text-primary text-[11px] sm:text-sm font-bold flex items-center gap-1.5 hover:opacity-80 transition-opacity cursor-pointer shrink-0">
+              {(!showAllQuestions || sectionMode) && (
+                <button onClick={sectionMode ? clearCurrentPageAnswers : clearAnswer} className="text-primary text-[11px] sm:text-sm font-bold flex items-center gap-1.5 hover:opacity-80 transition-opacity cursor-pointer shrink-0">
                   <Undo2 size={14} className="sm:h-4 sm:w-4" /> Xóa
                 </button>
               )}
@@ -1011,11 +1063,11 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
               )}
             </div>
             <div className="flex gap-3 sm:gap-4">
-              <button onClick={handlePrev} disabled={showAllQuestions || step === 0} className={`flex-1 min-h-[48px] sm:min-h-[52px] bg-white border-2 border-border-subtle rounded-xl text-sm sm:text-base font-bold text-text-primary transition-colors shadow-sm ${showAllQuestions || step === 0 ? 'opacity-50 cursor-not-allowed' : 'hover:bg-surface-container-low active:scale-95 cursor-pointer'}`}>
+              <button onClick={handlePrev} disabled={(showAllQuestions && !sectionMode) || step === 0} className={`flex-1 min-h-[48px] sm:min-h-[52px] bg-white border-2 border-border-subtle rounded-xl text-sm sm:text-base font-bold text-text-primary transition-colors shadow-sm ${(showAllQuestions && !sectionMode) || step === 0 ? 'opacity-50 cursor-not-allowed' : 'hover:bg-surface-container-low active:scale-95 cursor-pointer'}`}>
                 Quay lại
               </button>
               <button disabled={isSubmitting} onClick={handleNext} className={`flex-[2] min-h-[48px] sm:min-h-[52px] bg-primary text-white rounded-xl text-base sm:text-lg font-bold shadow-lg shadow-primary/25 hover:bg-primary/90 transition-all active:scale-95 flex items-center justify-center gap-2 ${isSubmitting ? 'opacity-70 cursor-not-allowed' : 'cursor-pointer'}`}>
-                {isSubmitting ? 'Đang gửi...' : showAllQuestions ? 'Hoàn thành' : step === totalSteps - 1 ? 'Hoàn thành' : 'Tiếp theo'}
+                {isSubmitting ? 'Đang gửi...' : showAllQuestions && !sectionMode || step === totalSteps - 1 ? 'Hoàn thành' : 'Tiếp theo'}
               </button>
             </div>
           </div>
