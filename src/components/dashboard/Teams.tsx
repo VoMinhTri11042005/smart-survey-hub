@@ -54,17 +54,17 @@ export function Teams() {
   const initials = (n: string) => n.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
 
   return (
-    <div className="p-8 max-w-7xl mx-auto animate-in fade-in zoom-in-95 duration-500">
-      <div className="flex items-center justify-between mb-8">
+    <div className="p-4 sm:p-8 max-w-7xl mx-auto animate-in fade-in zoom-in-95 duration-500">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
         <div>
-          <h1 className="font-display text-3xl font-bold text-text-primary">Quản lý Nhóm</h1>
+          <h1 className="font-display text-2xl sm:text-3xl font-bold text-text-primary">Quản lý Nhóm</h1>
           <p className="text-sm text-text-secondary mt-1">
             {teamMembers.length > 0 ? `${teamMembers.length} thành viên trong nhóm` : 'Mời đồng nghiệp cùng thiết kế và phân tích khảo sát.'}
           </p>
         </div>
         <button
           onClick={() => setShowInvite(true)}
-          className="px-5 py-2.5 bg-primary text-white font-bold rounded-xl shadow-md hover:bg-primary/90 transition-all flex items-center gap-2 cursor-pointer"
+          className="w-full sm:w-auto justify-center px-5 py-2.5 bg-primary text-white font-bold rounded-xl shadow-md hover:bg-primary/90 transition-all flex items-center gap-2 cursor-pointer"
         >
           <UserPlus size={18} />
           Mời thành viên
@@ -143,25 +143,25 @@ export function Teams() {
         </div>
       ) : (
         <div className="bg-white rounded-2xl border border-border-subtle overflow-hidden shadow-sm">
-          <div className="grid grid-cols-[1fr_1fr_auto_auto] gap-4 px-6 py-3 bg-surface-container-low text-[10px] font-bold text-text-secondary uppercase tracking-wider border-b border-border-subtle">
+          <div className="hidden sm:grid sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto_auto] gap-4 px-6 py-3 bg-surface-container-low text-[10px] font-bold text-text-secondary uppercase tracking-wider border-b border-border-subtle">
             <span>Thành viên</span>
             <span>Email</span>
             <span>Vai trò</span>
             <span></span>
           </div>
           {teamMembers.map(member => (
-            <div key={member.id} className="grid grid-cols-[1fr_1fr_auto_auto] gap-4 px-6 py-4 items-center border-b border-border-subtle last:border-0 hover:bg-surface-container-low/50 transition-colors">
-              <div className="flex items-center gap-3">
+            <div key={member.id} className="grid grid-cols-[minmax(0,1fr)_auto] sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto_auto] gap-x-3 gap-y-2 px-4 sm:px-6 py-4 items-center border-b border-border-subtle last:border-0 hover:bg-surface-container-low/50 transition-colors">
+              <div className="col-start-1 row-start-1 flex min-w-0 items-center gap-3 sm:col-auto sm:row-auto">
                 <div className="w-10 h-10 rounded-full bg-primary-fixed flex items-center justify-center text-sm font-bold text-primary">
                   {initials(member.name)}
                 </div>
-                <span className="font-semibold text-text-primary text-sm">{member.name}</span>
+                <span className="truncate font-semibold text-text-primary text-sm">{member.name}</span>
               </div>
-              <span className="text-text-secondary text-sm">{member.email}</span>
+              <span className="col-span-2 row-start-2 break-all text-text-secondary text-xs sm:col-span-1 sm:row-auto sm:text-sm">{member.email}</span>
               <select
                 value={member.role}
                 onChange={(e) => handleRoleChange(member.id, e.target.value as TeamRole)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer border-0 outline-none ${roleLabels[member.role].color}`}
+                className={`col-start-2 row-start-1 max-w-full px-2 sm:px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer border-0 outline-none sm:col-auto sm:row-auto ${roleLabels[member.role].color}`}
               >
                 <option value="admin">Quản trị</option>
                 <option value="editor">Biên tập</option>
@@ -169,7 +169,7 @@ export function Teams() {
               </select>
               <button
                 onClick={() => handleRemove(member.id)}
-                className="p-2 text-text-secondary hover:text-sentiment-negative hover:bg-sentiment-negative/10 rounded-lg transition-colors cursor-pointer"
+                className="col-start-2 row-start-2 justify-self-end p-2 text-text-secondary hover:text-sentiment-negative hover:bg-sentiment-negative/10 rounded-lg transition-colors cursor-pointer sm:col-auto sm:row-auto"
                 title="Xóa thành viên"
               >
                 <Trash2 size={16} />

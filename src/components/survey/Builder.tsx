@@ -653,7 +653,7 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError }: { onP
   };
 
   return (
-    <div className="flex flex-col md:flex-row h-full w-full overflow-y-auto md:overflow-hidden animate-in fade-in duration-500">
+    <div className="flex flex-col md:flex-row min-h-full md:h-full w-full overflow-x-hidden md:overflow-hidden animate-in fade-in duration-500">
       
 
 
@@ -1211,8 +1211,8 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError }: { onP
                </div>
 
                {/* Publish Bar */}
-               <div className="fixed bottom-0 left-0 md:left-64 right-0 md:right-80 bg-white/95 backdrop-blur-md border-t border-border-subtle p-4 flex items-center justify-between z-20 gap-3">
-                 <div className="flex flex-wrap items-center gap-2 md:gap-4">
+               <div className="fixed bottom-0 left-0 md:left-64 right-0 md:right-80 bg-white/95 backdrop-blur-md border-t border-border-subtle p-2 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between z-20 gap-2">
+                 <div className="w-full min-w-0 flex flex-nowrap sm:flex-wrap items-center gap-2 md:gap-4 overflow-x-auto whitespace-nowrap pb-1 sm:pb-0 [&>*]:shrink-0">
                    <span className="text-xs md:text-sm font-medium text-text-secondary">{questions.length} câu hỏi</span>
                    <span className="hidden md:inline text-text-secondary">•</span>
                    <label className="flex items-center gap-2 cursor-pointer group">
@@ -1316,7 +1316,7 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError }: { onP
                  <button
                    onClick={handlePublish}
                    disabled={isPublishing || questions.length === 0}
-                   className="px-4 md:px-8 py-2 md:py-2.5 bg-primary text-white font-bold rounded-xl shadow-md hover:bg-primary/90 active:scale-95 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed text-xs md:text-sm"
+                   className="w-full sm:w-auto justify-center shrink-0 px-4 md:px-8 py-2 md:py-2.5 bg-primary text-white font-bold rounded-xl shadow-md hover:bg-primary/90 active:scale-95 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed text-xs md:text-sm"
                  >
                   {isPublishing ? <RefreshCw size={18} className="animate-spin" /> : <Send size={18} />}
                   {currentSurvey ? 'Cập nhật' : 'Xuất bản'}
@@ -1383,7 +1383,7 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError }: { onP
            )}
 
            {/* Contextual Tip */}
-           <div className="p-5 bg-primary-fixed/40 rounded-2xl border border-primary-fixed-dim/50">
+           <div className="p-5 bg-primary-fixed rounded-2xl border border-primary-fixed-dim/50">
               <h3 className="text-xs font-bold text-primary mb-2 flex items-center gap-1.5 uppercase tracking-wide">
                  <Sparkles size={14} /> Mẹo theo ngữ cảnh
               </h3>
@@ -1423,7 +1423,7 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError }: { onP
         </div>
 
         {/* AI Chat Input */}
-        <div className="p-6 border-t border-border-subtle bg-surface-background/50">
+        <div className="p-6 border-t border-border-subtle bg-white">
            <form onSubmit={handleAiChatSubmit} className="relative">
               <input 
                  type="text" 

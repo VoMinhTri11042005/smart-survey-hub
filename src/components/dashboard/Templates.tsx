@@ -41,10 +41,10 @@ export function Templates({ onViewChange }: TemplatesProps) {
   });
 
   return (
-    <div className="p-8 max-w-7xl mx-auto animate-in fade-in zoom-in-95 duration-500">
+    <div className="p-4 sm:p-8 max-w-7xl mx-auto animate-in fade-in zoom-in-95 duration-500">
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8">
         <div>
-          <h1 className="font-display text-3xl font-bold text-text-primary">Thư viện Mẫu</h1>
+          <h1 className="font-display text-2xl sm:text-3xl font-bold text-text-primary">Thư viện Mẫu</h1>
           <p className="text-sm text-text-secondary mt-1">Bắt đầu nhanh với {SURVEY_TEMPLATES.length} mẫu khảo sát được thiết kế sẵn.</p>
         </div>
         <button
