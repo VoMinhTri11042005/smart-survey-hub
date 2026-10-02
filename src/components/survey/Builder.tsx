@@ -7,6 +7,7 @@ import ReactMarkdown from 'react-markdown';
 import ReactQuill from 'react-quill-new';
 import 'react-quill-new/dist/quill.snow.css';
 import type { SurveyQuestion, QuestionType, SurveyDisplayMode } from '../../types';
+import { cleanHtmlWhitespace, stripHtml } from '../../utils/stringUtils';
 
 const questionTypeLabels: Record<QuestionType, { label: string; icon: React.ReactNode }> = {
   single_choice: { label: 'Một lựa chọn', icon: <CircleDot size={16} className="text-primary" /> },
@@ -1003,7 +1004,7 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError }: { onP
                               >
                                 <option value="">Không lọc</option>
                                 {(q.options ?? []).map((option, index) => (
-                                  <option key={index} value={option}>{option.replace(/<[^>]*>/g, '').trim() || `Lựa chọn ${index + 1}`}</option>
+                                  <option key={index} value={option}>{stripHtml(cleanHtmlWhitespace(option)) || `Lựa chọn ${index + 1}`}</option>
                                 ))}
                               </select>
                               {q.screenOutAnswer && (
