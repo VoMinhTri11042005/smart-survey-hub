@@ -20,6 +20,10 @@ export function Dashboard({
   const [shareModal, setShareModal] = useState<{ id: string; title: string } | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; title: string } | null>(null);
   const [deleteDraftConfirm, setDeleteDraftConfirm] = useState<{ id: string; title: string } | null>(null);
+  const reportActivity = (message: string, type: 'success' | 'error' | 'info') => {
+    onShowToast?.(message, type);
+    onAddNotification?.(message);
+  };
 
   useEffect(() => {
     void fetchSurveys();
@@ -220,6 +224,7 @@ export function Dashboard({
         onClose={() => setShareModal(null)}
         surveyId={shareModal?.id || ''}
         surveyTitle={stripHtml(shareModal?.title) || ''}
+        onFeedback={reportActivity}
       />
 
       {/* Delete Confirmation Modal */}
@@ -242,7 +247,9 @@ export function Dashboard({
                     if (onShowToast) onShowToast('Đã xóa khảo sát thành công!', 'success');
                     if (onAddNotification) onAddNotification(`Bạn đã xóa khảo sát "${stripHtml(deleteConfirm.title)}"`);
                   } catch (error) {
-                    if (onShowToast) onShowToast('Không thể xóa khảo sát. Vui lòng thử lại.', 'error');
+                    const message = 'Không thể xóa khảo sát. Vui lòng thử lại.';
+                    if (onShowToast) onShowToast(message, 'error');
+                    if (onAddNotification) onAddNotification(message);
                   } finally {
                     setDeleteConfirm(null);
                   }
@@ -268,8 +275,11 @@ export function Dashboard({
                   try {
                     await deleteDraft(deleteDraftConfirm.id);
                     onShowToast?.('Đã xóa bản nháp.', 'success');
+                    onAddNotification?.(`Bạn đã xóa bản nháp "${stripHtml(deleteDraftConfirm.title)}"`);
                   } catch {
-                    onShowToast?.('Không thể xóa bản nháp. Vui lòng thử lại.', 'error');
+                    const message = 'Không thể xóa bản nháp. Vui lòng thử lại.';
+                    onShowToast?.(message, 'error');
+                    onAddNotification?.(message);
                   } finally {
                     setDeleteDraftConfirm(null);
                   }

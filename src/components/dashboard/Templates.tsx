@@ -3,6 +3,7 @@ import { useState, type ReactNode } from 'react';
 import { SURVEY_TEMPLATES, TEMPLATE_CATEGORIES } from '../../data/templates';
 import type { View, QuestionType } from '../../types';
 import { useSurvey } from '../../context/SurveyContext';
+import type { ToastType } from '../common/Toast';
 
 const typeIcons: Record<QuestionType, ReactNode> = {
   single_choice: <CircleDot size={12} />,
@@ -19,9 +20,10 @@ const typeIcons: Record<QuestionType, ReactNode> = {
 
 interface TemplatesProps {
   onViewChange?: (view: View) => void;
+  onFeedback?: (message: string, type: ToastType) => void;
 }
 
-export function Templates({ onViewChange }: TemplatesProps) {
+export function Templates({ onViewChange, onFeedback }: TemplatesProps) {
   const [category, setCategory] = useState('Tất cả');
   const [search, setSearch] = useState('');
   const { loadTemplate } = useSurvey();
@@ -30,6 +32,7 @@ export function Templates({ onViewChange }: TemplatesProps) {
     const template = SURVEY_TEMPLATES.find(t => t.id === templateId);
     if (template) {
       loadTemplate(template);
+      onFeedback?.(`Đã tải mẫu khảo sát “${template.title}” vào trình tạo.`, 'success');
       onViewChange?.('builder');
     }
   };

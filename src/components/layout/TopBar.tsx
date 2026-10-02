@@ -10,6 +10,17 @@ export interface Notification {
   read: boolean;
 }
 
+const formatNotificationTime = (value: string) => {
+  const timestamp = new Date(value).getTime();
+  if (!Number.isFinite(timestamp)) return value;
+  const elapsedMinutes = Math.max(0, Math.floor((Date.now() - timestamp) / 60000));
+  if (elapsedMinutes < 1) return 'Vừa xong';
+  if (elapsedMinutes < 60) return `${elapsedMinutes} phút trước`;
+  const elapsedHours = Math.floor(elapsedMinutes / 60);
+  if (elapsedHours < 24) return `${elapsedHours} giờ trước`;
+  return new Date(timestamp).toLocaleDateString('vi-VN');
+};
+
 interface TopBarProps {
   currentView: View;
   onViewChange: (view: View) => void;
@@ -17,10 +28,11 @@ interface TopBarProps {
   userProfile?: UserProfile;
   notifications?: Notification[];
   onMarkAllRead?: () => void;
+  onMarkRead?: (id: string) => void;
   onMenuClick?: () => void;
 }
 
-export function TopBar({ currentView, onViewChange, onPublish, userProfile, notifications = [], onMarkAllRead, onMenuClick }: TopBarProps) {
+export function TopBar({ currentView, onViewChange, onPublish, userProfile, notifications = [], onMarkAllRead, onMarkRead, onMenuClick }: TopBarProps) {
   const { searchQuery, setSearchQuery } = useSurvey();
   const [showNotifications, setShowNotifications] = useState(false);
   
@@ -91,14 +103,20 @@ export function TopBar({ currentView, onViewChange, onPublish, userProfile, noti
           </div>
         )}
         <div className="relative">
-          <button onClick={() => setShowNotifications(!showNotifications)} className="relative text-text-secondary hover:text-text-primary transition-colors p-2 rounded-full hover:bg-surface-container-high/50 cursor-pointer">
+          <button
+            type="button"
+            onClick={() => setShowNotifications(!showNotifications)}
+            aria-label={unreadCount > 0 ? `Thông báo, ${unreadCount} chưa đọc` : 'Thông báo'}
+            aria-expanded={showNotifications}
+            className="relative text-text-secondary hover:text-text-primary transition-colors p-2 rounded-full hover:bg-surface-container-high/50 cursor-pointer"
+          >
             <Bell size={20} />
             {unreadCount > 0 && <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-sentiment-negative rounded-full border-2 border-surface-background"></span>}
           </button>
           
           {showNotifications && (
-            <div className="absolute right-0 mt-2 w-72 md:w-80 bg-white rounded-2xl shadow-xl border border-border-subtle overflow-hidden z-50 animate-in fade-in slide-in-from-top-4 duration-200">
-              <div className="p-4 border-b border-border-subtle flex justify-between items-center bg-surface-background/50">
+            <div className="absolute right-0 mt-2 w-[min(20rem,calc(100vw-1rem))] bg-white rounded-2xl shadow-xl border border-border-subtle overflow-hidden z-50 animate-in fade-in slide-in-from-top-4 duration-200">
+              <div className="p-4 border-b border-border-subtle flex justify-between items-center bg-white">
                 <h3 className="font-bold text-text-primary">Thông báo</h3>
                 {unreadCount > 0 && (
                   <button onClick={onMarkAllRead} className="text-xs text-secondary font-medium hover:underline flex items-center gap-1 cursor-pointer">
@@ -113,10 +131,15 @@ export function TopBar({ currentView, onViewChange, onPublish, userProfile, noti
                   </div>
                 ) : (
                   notifications.map(notif => (
-                    <div key={notif.id} className={`p-4 border-b border-border-subtle hover:bg-surface-container-low transition-colors cursor-pointer ${notif.read ? 'opacity-60' : 'bg-primary-fixed/10'}`}>
+                    <button
+                      key={notif.id}
+                      type="button"
+                      onClick={() => onMarkRead?.(notif.id)}
+                      className={`block w-full border-b border-border-subtle p-4 text-left transition-colors hover:bg-surface-container-low ${notif.read ? 'bg-white' : 'bg-primary-fixed/10'}`}
+                    >
                       <p className="text-sm text-text-primary font-medium">{notif.message}</p>
-                      <p className="text-[10px] text-text-secondary mt-1">{notif.time}</p>
-                    </div>
+                      <p className="text-[10px] text-text-secondary mt-1">{formatNotificationTime(notif.time)}</p>
+                    </button>
                   ))
                 )}
               </div>

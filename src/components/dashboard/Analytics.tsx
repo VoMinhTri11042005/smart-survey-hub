@@ -6,6 +6,7 @@ import { cleanHtmlWhitespace, stripHtml, toUnaccented } from '../../utils/string
 import { getTextAnalyticsEligibility, isPersonalIdentifierQuestion } from '../../utils/textAnalytics';
 import { ImportResponsesDialog } from './ImportResponsesDialog';
 import type { Survey, SurveyResponse } from '../../types';
+import type { ToastType } from '../common/Toast';
 
 const QUESTION_CHART_COLORS = ['#3730a3', '#006591', '#89ceff', '#c3c0ff', '#94a3b8', '#10b981', '#f59e0b', '#ef4444'];
 const hasAnswer = (value: unknown) => {
@@ -16,7 +17,7 @@ const hasAnswer = (value: unknown) => {
 };
 const getRatingLevels = (distribution: Record<number, number>) => Object.keys(distribution).map(Number).sort((a, b) => a - b);
 
-export function Analytics() {
+export function Analytics({ onFeedback }: { onFeedback?: (message: string, type: ToastType) => void }) {
   const { surveys, currentSurvey, setCurrentSurvey, fetchSurveys, fetchSurveyById, fetchResponses, resetResponses } = useSurvey();
   const [selectedSurvey, setSelectedSurvey] = useState<Survey | null>(currentSurvey);
   const [allResponses, setAllResponses] = useState<SurveyResponse[]>([]);
@@ -117,15 +118,21 @@ export function Analytics() {
 
   const handleExport = () => {
     if (!selectedSurvey || responses.length === 0) return;
-    const csv = exportResponsesToCsv(selectedSurvey, responses);
-    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    const safeTitle = toUnaccented(stripHtml(selectedSurvey.title)).replace(/[^a-zA-Z0-9]/g, '_').replace(/_+/g, '_');
-    link.download = `${safeTitle}_responses.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
+    try {
+      const csv = exportResponsesToCsv(selectedSurvey, responses);
+      const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      const safeTitle = toUnaccented(stripHtml(selectedSurvey.title)).replace(/[^a-zA-Z0-9]/g, '_').replace(/_+/g, '_');
+      link.download = `${safeTitle}_responses.csv`;
+      link.click();
+      URL.revokeObjectURL(url);
+      onFeedback?.('Đã xuất phản hồi thành file CSV.', 'success');
+    } catch (error) {
+      console.error('CSV export failed:', error);
+      onFeedback?.('Không thể tạo file CSV. Vui lòng thử lại.', 'error');
+    }
   };
 
   const handleExcelExport = async () => {
@@ -133,9 +140,10 @@ export function Analytics() {
     try {
       const { exportSurveyAnalysisToExcel } = await import('../../utils/excelExport');
       await exportSurveyAnalysisToExcel(selectedSurvey, responses);
+      onFeedback?.('Đã xuất báo cáo thành file Excel.', 'success');
     } catch (error) {
       console.error('Excel export failed:', error);
-      alert('Không thể tạo file Excel. Vui lòng thử lại.');
+      onFeedback?.('Không thể tạo file Excel. Vui lòng thử lại.', 'error');
     }
   };
 
@@ -160,9 +168,10 @@ export function Analytics() {
       setAllResponses([]);
       await fetchSurveys();
       setShowResetConfirm(false);
+      onFeedback?.('Đã xóa toàn bộ phản hồi của khảo sát.', 'success');
     } catch (error) {
       console.error('Error resetting survey responses:', error);
-      alert('Không thể xóa dữ liệu phản hồi. Vui lòng thử lại.');
+      onFeedback?.('Không thể xóa dữ liệu phản hồi. Vui lòng thử lại.', 'error');
     } finally {
       setIsResetting(false);
     }
@@ -177,7 +186,7 @@ export function Analytics() {
         <button onClick={() => setShowImportDialog(true)} className="mt-5 inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-white hover:bg-primary/90">
           <FileSpreadsheet size={18} /> Nhập phản hồi từ Excel
         </button>
-        {showImportDialog && <ImportResponsesDialog surveys={surveys} onClose={() => setShowImportDialog(false)} onImported={handleImportComplete} />}
+        {showImportDialog && <ImportResponsesDialog surveys={surveys} onClose={() => setShowImportDialog(false)} onImported={handleImportComplete} onFeedback={(message, type) => onFeedback?.(message, type)} />}
       </div>
     );
   }
@@ -754,7 +763,7 @@ export function Analytics() {
           </div>
         </div>
       )}
-      {showImportDialog && <ImportResponsesDialog surveys={surveys} onClose={() => setShowImportDialog(false)} onImported={handleImportComplete} />}
+      {showImportDialog && <ImportResponsesDialog surveys={surveys} onClose={() => setShowImportDialog(false)} onImported={handleImportComplete} onFeedback={(message, type) => onFeedback?.(message, type)} />}
     </div>
   );
 }

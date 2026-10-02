@@ -1,15 +1,17 @@
 import { useState, useEffect } from 'react';
 import { X, Copy, Check, Link2, Mail, QrCode, ExternalLink } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
+import type { ToastType } from './Toast';
 
 interface ShareModalProps {
   isOpen: boolean;
   onClose: () => void;
   surveyId: string;
   surveyTitle: string;
+  onFeedback?: (message: string, type: ToastType) => void;
 }
 
-export function ShareModal({ isOpen, onClose, surveyId, surveyTitle }: ShareModalProps) {
+export function ShareModal({ isOpen, onClose, surveyId, surveyTitle, onFeedback }: ShareModalProps) {
   const [copied, setCopied] = useState(false);
   const [showQR, setShowQR] = useState(false);
 
@@ -23,14 +25,23 @@ export function ShareModal({ isOpen, onClose, surveyId, surveyTitle }: ShareModa
     }
   }, [isOpen]);
 
-  const copyLink = () => {
-    navigator.clipboard.writeText(shareLink);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const copyLink = async (showFeedback = true) => {
+    try {
+      await navigator.clipboard.writeText(shareLink);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+      if (showFeedback) onFeedback?.('Đã sao chép liên kết khảo sát.', 'success');
+      return true;
+    } catch (error) {
+      console.error('Failed to copy survey link:', error);
+      if (showFeedback) onFeedback?.('Không thể sao chép liên kết. Hãy thử lại hoặc sao chép thủ công.', 'error');
+      return false;
+    }
   };
 
   const shareViaFacebook = () => {
-    window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareLink)}`, '_blank', 'width=600,height=400');
+    const shareWindow = window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareLink)}`, '_blank', 'width=600,height=400');
+    onFeedback?.(shareWindow ? 'Đã mở cửa sổ chia sẻ Facebook.' : 'Trình duyệt đã chặn cửa sổ chia sẻ Facebook.', shareWindow ? 'info' : 'error');
   };
 
   const shareViaZalo = async () => {
@@ -43,22 +54,28 @@ export function ShareModal({ isOpen, onClose, surveyId, surveyTitle }: ShareModa
           text: `Mời bạn tham gia khảo sát: ${surveyTitle}`,
           url: shareLink
         });
+        onFeedback?.('Đã chia sẻ khảo sát.', 'success');
         return;
       } catch (e) {
+        if (e instanceof Error && e.name === 'AbortError') return;
         console.error('Native share failed', e);
       }
     }
     
     // Fallback cho PC hoặc khi Web Share API không khả dụng
-    copyLink();
-    alert('Hệ thống đã tự động sao chép liên kết khảo sát!\n\nTrình duyệt sẽ mở Zalo Web, bạn chỉ cần chọn người nhận và dán (Ctrl+V) liên kết vào khung chat để chia sẻ nhé.');
+    if (!await copyLink(false)) {
+      onFeedback?.('Không thể sao chép liên kết. Hãy thử lại hoặc sao chép thủ công.', 'error');
+      return;
+    }
     window.open('https://chat.zalo.me', '_blank');
+    onFeedback?.('Đã mở Zalo. Dán liên kết khảo sát để gửi cho người nhận.', 'info');
   };
 
   const shareViaEmail = () => {
     const subject = encodeURIComponent(`Mời bạn tham gia khảo sát: ${surveyTitle}`);
     const body = encodeURIComponent(`Xin chào,\n\nTôi muốn mời bạn tham gia khảo sát "${surveyTitle}".\n\nBạn có thể truy cập link sau để bắt đầu:\n${shareLink}\n\nCảm ơn bạn!`);
     window.open(`mailto:?subject=${subject}&body=${body}`);
+    onFeedback?.('Đã mở ứng dụng email để chia sẻ khảo sát.', 'info');
   };
 
   if (!isOpen) return null;
@@ -105,7 +122,7 @@ export function ShareModal({ isOpen, onClose, surveyId, surveyTitle }: ShareModa
                   {shareLink}
                 </div>
                 <button
-                  onClick={copyLink}
+                  onClick={() => { void copyLink(); }}
                   className={`px-4 py-3 rounded-xl font-bold text-sm flex items-center gap-2 transition-all cursor-pointer ${
                     copied
                       ? 'bg-sentiment-positive text-white'

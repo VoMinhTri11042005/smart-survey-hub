@@ -2,6 +2,7 @@ import { Users, UserPlus, Mail, Shield, Edit3, Eye, Trash2, X, RefreshCw } from 
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { useSurvey } from '../../context/SurveyContext';
 import type { TeamRole } from '../../types';
+import type { ToastType } from '../common/Toast';
 
 const roleLabels: Record<TeamRole, { label: string; icon: ReactNode; color: string }> = {
   admin: { label: 'Quản trị', icon: <Shield size={14} />, color: 'bg-primary-fixed text-primary' },
@@ -9,7 +10,7 @@ const roleLabels: Record<TeamRole, { label: string; icon: ReactNode; color: stri
   viewer: { label: 'Xem', icon: <Eye size={14} />, color: 'bg-surface-container text-text-secondary' },
 };
 
-export function Teams() {
+export function Teams({ onFeedback }: { onFeedback?: (message: string, type: ToastType) => void }) {
   const { teamMembers, fetchTeamMembers, inviteTeamMember, updateTeamMember, removeTeamMember } = useSurvey();
   const [showInvite, setShowInvite] = useState(false);
   const [name, setName] = useState('');
@@ -24,14 +25,17 @@ export function Teams() {
     e.preventDefault();
     setError(null);
     setIsInviting(true);
+    const invitedEmail = email;
     try {
       await inviteTeamMember(name, email, role);
       setName('');
       setEmail('');
       setRole('viewer');
       setShowInvite(false);
+      onFeedback?.(`Đã gửi lời mời đến ${invitedEmail}.`, 'success');
     } catch (err: any) {
       setError(err.message);
+      onFeedback?.(err instanceof Error ? err.message : 'Không thể gửi lời mời.', 'error');
     } finally {
       setIsInviting(false);
     }
@@ -40,14 +44,21 @@ export function Teams() {
   const handleRoleChange = async (id: string, newRole: TeamRole) => {
     try {
       await updateTeamMember(id, { role: newRole });
+      onFeedback?.('Đã cập nhật vai trò thành viên.', 'success');
     } catch {
       setError('Không thể cập nhật vai trò.');
+      onFeedback?.('Không thể cập nhật vai trò.', 'error');
     }
   };
 
   const handleRemove = async (id: string) => {
     if (confirm('Bạn có chắc muốn xóa thành viên này?')) {
-      await removeTeamMember(id);
+      try {
+        await removeTeamMember(id);
+        onFeedback?.('Đã xóa thành viên khỏi nhóm.', 'success');
+      } catch {
+        onFeedback?.('Không thể xóa thành viên. Vui lòng thử lại.', 'error');
+      }
     }
   };
 

@@ -3,6 +3,7 @@ import { AlertTriangle, CheckCircle2, FileSpreadsheet, Loader2, Upload, X } from
 import type { QuestionType, Survey, SurveyAnswer, SurveyQuestion } from '../../types';
 import { stripHtml, toUnaccented } from '../../utils/stringUtils';
 import { API_BASE, apiFetch } from '../../utils/api';
+import type { ToastType } from '../common/Toast';
 
 interface ImportedResponse {
   answers: Record<string, SurveyAnswer>;
@@ -13,6 +14,7 @@ interface Props {
   surveys: Survey[];
   onClose: () => void;
   onImported: (surveyId: string) => Promise<void>;
+  onFeedback: (message: string, type: ToastType) => void;
 }
 
 const QUESTION_TYPES: { value: QuestionType; label: string }[] = [
@@ -137,7 +139,7 @@ function parseGridAnswer(value: string, question: SurveyQuestion): Record<string
   return Object.keys(result).length ? result : null;
 }
 
-export function ImportResponsesDialog({ surveys, onClose, onImported }: Props) {
+export function ImportResponsesDialog({ surveys, onClose, onImported, onFeedback }: Props) {
   const [headers, setHeaders] = useState<string[]>([]);
   const [rows, setRows] = useState<unknown[][]>([]);
   const [timestampColumn, setTimestampColumn] = useState<number | null>(null);
@@ -271,7 +273,9 @@ export function ImportResponsesDialog({ surveys, onClose, onImported }: Props) {
     if (!file) return;
     setError('');
     if (file.size > 5 * 1024 * 1024) {
-      setError('File tối đa 5 MB để bảo đảm nhập ổn định.');
+      const message = 'File tối đa 5 MB để bảo đảm nhập ổn định.';
+      setError(message);
+      onFeedback(message, 'error');
       return;
     }
     setIsReading(true);
@@ -317,7 +321,9 @@ export function ImportResponsesDialog({ surveys, onClose, onImported }: Props) {
       setTitle(file.name.replace(/\.[^.]+$/, '').slice(0, 255));
       setIdempotencyKey(crypto.randomUUID());
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Không thể đọc file dữ liệu.');
+      const message = cause instanceof Error ? cause.message : 'Không thể đọc file dữ liệu.';
+      setError(message);
+      onFeedback(message, 'error');
       setHeaders([]);
       setRows([]);
       setIdempotencyKey('');
@@ -351,12 +357,14 @@ export function ImportResponsesDialog({ surveys, onClose, onImported }: Props) {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Không nhập được dữ liệu.');
       await onImported(data.surveyId);
-      window.alert(data.replayed
+      onFeedback(data.replayed
         ? `Lượt nhập này đã được xử lý trước đó (${data.imported} phản hồi). Không thêm trùng dữ liệu.`
-        : `Đã thêm ${data.imported} phản hồi${data.skipped ? `, bỏ qua ${data.skipped} phản hồi trùng` : ''}. Dữ liệu cũ được giữ nguyên.`);
+        : `Đã thêm ${data.imported} phản hồi${data.skipped ? `, bỏ qua ${data.skipped} phản hồi trùng` : ''}.`, 'success');
       onClose();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Không nhập được dữ liệu. Vui lòng thử lại.');
+      const message = cause instanceof Error ? cause.message : 'Không nhập được dữ liệu. Vui lòng thử lại.';
+      setError(message);
+      onFeedback(message, 'error');
     } finally {
       setIsImporting(false);
     }

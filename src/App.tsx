@@ -25,6 +25,7 @@ const Chatbot = lazy(() => import('./components/survey/Chatbot').then((m) => ({ 
 
 const Settings = lazy(() => import('./components/dashboard/Settings').then((m) => ({ default: m.Settings })));
 
+const NOTIFICATIONS_STORAGE_KEY = 'smart-survey-notifications';
 
 const AppFallback = () => (
   <div className="flex h-screen items-center justify-center bg-surface-background text-text-primary">
@@ -47,9 +48,21 @@ function AppContent() {
   }, [currentView]);
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [notifications, setNotifications] = useState<{ id: string; message: string; time: string; read: boolean }[]>([
-    { id: '1', message: 'Chào mừng bạn đến với Smart Survey Hub!', time: 'Hôm nay', read: false }
-  ]);
+  const [notifications, setNotifications] = useState<{ id: string; message: string; time: string; read: boolean }[]>(() => {
+    try {
+      const saved = localStorage.getItem(NOTIFICATIONS_STORAGE_KEY);
+      if (saved) {
+        const parsed: unknown = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed.filter(item =>
+          item && typeof item.id === 'string' && typeof item.message === 'string'
+          && typeof item.time === 'string' && typeof item.read === 'boolean'
+        );
+      }
+    } catch (error) {
+      console.error('Failed to load notifications:', error);
+    }
+    return [{ id: 'welcome', message: 'Chào mừng bạn đến với Smart Survey Hub!', time: new Date().toISOString(), read: false }];
+  });
   const [userProfile, setUserProfile] = useState<UserProfile>(() => {
     const saved = localStorage.getItem('userProfile');
     if (saved) {
@@ -175,8 +188,24 @@ function AppContent() {
   const showToast = (message: string, type: ToastType) => setToast({ message, type });
 
   const addNotification = (msg: string) => {
-    setNotifications(prev => [{ id: Date.now().toString(), message: msg, time: 'Vừa xong', read: false }, ...prev]);
+    setNotifications(prev => [
+      { id: `${Date.now()}-${Math.random().toString(36).slice(2)}`, message: msg, time: new Date().toISOString(), read: false },
+      ...prev,
+    ].slice(0, 50));
   };
+
+  const notifyActivity = (message: string, type: ToastType = 'success') => {
+    showToast(message, type);
+    addNotification(message);
+  };
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(NOTIFICATIONS_STORAGE_KEY, JSON.stringify(notifications));
+    } catch (error) {
+      console.error('Failed to save notifications:', error);
+    }
+  }, [notifications]);
 
   const handleLogout = () => {
     void logOut();
@@ -253,23 +282,21 @@ function AppContent() {
             <TopBar 
               currentView={currentView} 
               onViewChange={setCurrentView} 
-              onPublish={() => { 
-                showToast('Khảo sát mới đã được đăng lên bảng điều khiển!', 'success');
-                addNotification('Bạn vừa xuất bản một khảo sát mới');
-              }} 
+              onPublish={() => notifyActivity('Hãy dùng nút Xuất bản ở thanh cuối trình tạo để đăng khảo sát.', 'info')}
               userProfile={userProfile} 
               notifications={notifications}
+              onMarkRead={id => setNotifications(prev => prev.map(notification => notification.id === id ? { ...notification, read: true } : notification))}
               onMarkAllRead={() => setNotifications(prev => prev.map(n => ({ ...n, read: true })))}
               onMenuClick={() => setIsMobileMenuOpen(true)}
             />
             <main className="flex-1 overflow-y-auto relative bg-surface-background">
               <Suspense fallback={<AppFallback />}>
                 {currentView === 'dashboard' && <Dashboard onViewChange={setCurrentView} userProfile={userProfile} onShowToast={showToast} onAddNotification={addNotification} />}
-                {currentView === 'templates' && <Templates onViewChange={setCurrentView} />}
-                {currentView === 'analytics' && <Analytics />}
-                {currentView === 'teams' && <Teams />}
+                {currentView === 'templates' && <Templates onViewChange={setCurrentView} onFeedback={notifyActivity} />}
+                {currentView === 'analytics' && <Analytics onFeedback={notifyActivity} />}
+                {currentView === 'teams' && <Teams onFeedback={notifyActivity} />}
                 {currentView === 'settings' && <Settings profile={userProfile} onUpdateProfile={setUserProfile} onClose={() => setCurrentView('dashboard')} onShowToast={showToast} onAddNotification={addNotification} />}
-                {currentView === 'builder' && <Builder onPublished={() => { showToast('Khảo sát đã được xuất bản thành công!', 'success'); addNotification('Bạn vừa xuất bản một khảo sát mới'); setCurrentView('dashboard'); }} onUpdated={() => { showToast('Đã cập nhật khảo sát thành công!', 'success'); addNotification('Bạn vừa cập nhật một khảo sát'); setCurrentView('dashboard'); }} onDraftSaved={() => { showToast('Đã lưu bản nháp!', 'success'); setCurrentView('dashboard'); }} onError={(msg) => showToast(msg, 'error')} />}
+                {currentView === 'builder' && <Builder onPublished={() => { notifyActivity('Khảo sát đã được xuất bản thành công!'); setCurrentView('dashboard'); }} onUpdated={() => { notifyActivity('Đã cập nhật khảo sát thành công!'); setCurrentView('dashboard'); }} onDraftSaved={() => { notifyActivity('Đã lưu bản nháp!'); setCurrentView('dashboard'); }} onError={(msg) => notifyActivity(msg, 'error')} onActivity={message => notifyActivity(message)} />}
               </Suspense>
             </main>
           </div>

@@ -40,7 +40,7 @@ const toDateTimeLocalValue = (value: string | null | undefined) => {
 
 const roundScore = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
 
-export function Builder({ onPublished, onUpdated, onDraftSaved, onError }: { onPublished?: () => void; onUpdated?: () => void; onDraftSaved?: () => void; onError?: (msg: string) => void }) {
+export function Builder({ onPublished, onUpdated, onDraftSaved, onError, onActivity }: { onPublished?: () => void; onUpdated?: () => void; onDraftSaved?: () => void; onError?: (msg: string) => void; onActivity?: (message: string) => void }) {
   const { parseDocx, createSurvey, updateSurvey, currentSurvey, setCurrentSurvey, isLoading, pendingTemplate, clearPendingTemplate, chatWithAI, fetchDrafts, saveDraft, deleteDraft } = useSurvey();
   const DRAFT_STORAGE_KEY = 'smart-survey-hub-builder-draft';
   const LEGACY_DRAFT_STORAGE_KEY = 'smart-survey-hub-drafts';
@@ -415,6 +415,8 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError }: { onP
       setDraftId(saved.id || draft.id);
       setDraftSavedAt(new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }));
       onDraftSaved?.();
+    } catch (error) {
+      onError?.(error instanceof Error ? error.message : 'Không thể lưu bản nháp. Vui lòng thử lại.');
     } finally {
       setIsSavingDraft(false);
     }
@@ -431,6 +433,7 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError }: { onP
       if (result.questions.length > 0) {
         setActiveQuestionId(result.questions[0].id);
       }
+      onActivity?.(`AI đã tạo ${result.questions.length} câu hỏi cho khảo sát.`);
     } catch (err: any) {
       if (onError) onError(err.message || 'Đã xảy ra lỗi khi phân tích. Vui lòng thử lại.');
     }

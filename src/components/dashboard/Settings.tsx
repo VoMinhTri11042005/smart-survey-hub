@@ -18,6 +18,10 @@ export function Settings({ profile, onUpdateProfile, onClose, onShowToast, onAdd
   const [isBackupBusy, setIsBackupBusy] = useState(false);
   const [backupMessage, setBackupMessage] = useState('');
   const backupInput = useRef<HTMLInputElement>(null);
+  const reportActivity = (message: string, type: ToastType) => {
+    onShowToast?.(message, type);
+    onAddNotification?.(message);
+  };
 
   const downloadBackup = async () => {
     setIsBackupBusy(true);
@@ -32,12 +36,14 @@ export function Settings({ profile, onUpdateProfile, onClose, onShowToast, onAdd
       link.download = `smart-survey-hub-backup-${new Date().toISOString().slice(0, 10)}.json`;
       link.click();
       window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-      setBackupMessage('Đã tải bản sao lưu. Hãy lưu tệp an toàn vì tệp chứa dữ liệu khảo sát và phản hồi.');
+      const message = 'Đã tải bản sao lưu. Hãy lưu tệp an toàn vì tệp chứa dữ liệu khảo sát và phản hồi.';
+      setBackupMessage(message);
+      reportActivity('Đã tải bản sao lưu dữ liệu.', 'success');
     } catch (error) {
       console.error('Backup download failed:', error);
       const message = error instanceof Error ? error.message : 'Không thể tải bản sao lưu.';
       setBackupMessage(message);
-      onShowToast?.(message, 'error');
+      reportActivity(message, 'error');
     } finally {
       setIsBackupBusy(false);
     }
@@ -48,7 +54,9 @@ export function Settings({ profile, onUpdateProfile, onClose, onShowToast, onAdd
     event.target.value = '';
     if (!file) return;
     if (file.size > 10 * 1024 * 1024) {
-      setBackupMessage('Tệp sao lưu vượt quá giới hạn 10 MB.');
+      const message = 'Tệp sao lưu vượt quá giới hạn 10 MB.';
+      setBackupMessage(message);
+      reportActivity(message, 'error');
       return;
     }
     if (!window.confirm('Khôi phục bằng cách gộp các bản ghi còn thiếu. Dữ liệu hiện tại không bị ghi đè. Bạn có muốn tiếp tục?')) return;
@@ -69,12 +77,13 @@ export function Settings({ profile, onUpdateProfile, onClose, onShowToast, onAdd
       const result = await response.json().catch(() => null);
       if (!response.ok) throw new Error(result?.error || 'Không thể khôi phục bản sao lưu.');
       setBackupMessage('Khôi phục thành công. Đang tải lại dữ liệu...');
+      reportActivity('Đã khôi phục dữ liệu từ bản sao lưu.', 'success');
       window.setTimeout(() => window.location.reload(), 1200);
     } catch (error) {
       console.error('Backup restore failed:', error);
       const message = error instanceof Error ? error.message : 'Không thể khôi phục bản sao lưu.';
       setBackupMessage(message);
-      onShowToast?.(message, 'error');
+      reportActivity(message, 'error');
     } finally {
       setIsBackupBusy(false);
     }
@@ -93,15 +102,14 @@ export function Settings({ profile, onUpdateProfile, onClose, onShowToast, onAdd
       
       if (res.ok) {
         onUpdateProfile(formData);
-        if (onShowToast) onShowToast('Cập nhật thông tin và đồng bộ thành công!', 'success');
-        if (onAddNotification) onAddNotification('Bạn vừa cập nhật thông tin cá nhân');
+        reportActivity('Cập nhật thông tin và đồng bộ thành công!', 'success');
         if (onClose) onClose();
       } else {
-        if (onShowToast) onShowToast('Lỗi khi đồng bộ!', 'error');
+        reportActivity('Lỗi khi đồng bộ!', 'error');
       }
     } catch (error) {
       console.error(error);
-      if (onShowToast) onShowToast('Lỗi kết nối mạng!', 'error');
+      reportActivity('Lỗi kết nối mạng!', 'error');
     } finally {
       setIsSaving(false);
     }
