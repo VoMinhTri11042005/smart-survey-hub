@@ -847,10 +847,15 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError }: { onP
                               >
                                 <GripVertical size={16} />
                               </span>
+                              {q.type === 'dropdown' && (
+                                <span className="flex-shrink-0 w-5 text-center text-sm font-medium text-text-secondary" aria-label={`Lựa chọn ${optIdx + 1}`}>
+                                  {optIdx + 1}.
+                                </span>
+                              )}
                               {isQuiz && (q.type === 'single_choice' || q.type === 'multiple_choice' || q.type === 'dropdown') ? (
                                <button
                                  onClick={(e) => { e.stopPropagation(); toggleCorrectAnswer(q.id, opt); }}
-                                 className={`flex-shrink-0 w-5 h-5 ${q.type === 'multiple_choice' ? 'rounded-md' : 'rounded-full'} border-2 flex items-center justify-center transition-colors cursor-pointer ${
+                                 className={`flex-shrink-0 w-5 h-5 ${q.type === 'multiple_choice' || q.type === 'dropdown' ? 'rounded-md' : 'rounded-full'} border-2 flex items-center justify-center transition-colors cursor-pointer ${
                                    ((q.type === 'single_choice' || q.type === 'dropdown') && q.correctAnswer === opt) || (q.type === 'multiple_choice' && Array.isArray(q.correctAnswer) && q.correctAnswer.includes(opt))
                                      ? 'border-sentiment-positive bg-sentiment-positive text-white' 
                                      : 'border-text-secondary hover:border-sentiment-positive'
@@ -862,9 +867,11 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError }: { onP
                                  )}
                                </button>
                              ) : (
-                               q.type === 'multiple_choice' || q.type === 'checkbox_grid'
-                                 ? <CheckSquare size={18} className="text-text-secondary flex-shrink-0" />
-                                 : <CircleDot size={18} className="text-text-secondary flex-shrink-0" />
+                               q.type === 'dropdown'
+                                 ? null
+                                 : q.type === 'multiple_choice' || q.type === 'checkbox_grid'
+                                   ? <CheckSquare size={18} className="text-text-secondary flex-shrink-0" />
+                                   : <CircleDot size={18} className="text-text-secondary flex-shrink-0" />
                              )}
                              <div className="flex-1 min-w-0 quill-option quill-smart-toolbar">
                                <ReactQuill
