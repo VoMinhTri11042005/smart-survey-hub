@@ -22,7 +22,6 @@ function normalizeSavedStarRatings(survey: Survey, source: Record<string, any>) 
   return normalized;
 }
 
-const roundScore = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
 const DEFAULT_SCREEN_OUT_MESSAGE = 'Cảm ơn bạn đã tham gia. Dựa trên câu trả lời của bạn, bạn không thuộc đối tượng khảo sát này.';
 
 export function Respondent({ survey, onExit, onComplete, isPublic = false }: RespondentProps) {
@@ -438,48 +437,16 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
     setIsSubmitting(true);
     try {
       const submittedAnswers = answerOverrides ?? answers;
-      let score: number | undefined = undefined;
-      let totalQ: number | undefined = undefined;
-
-      if (survey?.isQuiz && !isScreenOutResponse) {
-        score = 0;
-        totalQ = 0;
-        survey.questions.forEach(q => {
-          if (q.type === 'single_choice' || q.type === 'dropdown') {
-            const hasCorrect = typeof q.correctAnswer === 'string' && q.correctAnswer.trim().length > 0;
-            if (hasCorrect) {
-              const qPoints = typeof q.points === 'number' && q.points > 0 ? q.points : 1;
-              totalQ! += qPoints;
-              const userAnswer = submittedAnswers[q.id];
-              if (typeof userAnswer === 'string' && userAnswer === q.correctAnswer) {
-                score! += qPoints;
-              }
-            }
-          } else if (q.type === 'multiple_choice') {
-            const hasCorrect = Array.isArray(q.correctAnswer) && q.correctAnswer.length > 0;
-            if (hasCorrect) {
-              const qPoints = typeof q.points === 'number' && q.points > 0 ? q.points : 1;
-              totalQ! += qPoints;
-              const userAnswer = submittedAnswers[q.id];
-              if (Array.isArray(userAnswer) && userAnswer.length === q.correctAnswer.length) {
-                const sortedUser = [...userAnswer].sort();
-                const sortedCorrect = [...q.correctAnswer].sort();
-                if (sortedUser.every((val, idx) => val === sortedCorrect[idx])) {
-                  score! += qPoints;
-                }
-              }
-            }
-          }
-        });
-        setQuizScore(roundScore(score));
-        setQuizTotal(roundScore(totalQ));
-      }
 
       const normalizedAnswers = normalizeSavedStarRatings(survey, submittedAnswers);
       if (Object.keys(normalizedAnswers).some(key => normalizedAnswers[key] !== submittedAnswers[key])) {
         setAnswers(normalizedAnswers);
       }
-      await submitResponse(survey.id, respondentId, normalizedAnswers, score === undefined ? score : roundScore(score), totalQ === undefined ? totalQ : roundScore(totalQ));
+      const submittedResponse = await submitResponse(survey.id, respondentId, normalizedAnswers);
+      if (survey?.isQuiz && !isScreenOutResponse) {
+        setQuizScore(typeof submittedResponse.score === 'number' ? submittedResponse.score : 0);
+        setQuizTotal(typeof submittedResponse.totalQuizQuestions === 'number' ? submittedResponse.totalQuizQuestions : 0);
+      }
 
       const deviceKey = `survey-device-attempts:${survey.id}`;
       const deviceId = getDeviceId();

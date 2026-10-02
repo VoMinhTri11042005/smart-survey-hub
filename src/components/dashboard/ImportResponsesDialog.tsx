@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { AlertTriangle, CheckCircle2, FileSpreadsheet, Loader2, Upload, X } from 'lucide-react';
 import type { QuestionType, Survey, SurveyAnswer, SurveyQuestion } from '../../types';
 import { stripHtml, toUnaccented } from '../../utils/stringUtils';
+import { API_BASE, apiFetch } from '../../utils/api';
 
 interface ImportedResponse {
   answers: Record<string, SurveyAnswer>;
@@ -25,9 +26,6 @@ const QUESTION_TYPES: { value: QuestionType; label: string }[] = [
   { value: 'text', label: 'Văn bản' },
 ];
 
-let apiBase = import.meta.env.VITE_API_URL;
-if (apiBase && !apiBase.endsWith('/api')) apiBase = apiBase.endsWith('/') ? `${apiBase}api` : `${apiBase}/api`;
-const API_BASE = apiBase || (import.meta.env.PROD ? 'https://smart-survey-hub.onrender.com/api' : '/api');
 const normalize = (value: string) => toUnaccented(stripHtml(value)).trim().toLocaleLowerCase('vi-VN').replace(/\s+/g, ' ');
 const isBlank = (value: unknown) => value === undefined || value === null || String(value).trim() === '';
 
@@ -345,7 +343,7 @@ export function ImportResponsesDialog({ surveys, onClose, onImported }: Props) {
       if (new TextEncoder().encode(body).byteLength > 9 * 1024 * 1024) {
         throw new Error('Dữ liệu sau khi chuyển đổi vượt giới hạn gửi lên máy chủ. Hãy chia file thành các phần nhỏ hơn.');
       }
-      const response = await fetch(`${API_BASE}/surveys/import-responses`, {
+      const response = await apiFetch(`${API_BASE}/surveys/import-responses`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body,

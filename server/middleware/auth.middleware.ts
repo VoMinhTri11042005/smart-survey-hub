@@ -1,11 +1,6 @@
-/**
- * Firebase Authentication middleware.
- * Uses Firebase Admin SDK when FIREBASE_SERVICE_ACCOUNT is configured.
- * Gracefully degrades: if no key is set, all requests pass through.
- */
 import type { Request, Response, NextFunction } from 'express';
+import type { Auth } from 'firebase-admin/auth';
 
-// Extend Express Request
 declare global {
   namespace Express {
     interface Request {
@@ -14,79 +9,101 @@ declare global {
   }
 }
 
-let adminAuth: any = null;
-let initAttempted = false;
+let adminAuthPromise: Promise<Auth | null> | null = null;
 
-async function getAdminAuth() {
-  if (initAttempted) return adminAuth;
-  initAttempted = true;
+function getAdminAuth(): Promise<Auth | null> {
+  if (!adminAuthPromise) {
+    adminAuthPromise = (async () => {
+      const serviceAccount = process.env.FIREBASE_SERVICE_ACCOUNT;
+      if (!serviceAccount) {
+        console.log('ℹ️ FIREBASE_SERVICE_ACCOUNT not set — auth is disabled in development.');
+        return null;
+      }
 
-  const serviceAccount = process.env.FIREBASE_SERVICE_ACCOUNT;
-  if (!serviceAccount) {
-    console.log('ℹ️  FIREBASE_SERVICE_ACCOUNT not set — auth middleware disabled (all requests allowed).');
-    return null;
+      try {
+        const [{ cert, initializeApp, getApps }, { getAuth }] = await Promise.all([
+          import('firebase-admin/app'),
+          import('firebase-admin/auth'),
+        ]);
+        if (getApps().length === 0) {
+          initializeApp({ credential: cert(JSON.parse(serviceAccount)) });
+        }
+        console.log('✅ Firebase Admin SDK initialized.');
+        return getAuth();
+      } catch (error) {
+        console.error('Failed to initialize Firebase Admin SDK:', error);
+        return null;
+      }
+    })();
   }
+  return adminAuthPromise;
+}
 
-  try {
-    const { cert, initializeApp, getApps } = await import('firebase-admin/app');
-    const { getAuth } = await import('firebase-admin/auth');
+export async function assertAuthConfiguration() {
+  if (process.env.NODE_ENV !== 'production') return;
+  if (!process.env.FIREBASE_SERVICE_ACCOUNT) {
+    throw new Error('FIREBASE_SERVICE_ACCOUNT is required in production.');
+  }
+  if (!process.env.ADMIN_EMAILS?.split(',').some(email => email.trim())) {
+    throw new Error('ADMIN_EMAILS must contain at least one administrator in production.');
+  }
+  if (!await getAdminAuth()) {
+    throw new Error('Firebase Admin could not be initialized; refusing to start without API authentication.');
+  }
+}
 
-    if (getApps().length === 0) {
-      const parsed = JSON.parse(serviceAccount);
-      initializeApp({ credential: cert(parsed) });
+async function authenticate(req: Request, res: Response) {
+  const auth = await getAdminAuth();
+  if (!auth) {
+    if (process.env.NODE_ENV === 'production') {
+      res.status(503).json({ error: 'Dịch vụ xác thực chưa được cấu hình.' });
+      return false;
     }
-    adminAuth = getAuth();
-    console.log('✅ Firebase Admin SDK initialized — API authentication enabled.');
-    return adminAuth;
-  } catch (err) {
-    console.warn('⚠️  Failed to initialize Firebase Admin SDK:', (err as Error).message);
-    return null;
+    return true;
   }
-}
 
-// Initialize eagerly (non-blocking)
-getAdminAuth();
-
-/**
- * Optional auth: if token exists and is valid, attach user. Otherwise continue.
- */
-export async function optionalAuth(req: Request, _res: Response, next: NextFunction) {
-  const auth = await getAdminAuth();
-  if (!auth) return next();
-
-  const header = req.headers.authorization;
-  if (!header?.startsWith('Bearer ')) return next();
-
-  try {
-    const token = header.split('Bearer ')[1];
-    const decoded = await auth.verifyIdToken(token);
-    req.user = { uid: decoded.uid, email: decoded.email };
-  } catch (_) {
-    // Token invalid — continue without user
-  }
-  next();
-}
-
-/**
- * Required auth: request must have a valid Firebase token.
- * If Firebase Admin is not configured, all requests pass through (backward compatible).
- */
-export async function requireAuth(req: Request, res: Response, next: NextFunction) {
-  const auth = await getAdminAuth();
-  // If admin SDK not configured, skip auth entirely (backward compatible)
-  if (!auth) return next();
-
-  const header = req.headers.authorization;
-  if (!header?.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'Yêu cầu đăng nhập.' });
+  const [scheme, token, ...extra] = (req.headers.authorization || '').split(' ');
+  if (scheme !== 'Bearer' || !token || extra.length > 0) {
+    res.status(401).json({ error: 'Yêu cầu đăng nhập.' });
+    return false;
   }
 
   try {
-    const token = header.split('Bearer ')[1];
     const decoded = await auth.verifyIdToken(token);
     req.user = { uid: decoded.uid, email: decoded.email };
-    next();
-  } catch (_) {
+    return true;
+  } catch {
     res.status(401).json({ error: 'Token không hợp lệ hoặc đã hết hạn.' });
+    return false;
+  }
+}
+
+export async function requireAuth(req: Request, res: Response, next: NextFunction) {
+  try {
+    if (await authenticate(req, res)) next();
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function requireAdmin(req: Request, res: Response, next: NextFunction) {
+  try {
+    if (!await authenticate(req, res)) return;
+    if (process.env.NODE_ENV !== 'production' && !process.env.FIREBASE_SERVICE_ACCOUNT) {
+      next();
+      return;
+    }
+
+    const admins = (process.env.ADMIN_EMAILS || '')
+      .split(',')
+      .map(email => email.trim().toLowerCase())
+      .filter(Boolean);
+    if (!req.user?.email || !admins.includes(req.user.email.toLowerCase())) {
+      res.status(403).json({ error: 'Tài khoản này không có quyền quản trị.' });
+      return;
+    }
+    next();
+  } catch (error) {
+    next(error);
   }
 }

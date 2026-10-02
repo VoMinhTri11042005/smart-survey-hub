@@ -26,6 +26,17 @@ export async function getById(req: Request<{ id: string }>, res: Response, next:
   } catch (err) { next(err); }
 }
 
+export async function getPublicById(req: Request<{ id: string }>, res: Response, next: NextFunction) {
+  try {
+    const survey = await surveyService.getSurveyById(req.params.id);
+    if (!survey) return res.status(404).json({ error: 'Không tìm thấy khảo sát.' });
+    res.json({
+      ...survey,
+      questions: survey.questions.map(({ correctAnswer: _correctAnswer, points: _points, ...question }: any) => question),
+    });
+  } catch (err) { next(err); }
+}
+
 export async function update(req: Request<{ id: string }>, res: Response, next: NextFunction) {
   try {
     const survey = await surveyService.updateSurvey(req.params.id, req.body);

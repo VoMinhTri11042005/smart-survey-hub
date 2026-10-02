@@ -111,12 +111,45 @@ function assertMultipleChoiceLimits(questions: any[], answers: Record<string, un
     if (question.type !== 'multiple_choice') continue;
     const answer = answers?.[question.id];
     if (answer === undefined || answer === null) continue;
-    if (!Array.isArray(answer)) {
+    if (!Array.isArray(answer) || answer.some(value => typeof value !== 'string')) {
       throw Object.assign(new Error(`Câu hỏi "${question.text}" cần có danh sách đáp án.`), { status: 400 });
+    }
+    if (new Set(answer).size !== answer.length || answer.some(value => question.options && !question.options.includes(value))) {
+      throw Object.assign(new Error(`Câu trả lời của "${question.text}" chứa lựa chọn không hợp lệ.`), { status: 400 });
     }
     if (question.maxSelections && answer.length > question.maxSelections) {
       throw Object.assign(new Error(`Câu hỏi "${question.text}" chỉ được chọn tối đa ${question.maxSelections} đáp án.`), { status: 400 });
     }
+  }
+}
+
+function assertRequiredAnswers(questions: any[], answers: Record<string, unknown> | undefined) {
+  const questionIds = new Set((questions || []).map(question => question.id));
+  if (Object.keys(answers || {}).some(id => !questionIds.has(id))) {
+    throw Object.assign(new Error('Câu trả lời chứa câu hỏi không tồn tại.'), { status: 400 });
+  }
+  for (const question of questions || []) {
+    const answer = answers?.[question.id];
+    const empty = answer === undefined
+      || answer === null
+      || (typeof answer === 'string' && answer.trim() === '')
+      || (Array.isArray(answer) && answer.length === 0)
+      || (typeof answer === 'object' && !Array.isArray(answer) && Object.keys(answer).length === 0);
+    if (question.required !== false && empty) {
+      throw Object.assign(new Error(`Vui lòng trả lời câu hỏi "${question.text}".`), { status: 400 });
+    }
+    if (empty) continue;
+    if ((question.type === 'single_choice' || question.type === 'dropdown')
+      && (typeof answer !== 'string' || !question.options?.includes(answer))) {
+      throw Object.assign(new Error(`Câu trả lời không khớp lựa chọn của câu hỏi "${question.text}".`), { status: 400 });
+    }
+    if (question.type === 'nps' && (typeof answer !== 'number' || !Number.isInteger(answer) || answer < 0 || answer > 10)) {
+      throw Object.assign(new Error(`Câu trả lời của "${question.text}" phải là số nguyên từ 0 đến 10.`), { status: 400 });
+    }
+    if (question.type === 'star_rating' && !isIntegerStarRating(answer)) {
+      throw Object.assign(new Error('Đánh giá sao chỉ nhận các mức nguyên từ 1 đến 5.'), { status: 400 });
+    }
+    if (question.type === 'single_choice' && answer === question.screenOutAnswer) break;
   }
 }
 
@@ -285,11 +318,15 @@ export async function deleteSurvey(id: string) {
 // ─── Responses ───
 
 export async function submitResponse(surveyId: string, data: any) {
-  const { respondentId, answers, score, totalQuizQuestions } = data;
+  const { respondentId, answers } = data;
 
   if (!process.env.DATABASE_URL) {
     const survey = inMemorySurveys[surveyId];
     if (!survey) return null;
+    if (survey.status !== 'live' || (survey.closesAt && new Date(survey.closesAt).getTime() <= Date.now())) {
+      throw Object.assign(new Error('Khảo sát đã đóng hoặc chưa được phát hành.'), { status: 410 });
+    }
+    assertRequiredAnswers(survey.questions, answers);
     assertIntegerStarRatings(survey.questions, answers);
     assertMultipleChoiceLimits(survey.questions, answers);
     assertAdditionalQuestionAnswers(survey.questions, answers);
@@ -299,9 +336,6 @@ export async function submitResponse(surveyId: string, data: any) {
     if (survey?.isQuiz && !screenedOut) {
       const computed = computeServerQuizScore(survey.questions, answers || {});
       finalScore = computed.score; finalTotal = computed.totalPossible;
-    } else if (!survey?.isQuiz && score !== undefined && score !== null && Number.isFinite(Number(score))) {
-      finalScore = roundQuizScore(Number(score));
-      finalTotal = totalQuizQuestions !== undefined && totalQuizQuestions !== null && Number.isFinite(Number(totalQuizQuestions)) ? roundQuizScore(Number(totalQuizQuestions)) : null;
     }
     inMemoryResponses[surveyId] = inMemoryResponses[surveyId] || [];
     const existing = inMemoryResponses[surveyId].find((r: any) => r.respondentId === respondentId);
@@ -321,7 +355,11 @@ export async function submitResponse(surveyId: string, data: any) {
   if (surveyResult.rows.length === 0) return null; // survey not found
 
   const survey = surveyResult.rows[0];
+  if (survey.status !== 'live' || (survey.closes_at && new Date(survey.closes_at).getTime() <= Date.now())) {
+    throw Object.assign(new Error('Khảo sát đã đóng hoặc chưa được phát hành.'), { status: 410 });
+  }
   const questions = typeof survey.questions === 'string' ? JSON.parse(survey.questions) : survey.questions;
+  assertRequiredAnswers(questions, answers);
   assertIntegerStarRatings(questions, answers);
   assertMultipleChoiceLimits(questions, answers);
   assertAdditionalQuestionAnswers(questions, answers);
@@ -331,9 +369,6 @@ export async function submitResponse(surveyId: string, data: any) {
   if (survey.is_quiz && !screenedOut) {
     const computed = computeServerQuizScore(questions, answers || {});
     finalScore = computed.score; finalTotal = computed.totalPossible;
-  } else if (!survey.is_quiz && score !== undefined && score !== null && Number.isFinite(Number(score))) {
-    finalScore = roundQuizScore(Number(score));
-    finalTotal = totalQuizQuestions !== undefined && totalQuizQuestions !== null && Number.isFinite(Number(totalQuizQuestions)) ? roundQuizScore(Number(totalQuizQuestions)) : null;
   }
 
   const existingCheck = await pool.query('SELECT id FROM responses WHERE survey_id = $1 AND respondent_id = $2', [surveyId, respondentId]);

@@ -3,6 +3,7 @@
  * All business logic lives in services/survey.service.ts
  */
 import { Router } from 'express';
+import { requireAdmin } from '../middleware/auth.middleware';
 import { validate } from '../middleware/validate';
 import { CreateSurveySchema, UpdateSurveySchema, SubmitResponseSchema, SaveDraftSchema, ImportResponsesSchema } from '../validators/survey.validator';
 import * as surveyCtrl from '../controllers/survey.controller';
@@ -21,28 +22,28 @@ function requireDestructiveConfirmation(action: string) {
   };
 }
 
-// ─── Surveys CRUD ───
-router.post('/surveys', validate(CreateSurveySchema), surveyCtrl.create);
-router.get('/surveys', surveyCtrl.list);
-
 // Specific draft paths must be registered before /surveys/:id.
-router.get('/surveys/drafts', draftCtrl.list);
-router.post('/surveys/drafts', validate(SaveDraftSchema), draftCtrl.save);
-router.delete('/surveys/drafts/:id', requireDestructiveConfirmation('delete-draft'), draftCtrl.remove);
+router.get('/surveys/drafts', requireAdmin, draftCtrl.list);
+router.post('/surveys/drafts', requireAdmin, validate(SaveDraftSchema), draftCtrl.save);
+router.delete('/surveys/drafts/:id', requireAdmin, requireDestructiveConfirmation('delete-draft'), draftCtrl.remove);
 
-// ─── Responses ───
-router.post('/surveys/import-responses', validate(ImportResponsesSchema), responseCtrl.importBatch);
+// Public survey read strips quiz answer keys. Response reads remain admin-only.
+router.get('/surveys/:id', surveyCtrl.getPublicById);
 router.post('/surveys/:id/responses', validate(SubmitResponseSchema), responseCtrl.submit);
-router.get('/surveys/:id/responses', responseCtrl.list);
 router.get('/surveys/:id/responses/my/:respondentId', responseCtrl.getMine);
-router.delete('/surveys/:id/responses', requireDestructiveConfirmation('reset-responses'), responseCtrl.reset);
 
-router.get('/surveys/:id', surveyCtrl.getById);
-router.put('/surveys/:id', validate(UpdateSurveySchema), surveyCtrl.update);
-router.delete('/surveys/:id', requireDestructiveConfirmation('delete-survey'), surveyCtrl.remove);
+// ─── Admin management ───
+router.post('/surveys', requireAdmin, validate(CreateSurveySchema), surveyCtrl.create);
+router.get('/surveys', requireAdmin, surveyCtrl.list);
+router.get('/admin/surveys/:id', requireAdmin, surveyCtrl.getById);
+router.put('/surveys/:id', requireAdmin, validate(UpdateSurveySchema), surveyCtrl.update);
+router.delete('/surveys/:id', requireAdmin, requireDestructiveConfirmation('delete-survey'), surveyCtrl.remove);
+router.post('/surveys/import-responses', requireAdmin, validate(ImportResponsesSchema), responseCtrl.importBatch);
+router.get('/surveys/:id/responses', requireAdmin, responseCtrl.list);
+router.delete('/surveys/:id/responses', requireAdmin, requireDestructiveConfirmation('reset-responses'), responseCtrl.reset);
 
 // ─── Backup ───
-router.get('/backup/export', backupCtrl.exportData);
-router.post('/backup/import', requireDestructiveConfirmation('import-backup'), backupCtrl.importData);
+router.get('/backup/export', requireAdmin, backupCtrl.exportData);
+router.post('/backup/import', requireAdmin, requireDestructiveConfirmation('import-backup'), backupCtrl.importData);
 
 export default router;

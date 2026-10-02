@@ -12,6 +12,8 @@ import { Toast, ToastType } from './components/common/Toast';
 import { AnimatePresence } from 'motion/react';
 import { SurveyProvider, useSurvey } from './context/SurveyContext';
 import { Sparkles } from 'lucide-react';
+import { API_BASE, apiFetch } from './utils/api';
+import { logOut, onAuthChange } from './services/firebase';
 
 const Dashboard = lazy(() => import('./components/dashboard/Dashboard').then((m) => ({ default: m.Dashboard })));
 const Analytics = lazy(() => import('./components/dashboard/Analytics').then((m) => ({ default: m.Analytics })));
@@ -34,30 +36,8 @@ const AppFallback = () => (
 );
 
 function AppContent() {
-  const [isAuthenticated, setIsAuthenticated] = useState(() => {
-    // Clear any previous persistent login from localStorage so exiting the browser requires logging in again
-    try {
-      localStorage.removeItem('isAuthenticated');
-      localStorage.removeItem('userRole');
-    } catch (_) {}
-    return sessionStorage.getItem('isAuthenticated') === 'true';
-  });
-  const [userRole, setUserRole] = useState<Role | null>(() => {
-    return (sessionStorage.getItem('userRole') as Role) || null;
-  });
-
-  useEffect(() => {
-    if (isAuthenticated) {
-      sessionStorage.setItem('isAuthenticated', 'true');
-    } else {
-      sessionStorage.removeItem('isAuthenticated');
-    }
-    if (userRole) {
-      sessionStorage.setItem('userRole', userRole);
-    } else {
-      sessionStorage.removeItem('userRole');
-    }
-  }, [isAuthenticated, userRole]);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [userRole, setUserRole] = useState<Role | null>(null);
   const [currentView, setCurrentView] = useState<View>(() => {
     return (localStorage.getItem('currentView') as View) || 'dashboard';
   });
@@ -85,15 +65,10 @@ function AppContent() {
 
   // Fetch user profile from DB on load
   useEffect(() => {
+    if (!isAuthenticated) return;
     const fetchUserProfile = async () => {
       try {
-        let envApi = (import.meta as any).env.VITE_API_URL;
-        if (envApi && !envApi.endsWith('/api')) {
-          envApi = envApi.endsWith('/') ? envApi + 'api' : envApi + '/api';
-        }
-        const apiBase = envApi || '/api';
-        
-        const response = await fetch(`${apiBase}/user/admin`);
+        const response = await apiFetch(`${API_BASE}/user/admin`);
         if (response.ok) {
           const contentType = response.headers.get('content-type');
           if (contentType && contentType.includes('application/json')) {
@@ -107,7 +82,7 @@ function AppContent() {
       }
     };
     fetchUserProfile();
-  }, []);
+  }, [isAuthenticated]);
 
   useEffect(() => {
     try {
@@ -135,6 +110,32 @@ function AppContent() {
 
   const { fetchSurveyById, currentSurvey, setCurrentSurvey } = useSurvey();
 
+  useEffect(() => onAuthChange(user => {
+    if (!user?.email) {
+      setIsAuthenticated(false);
+      setUserRole(null);
+      return;
+    }
+    const allowedEmails = (import.meta.env.VITE_ADMIN_EMAILS || '')
+      .split(',')
+      .map(email => email.trim().toLowerCase())
+      .filter(Boolean);
+    if (!allowedEmails.includes(user.email.toLowerCase())) {
+      void logOut();
+      setIsAuthenticated(false);
+      setUserRole(null);
+      return;
+    }
+    setIsAuthenticated(true);
+    setUserRole('admin');
+    setUserProfile(previous => ({
+      ...previous,
+      name: user.displayName || previous.name,
+      email: user.email || previous.email,
+      photoURL: user.photoURL || previous.photoURL,
+    }));
+  }), []);
+
   useEffect(() => {
     const path = window.location.pathname;
     const match = path.match(/^\/survey\/(.+)$/);
@@ -156,42 +157,14 @@ function AppContent() {
             setShareSurvey(survey);
             setCurrentSurvey(survey);
           } else {
-            const demo = {
-              id: shareSurveyId,
-              title: 'Bản demo: Khảo sát mẫu',
-              description: 'Khảo sát mẫu để thử nghiệm',
-              questions: [
-                { id: 'q1', type: 'single_choice', text: 'Bạn thích màu nào?', options: ['Đỏ', 'Xanh', 'Vàng'], required: true },
-                { id: 'q2', type: 'text', text: 'Lý do?', required: false }
-              ],
-              isQuiz: false,
-              displayMode: 'single',
-              showScore: true,
-              createdAt: new Date().toISOString(),
-              status: 'live'
-            } as any;
-            setShareSurvey(demo);
-            setCurrentSurvey(demo);
+            setShareSurvey(null);
+            setShareError('Không tìm thấy khảo sát hoặc liên kết không còn hợp lệ.');
           }
         })
         .catch(err => {
           console.error('Error loading survey:', err);
-          const demo = {
-            id: shareSurveyId,
-            title: 'Bản demo: Khảo sát mẫu',
-            description: 'Khảo sát mẫu để thử nghiệm',
-            questions: [
-              { id: 'q1', type: 'single_choice', text: 'Bạn thích màu nào?', options: ['Đỏ', 'Xanh', 'Vàng'], required: true },
-              { id: 'q2', type: 'text', text: 'Lý do?', required: false }
-            ],
-            isQuiz: false,
-            displayMode: 'single',
-            showScore: true,
-            createdAt: new Date().toISOString(),
-            status: 'live'
-          } as any;
-          setShareSurvey(demo);
-          setCurrentSurvey(demo);
+          setShareSurvey(null);
+          setShareError('Không thể tải khảo sát. Vui lòng thử lại sau.');
         })
         .finally(() => {
           setIsShareLoading(false);
@@ -206,15 +179,10 @@ function AppContent() {
   };
 
   const handleLogout = () => {
+    void logOut();
     setIsAuthenticated(false);
     setUserRole(null);
     setCurrentView('dashboard');
-    try {
-      sessionStorage.removeItem('isAuthenticated');
-      sessionStorage.removeItem('userRole');
-      localStorage.removeItem('isAuthenticated');
-      localStorage.removeItem('userRole');
-    } catch (_) {}
   };
 
   if (shareSurveyId) {
@@ -261,7 +229,7 @@ function AppContent() {
   return (
     <>
       {(!isAuthenticated || !userRole) ? (
-        <Auth onLogin={(role) => { setIsAuthenticated(true); setUserRole(role); }} />
+        <Auth onLogin={(role, user) => { setIsAuthenticated(true); setUserRole(role); setUserProfile(user); }} />
       ) : (userRole === 'user' || currentView === 'respondent') ? (
         <Suspense fallback={<AppFallback />}>
           <>

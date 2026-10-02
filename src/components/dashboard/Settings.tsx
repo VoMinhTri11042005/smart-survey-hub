@@ -2,6 +2,7 @@ import { useState, type ChangeEvent, type FormEvent } from 'react';
 import { Camera, Save, User, Mail, Briefcase, RefreshCw, X } from 'lucide-react';
 import type { UserProfile } from '../../types';
 import { ToastType } from '../common/Toast';
+import { API_BASE, apiFetch } from '../../utils/api';
 
 interface SettingsProps {
   profile: UserProfile;
@@ -20,13 +21,7 @@ export function Settings({ profile, onUpdateProfile, onClose, onShowToast, onAdd
     setIsSaving(true);
 
     try {
-      let envApi = (import.meta as any).env.VITE_API_URL;
-      if (envApi && !envApi.endsWith('/api')) {
-        envApi = envApi.endsWith('/') ? envApi + 'api' : envApi + '/api';
-      }
-      const apiBase = envApi || '/api';
-
-      const res = await fetch(`${apiBase}/user`, {
+      const res = await apiFetch(`${API_BASE}/user`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: 'admin', ...formData })

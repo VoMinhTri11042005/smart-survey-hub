@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react';
 import type { Survey, SurveyAnswer, SurveyQuestion, SurveyResponse, SurveySection, SurveyTemplateData, TeamMember, TeamRole, SurveyDisplayMode } from '../types';
+import { API_BASE, apiFetch } from '../utils/api';
 
 interface SurveyDraft {
   id: string;
@@ -26,7 +27,7 @@ interface SurveyContextType {
   drafts: SurveyDraft[];
 
   fetchSurveys: () => Promise<void>;
-  fetchSurveyById: (id: string) => Promise<Survey | null>;
+  fetchSurveyById: (id: string, includeAnswerKey?: boolean) => Promise<Survey | null>;
   createSurvey: (survey: Omit<Survey, 'id' | 'createdAt' | 'status'> & { status?: string; closesAt?: string | null; displayMode?: SurveyDisplayMode }) => Promise<Survey>;
   updateSurvey: (id: string, survey: Omit<Survey, 'id' | 'createdAt' | 'status'> & { status?: string; closesAt?: string | null; displayMode?: SurveyDisplayMode }) => Promise<Survey>;
   deleteSurvey: (id: string) => Promise<void>;
@@ -36,7 +37,7 @@ interface SurveyContextType {
   saveDraft: (draft: Partial<SurveyDraft> & { title?: string; description?: string; questions?: SurveyQuestion[] }) => Promise<SurveyDraft>;
   deleteDraft: (id: string) => Promise<void>;
 
-  submitResponse: (surveyId: string, respondentId: string, answers: Record<string, SurveyAnswer>, score?: number, totalQuizQuestions?: number) => Promise<void>;
+  submitResponse: (surveyId: string, respondentId: string, answers: Record<string, SurveyAnswer>) => Promise<SurveyResponse>;
   fetchResponses: (surveyId: string) => Promise<SurveyResponse[]>;
   fetchMyResponse: (surveyId: string, respondentId: string) => Promise<SurveyResponse | null>;
   resetResponses: (surveyId: string) => Promise<number>;
@@ -54,15 +55,6 @@ interface SurveyContextType {
 }
 
 const SurveyContext = createContext<SurveyContextType | null>(null);
-
-let envApi = (import.meta as any).env.VITE_API_URL;
-if (envApi && !envApi.endsWith('/api')) {
-  envApi = envApi.endsWith('/') ? envApi + 'api' : envApi + '/api';
-}
-// Vercel hosts the frontend while the persistent API/database run on Render.
-// Keep a production fallback so drafts do not silently fall back to per-device localStorage
-// when VITE_API_URL is not injected into the Vercel build.
-const API_BASE = envApi || (import.meta.env.PROD ? 'https://smart-survey-hub.onrender.com/api' : '/api');
 
 export function SurveyProvider({ children }: { children: ReactNode }) {
   const [surveys, setSurveys] = useState<Survey[]>(() => {
@@ -154,7 +146,7 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
 
   const fetchSurveys = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE}/surveys`);
+      const res = await apiFetch(`${API_BASE}/surveys`);
       if (res.ok) {
         const contentType = res.headers.get('content-type');
         if (contentType && !contentType.includes('application/json')) {
@@ -183,9 +175,10 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const fetchSurveyById = useCallback(async (id: string): Promise<Survey | null> => {
+  const fetchSurveyById = useCallback(async (id: string, includeAnswerKey = false): Promise<Survey | null> => {
     try {
-      const res = await fetch(`${API_BASE}/surveys/${id}`);
+      const endpoint = includeAnswerKey ? `/admin/surveys/${id}` : `/surveys/${id}`;
+      const res = await apiFetch(`${API_BASE}${endpoint}`);
       if (res.ok) {
         const contentType = res.headers.get('content-type');
         if (contentType && !contentType.includes('application/json')) {
@@ -203,9 +196,11 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
           timeLimitMinutes: survey.timeLimitMinutes ?? survey.time_limit_minutes ?? null,
         };
       }
-      return null;
+      if (res.status === 404) return null;
+      throw new Error(`Failed to fetch survey (${res.status})`);
     } catch (error) {
       console.error('Error fetching survey by id from API:', error);
+      if (import.meta.env.PROD) throw error;
       // Fallback
       const saved = localStorage.getItem('surveys');
       if (saved) {
@@ -221,7 +216,7 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
 
   const createSurvey = useCallback(async (surveyData: Omit<Survey, 'id' | 'createdAt' | 'status'> & { status?: string; closesAt?: string | null; displayMode?: SurveyDisplayMode }): Promise<Survey> => {
     try {
-      const res = await fetch(`${API_BASE}/surveys`, {
+      const res = await apiFetch(`${API_BASE}/surveys`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -240,6 +235,7 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
       return survey;
     } catch (error) {
       console.error('Error creating survey via API:', error);
+      if (import.meta.env.PROD) throw error;
 
       const newSurvey: Survey = {
         ...surveyData,
@@ -270,7 +266,7 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
       maxAttemptsPerDevice: surveyData.maxAttemptsPerDevice ?? null,
       timeLimitMinutes: surveyData.timeLimitMinutes ?? null,
     };
-    const res = await fetch(`${API_BASE}/surveys/${id}`, {
+    const res = await apiFetch(`${API_BASE}/surveys/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -284,7 +280,7 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
 
   const fetchDrafts = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE}/surveys/drafts`);
+      const res = await apiFetch(`${API_BASE}/surveys/drafts`);
       if (!res.ok) {
         const localDrafts = readLocalDrafts();
         setDrafts(localDrafts);
@@ -319,7 +315,7 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
     };
 
     try {
-      const res = await fetch(`${API_BASE}/surveys/drafts`, {
+      const res = await apiFetch(`${API_BASE}/surveys/drafts`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -333,6 +329,7 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
       return saved;
     } catch (error) {
       console.error('Error saving draft:', error);
+      if (import.meta.env.PROD) throw error;
       const fallback = { ...payload, updatedAt: new Date().toISOString() };
       const key = 'smart-survey-hub-builder-draft';
       const legacyKey = 'smart-survey-hub-drafts';
@@ -359,12 +356,11 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const deleteDraft = useCallback(async (id: string) => {
-    // Server deletion is best-effort: a draft may exist only in local fallback
-    // storage (or already be deleted remotely), but must still disappear here.
     try {
-      const res = await fetch(`${API_BASE}/surveys/drafts/${id}`, { method: 'DELETE', headers: { 'X-Confirm-Action': 'delete-draft' } });
-      if (!res.ok && res.status !== 404) console.warn('Draft delete API returned', res.status);
+      const res = await apiFetch(`${API_BASE}/surveys/drafts/${id}`, { method: 'DELETE', headers: { 'X-Confirm-Action': 'delete-draft' } });
+      if (!res.ok && res.status !== 404) throw new Error('Không thể xóa bản nháp trên máy chủ.');
     } catch (error) {
+      if (import.meta.env.PROD) throw error;
       console.warn('Draft delete API unavailable; removing local copy', error);
     }
 
@@ -385,23 +381,24 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const deleteSurvey = useCallback(async (id: string) => {
-    try {
-      await fetch(`${API_BASE}/surveys/${id}`, { method: 'DELETE', headers: { 'X-Confirm-Action': 'delete-survey' } });
-    } catch (e) {
-      console.error('Error deleting survey via API:', e);
-    }
+    const response = await apiFetch(`${API_BASE}/surveys/${id}`, { method: 'DELETE', headers: { 'X-Confirm-Action': 'delete-survey' } });
+    if (!response.ok) throw new Error('Không thể xóa khảo sát.');
     setSurveys(prev => prev.filter(s => s.id !== id));
     if (currentSurvey?.id === id) setCurrentSurvey(null);
   }, [currentSurvey?.id]);
 
-  const submitResponse = useCallback(async (surveyId: string, respondentId: string, answers: Record<string, SurveyAnswer>, score?: number, totalQuizQuestions?: number) => {
+  const submitResponse = useCallback(async (surveyId: string, respondentId: string, answers: Record<string, SurveyAnswer>) => {
     try {
-      const res = await fetch(`${API_BASE}/surveys/${surveyId}/responses`, {
+      const res = await apiFetch(`${API_BASE}/surveys/${surveyId}/responses`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ respondentId, answers, score, totalQuizQuestions })
+        body: JSON.stringify({ respondentId, answers })
       });
-      if (!res.ok) throw new Error('Failed to submit response');
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.error || 'Failed to submit response');
+      }
+      return await res.json() as SurveyResponse;
     } catch (error) {
       console.error('Error submitting response via API:', error);
       throw error;
@@ -410,7 +407,7 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
 
   const fetchMyResponse = useCallback(async (surveyId: string, respondentId: string): Promise<SurveyResponse | null> => {
     try {
-      const res = await fetch(`${API_BASE}/surveys/${surveyId}/responses/my/${respondentId}`);
+      const res = await apiFetch(`${API_BASE}/surveys/${surveyId}/responses/my/${respondentId}`);
       if (res.ok) {
         const contentType = res.headers.get('content-type');
         if (contentType && !contentType.includes('application/json')) {
@@ -427,7 +424,7 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
 
   const fetchResponses = useCallback(async (surveyId: string): Promise<SurveyResponse[]> => {
     try {
-      const res = await fetch(`${API_BASE}/surveys/${surveyId}/responses`);
+      const res = await apiFetch(`${API_BASE}/surveys/${surveyId}/responses`);
       if (res.ok) {
         const contentType = res.headers.get('content-type');
         if (contentType && !contentType.includes('application/json')) {
@@ -443,7 +440,7 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const resetResponses = useCallback(async (surveyId: string): Promise<number> => {
-    const res = await fetch(`${API_BASE}/surveys/${surveyId}/responses`, { method: 'DELETE', headers: { 'X-Confirm-Action': 'reset-responses' } });
+    const res = await apiFetch(`${API_BASE}/surveys/${surveyId}/responses`, { method: 'DELETE', headers: { 'X-Confirm-Action': 'reset-responses' } });
     if (!res.ok) throw new Error('Failed to reset survey responses');
     const data = await res.json();
     return data.deletedCount ?? 0;
@@ -456,7 +453,7 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
       if (file) formData.append('file', file);
       formData.append('topic', topic);
 
-      const res = await fetch(`${API_BASE}/parse-docx`, { method: 'POST', body: formData });
+      const res = await apiFetch(`${API_BASE}/parse-docx`, { method: 'POST', body: formData });
       if (!res.ok) {
         const err = await res.json();
         let errorMsg = err.error || 'Lỗi khi phân tích file';
@@ -489,7 +486,7 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
     currentQuestionIndex?: number
   ): Promise<string> => {
     try {
-      const res = await fetch(`${API_BASE}/chat`, {
+      const res = await apiFetch(`${API_BASE}/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message, surveyTitle, surveyDescription, questions, currentQuestionIndex }),
@@ -518,7 +515,7 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
 
   const fetchTeamMembers = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE}/teams`);
+      const res = await apiFetch(`${API_BASE}/teams`);
       if (res.ok) setTeamMembers(await res.json());
     } catch (error) {
       console.error('Error fetching team:', error);
@@ -526,7 +523,7 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const inviteTeamMember = useCallback(async (name: string, email: string, role: TeamRole): Promise<TeamMember> => {
-    const res = await fetch(`${API_BASE}/teams`, {
+    const res = await apiFetch(`${API_BASE}/teams`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, email, role }),
@@ -541,7 +538,7 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const updateTeamMember = useCallback(async (id: string, updates: { name?: string; role?: TeamRole }): Promise<TeamMember> => {
-    const res = await fetch(`${API_BASE}/teams/${id}`, {
+    const res = await apiFetch(`${API_BASE}/teams/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updates),
@@ -553,7 +550,7 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const removeTeamMember = useCallback(async (id: string) => {
-    await fetch(`${API_BASE}/teams/${id}`, { method: 'DELETE' });
+    await apiFetch(`${API_BASE}/teams/${id}`, { method: 'DELETE' });
     setTeamMembers(prev => prev.filter(m => m.id !== id));
   }, []);
 

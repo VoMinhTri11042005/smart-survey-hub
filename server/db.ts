@@ -86,6 +86,7 @@ export const initDB = async () => {
         status VARCHAR(50) DEFAULT 'draft'
       );
     `);
+    await client.query(`ALTER TABLE surveys ADD COLUMN IF NOT EXISTS sections JSONB NOT NULL DEFAULT '[]'::jsonb;`);
     
     // Create responses table
     await client.query(`

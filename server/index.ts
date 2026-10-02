@@ -7,7 +7,7 @@ import express from 'express';
 import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { requireAuth } from './middleware/auth.middleware';
+import { assertAuthConfiguration, requireAdmin } from './middleware/auth.middleware';
 import { errorHandler } from './middleware/errorHandler';
 import uploadRoutes from './routes/upload.routes';
 import surveyRoutes from './routes/survey.routes';
@@ -26,7 +26,7 @@ const allowedOrigins = (process.env.CORS_ORIGIN || process.env.APP_URL || '')
   .filter(Boolean);
 app.use(cors({
   origin(origin, callback) {
-    if (!origin || allowedOrigins.length === 0 || allowedOrigins.includes(origin)) return callback(null, true);
+    if (!origin || (allowedOrigins.length === 0 && process.env.NODE_ENV !== 'production') || allowedOrigins.includes(origin)) return callback(null, true);
     callback(new Error('Origin không được phép truy cập API.'));
   },
 }));
@@ -38,14 +38,13 @@ app.get('/api/health', (_req, res) => {
 });
 
 // ─── Routes ───
-// All routes are mounted under /api. Auth middleware is applied at the router
-// level inside each route file where needed. The requireAuth middleware
-// gracefully degrades when FIREBASE_SERVICE_ACCOUNT is not configured.
+// All routes are mounted under /api. Public survey read/submission routes are
+// explicitly public; management routes enforce the administrator allowlist.
 app.use('/api', surveyRoutes);
-app.use('/api', requireAuth, uploadRoutes);
-app.use('/api', requireAuth, chatRoutes);
-app.use('/api', requireAuth, teamRoutes);
-app.use('/api', userRoutes);
+app.use('/api', requireAdmin, uploadRoutes);
+app.use('/api', requireAdmin, chatRoutes);
+app.use('/api', requireAdmin, teamRoutes);
+app.use('/api', requireAdmin, userRoutes);
 
 // ─── Serve Frontend in Production ───
 const __filename = fileURLToPath(import.meta.url);
@@ -69,6 +68,10 @@ app.use(errorHandler);
 
 // ─── Start Server ───
 async function startServer() {
+  await assertAuthConfiguration();
+  if (process.env.NODE_ENV === 'production' && allowedOrigins.length === 0) {
+    throw new Error('CORS_ORIGIN or APP_URL must contain the frontend origin in production.');
+  }
   await initDB();
   app.listen(PORT, () => {
     console.log(`\n🚀 Smart Survey Hub API running on http://localhost:${PORT}`);

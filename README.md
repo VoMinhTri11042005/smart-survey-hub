@@ -75,8 +75,15 @@ Import chỉ thêm phản hồi; không cập nhật hay xóa response hiện c�
    - `NODE_ENV=production`
    - `PORT=3001`
    - `GEMINI_API_KEY=...`
-   - `DATABASE_URL=...` (nếu dùng PostgreSQL)
+   - `DATABASE_URL=...` (PostgreSQL)
+   - `FIREBASE_SERVICE_ACCOUNT=...` (JSON service account Firebase, lưu dưới dạng secret)
+   - `ADMIN_EMAILS=admin@example.com` (email quản trị, nhiều email phân tách bằng dấu phẩy)
+   - `VITE_ADMIN_EMAILS=admin@example.com` (phải khớp `ADMIN_EMAILS`; được nhúng vào frontend lúc build)
+   - Các biến Firebase client `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID`, `VITE_FIREBASE_STORAGE_BUCKET`, `VITE_FIREBASE_MESSAGING_SENDER_ID` và `VITE_FIREBASE_APP_ID`
+   - `CORS_ORIGIN=https://your-app.vercel.app` (origin frontend; nhiều origin phân tách bằng dấu phẩy)
 8. Render sẽ chạy cả frontend + backend trên cùng 1 service; app sẽ phục vụ static build từ `dist/` và API từ `/api`.
+
+Trong production, server từ chối khởi động nếu thiếu Firebase service account, danh sách email quản trị hoặc CORS origin. Không commit service-account JSON vào Git. API quản trị yêu cầu đăng nhập Google và email thuộc allowlist; đọc khảo sát và gửi phản hồi vẫn công khai.
 
 ## 🌐 Deploy lên Vercel
 
@@ -84,9 +91,13 @@ Import chỉ thêm phản hồi; không cập nhật hay xóa response hiện c�
 2. Import repo.
 3. Set environment variable:
    - `VITE_API_URL=https://your-render-service-name.onrender.com/api`
+   - `VITE_ADMIN_EMAILS=admin@example.com`
+   - Các biến cấu hình Firebase client (`VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID`, `VITE_FIREBASE_STORAGE_BUCKET`, `VITE_FIREBASE_MESSAGING_SENDER_ID`, `VITE_FIREBASE_APP_ID`)
 4. Build command: `npm run build`
 5. Output directory: `dist`
 6. Kết quả: frontend chạy trên Vercel, backend API chạy trên Render.
+
+Trên Render, đặt `FIREBASE_SERVICE_ACCOUNT`, `ADMIN_EMAILS`, `DATABASE_URL` và `CORS_ORIGIN` trong Environment. `ADMIN_EMAILS` và `VITE_ADMIN_EMAILS` phải khớp nhau.
 
 ## 🐳 Deploy bằng Docker
 

@@ -126,7 +126,7 @@ export function Analytics() {
 
   const handleImportComplete = async (surveyId: string) => {
     await fetchSurveys();
-    const importedSurvey = await fetchSurveyById(surveyId);
+    const importedSurvey = await fetchSurveyById(surveyId, true);
     if (!importedSurvey) throw new Error('Dữ liệu đã được nhập nhưng không tải lại được khảo sát.');
     handleSelectSurvey(importedSurvey);
     setAllResponses(await fetchResponses(surveyId));
