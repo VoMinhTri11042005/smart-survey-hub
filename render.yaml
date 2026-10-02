@@ -6,6 +6,7 @@ services:
     region: oregon
     buildCommand: npm install --include=dev && npm run build
     startCommand: npm start
+    healthCheckPath: /api/ready
     envVars:
       - key: NODE_ENV
         value: production

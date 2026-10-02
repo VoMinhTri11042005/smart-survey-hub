@@ -4,6 +4,7 @@
  */
 import { Router } from 'express';
 import { requireAdmin } from '../middleware/auth.middleware';
+import { limitPublicResponseSubmissions } from '../middleware/rateLimit';
 import { validate } from '../middleware/validate';
 import { CreateSurveySchema, UpdateSurveySchema, SubmitResponseSchema, SaveDraftSchema, ImportResponsesSchema } from '../validators/survey.validator';
 import * as surveyCtrl from '../controllers/survey.controller';
@@ -29,7 +30,7 @@ router.delete('/surveys/drafts/:id', requireAdmin, requireDestructiveConfirmatio
 
 // Public survey read strips quiz answer keys. Response reads remain admin-only.
 router.get('/surveys/:id', surveyCtrl.getPublicById);
-router.post('/surveys/:id/responses', validate(SubmitResponseSchema), responseCtrl.submit);
+router.post('/surveys/:id/responses', limitPublicResponseSubmissions, validate(SubmitResponseSchema), responseCtrl.submit);
 router.get('/surveys/:id/responses/my/:respondentId', responseCtrl.getMine);
 
 // ─── Admin management ───

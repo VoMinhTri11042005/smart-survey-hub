@@ -14,10 +14,11 @@ import surveyRoutes from './routes/survey.routes';
 import chatRoutes from './routes/chat.routes';
 import teamRoutes from './routes/team.routes';
 import userRoutes from './routes/user.routes';
-import { initDB } from './db';
+import pool, { initDB } from './db';
 
 const app = express();
 const PORT = process.env.PORT || 3005;
+app.set('trust proxy', 1);
 
 // ─── Middleware ───
 const allowedOrigins = (process.env.CORS_ORIGIN || process.env.APP_URL || '')
@@ -35,6 +36,16 @@ app.use(express.json({ limit: '10mb' }));
 // ─── Health Check (public) ───
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+app.get('/api/ready', async (_req, res) => {
+  try {
+    await pool.query('SELECT 1');
+    res.json({ status: 'ready', timestamp: new Date().toISOString() });
+  } catch (error) {
+    console.error('Readiness check failed:', error);
+    res.status(503).json({ status: 'unavailable' });
+  }
 });
 
 // ─── Routes ───

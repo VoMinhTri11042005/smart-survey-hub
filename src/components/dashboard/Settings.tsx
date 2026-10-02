@@ -1,5 +1,5 @@
-import { useState, type ChangeEvent, type FormEvent } from 'react';
-import { Camera, Save, User, Mail, Briefcase, RefreshCw, X } from 'lucide-react';
+import { useRef, useState, type ChangeEvent, type FormEvent } from 'react';
+import { Camera, Save, User, Mail, Briefcase, RefreshCw, X, Download, FileUp } from 'lucide-react';
 import type { UserProfile } from '../../types';
 import { ToastType } from '../common/Toast';
 import { API_BASE, apiFetch } from '../../utils/api';
@@ -15,6 +15,70 @@ interface SettingsProps {
 export function Settings({ profile, onUpdateProfile, onClose, onShowToast, onAddNotification }: SettingsProps) {
   const [formData, setFormData] = useState<UserProfile>(profile);
   const [isSaving, setIsSaving] = useState(false);
+  const [isBackupBusy, setIsBackupBusy] = useState(false);
+  const [backupMessage, setBackupMessage] = useState('');
+  const backupInput = useRef<HTMLInputElement>(null);
+
+  const downloadBackup = async () => {
+    setIsBackupBusy(true);
+    setBackupMessage('');
+    try {
+      const response = await apiFetch(`${API_BASE}/backup/export`);
+      if (!response.ok) throw new Error('Không thể tải bản sao lưu từ máy chủ.');
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `smart-survey-hub-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      link.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setBackupMessage('Đã tải bản sao lưu. Hãy lưu tệp an toàn vì tệp chứa dữ liệu khảo sát và phản hồi.');
+    } catch (error) {
+      console.error('Backup download failed:', error);
+      const message = error instanceof Error ? error.message : 'Không thể tải bản sao lưu.';
+      setBackupMessage(message);
+      onShowToast?.(message, 'error');
+    } finally {
+      setIsBackupBusy(false);
+    }
+  };
+
+  const importBackupFile = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) {
+      setBackupMessage('Tệp sao lưu vượt quá giới hạn 10 MB.');
+      return;
+    }
+    if (!window.confirm('Khôi phục bằng cách gộp các bản ghi còn thiếu. Dữ liệu hiện tại không bị ghi đè. Bạn có muốn tiếp tục?')) return;
+
+    setIsBackupBusy(true);
+    setBackupMessage('');
+    try {
+      const parsed: unknown = JSON.parse(await file.text());
+      if (!parsed || typeof parsed !== 'object' || !Array.isArray((parsed as { surveys?: unknown }).surveys)
+        || !Array.isArray((parsed as { responses?: unknown }).responses)) {
+        throw new Error('Tệp không phải bản sao lưu Smart Survey Hub hợp lệ.');
+      }
+      const response = await apiFetch(`${API_BASE}/backup/import`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Confirm-Action': 'import-backup' },
+        body: JSON.stringify(parsed),
+      });
+      const result = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(result?.error || 'Không thể khôi phục bản sao lưu.');
+      setBackupMessage('Khôi phục thành công. Đang tải lại dữ liệu...');
+      window.setTimeout(() => window.location.reload(), 1200);
+    } catch (error) {
+      console.error('Backup restore failed:', error);
+      const message = error instanceof Error ? error.message : 'Không thể khôi phục bản sao lưu.';
+      setBackupMessage(message);
+      onShowToast?.(message, 'error');
+    } finally {
+      setIsBackupBusy(false);
+    }
+  };
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -184,6 +248,35 @@ export function Settings({ profile, onUpdateProfile, onClose, onShowToast, onAdd
           </div>
         </form>
       </div>
+
+      <section className="mt-6 rounded-3xl border border-border-subtle bg-white p-6 shadow-sm md:p-8">
+        <h2 className="font-display text-xl font-bold text-text-primary">Sao lưu và khôi phục</h2>
+        <p className="mt-2 text-sm leading-relaxed text-text-secondary">
+          Tải xuống bản sao dữ liệu khảo sát, phản hồi và cài đặt. Hãy lưu bản sao ở nơi an toàn; tệp có thể chứa thông tin do người tham gia cung cấp.
+        </p>
+        <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+          <button
+            type="button"
+            onClick={() => void downloadBackup()}
+            disabled={isBackupBusy}
+            className="flex items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-bold text-white hover:bg-primary/90 disabled:opacity-60"
+          >
+            <Download size={18} />
+            Tải bản sao lưu
+          </button>
+          <button
+            type="button"
+            onClick={() => backupInput.current?.click()}
+            disabled={isBackupBusy}
+            className="flex items-center justify-center gap-2 rounded-xl border border-border-subtle px-5 py-3 text-sm font-bold text-text-primary hover:bg-surface-container-low disabled:opacity-60"
+          >
+            <FileUp size={18} />
+            Khôi phục từ tệp JSON
+          </button>
+          <input ref={backupInput} type="file" accept="application/json,.json" className="hidden" onChange={event => void importBackupFile(event)} />
+        </div>
+        {backupMessage && <p role="status" className="mt-4 text-sm text-text-secondary">{backupMessage}</p>}
+      </section>
     </div>
   );
 }

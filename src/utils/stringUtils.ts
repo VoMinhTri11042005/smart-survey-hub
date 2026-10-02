@@ -1,3 +1,5 @@
+import DOMPurify from 'dompurify';
+
 export const stripHtml = (html: string | undefined) => {
   if (!html) return "";
   const tmp = document.createElement("DIV");
@@ -9,6 +11,8 @@ export const cleanHtmlWhitespace = (html: string | undefined) => {
   if (!html) return "";
   return html.replace(/&nbsp;|\u00A0|&#160;/gi, ' ');
 };
+
+export const sanitizeHtml = (html: string | undefined) => DOMPurify.sanitize(cleanHtmlWhitespace(html));
 
 export const toUnaccented = (str: string | undefined) => {
   if (!str) return "";

@@ -1,7 +1,7 @@
 import { Timer, Undo2, Sparkles, CircleDot, CheckSquare, CheckCircle2, Home, Edit3, LogOut, X, Trash2, AlertTriangle } from 'lucide-react';
 import { useState, useEffect, useCallback } from 'react';
 import { useSurvey } from '../../context/SurveyContext';
-import { stripHtml, cleanHtmlWhitespace } from '../../utils/stringUtils';
+import { stripHtml, cleanHtmlWhitespace, sanitizeHtml } from '../../utils/stringUtils';
 import type { Survey, SurveyQuestion } from '../../types';
 import { roundLegacyStarRating } from '../../../shared/starRating';
 
@@ -620,7 +620,7 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
             {question.options?.map((option, idx) => (
               <button key={idx} onClick={() => selectSingleChoice(question, option)} className={`w-full text-left flex items-center gap-4 p-4 rounded-xl border-2 transition-all cursor-pointer ${answer === option ? 'border-primary bg-primary-fixed shadow-sm' : 'border-border-subtle bg-white hover:border-primary/30 hover:shadow-sm'}`}>
                 <CircleDot size={20} className={`flex-shrink-0 mt-0.5 ${answer === option ? 'text-primary' : 'text-text-secondary'}`} />
-                <span className={`min-w-0 text-base font-medium rendered-option break-words ${answer === option ? 'text-primary' : 'text-text-primary'}`} dangerouslySetInnerHTML={{ __html: cleanHtmlWhitespace(option) }} />
+                <span className={`min-w-0 text-base font-medium rendered-option break-words ${answer === option ? 'text-primary' : 'text-text-primary'}`} dangerouslySetInnerHTML={{ __html: sanitizeHtml(option) }} />
               </button>
             ))}
           </div>
@@ -737,7 +737,7 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
               return (
                 <button key={idx} onClick={() => toggleMultiple(question, option)} disabled={!selected && reachedLimit} className={`w-full text-left flex items-center gap-4 p-4 rounded-xl border-2 transition-all ${selected ? 'border-primary bg-primary-fixed shadow-sm cursor-pointer' : reachedLimit ? 'border-border-subtle bg-surface-container-low text-text-secondary/60 cursor-not-allowed' : 'border-border-subtle bg-white hover:border-primary/30 hover:shadow-sm cursor-pointer'}`}>
                   <CheckSquare size={20} className={`flex-shrink-0 mt-0.5 ${selected ? 'text-primary' : 'text-text-secondary'}`} />
-                  <span className={`min-w-0 text-base font-medium rendered-option break-words ${selected ? 'text-primary' : 'text-text-primary'}`} dangerouslySetInnerHTML={{ __html: cleanHtmlWhitespace(option) }} />
+                  <span className={`min-w-0 text-base font-medium rendered-option break-words ${selected ? 'text-primary' : 'text-text-primary'}`} dangerouslySetInnerHTML={{ __html: sanitizeHtml(option) }} />
                 </button>
               );
             })}
@@ -791,7 +791,7 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
         </div>
 
         <nav className="relative z-10 px-4 py-4 flex justify-between items-center border-b border-white/10 backdrop-blur-md">
-          <div className="font-display text-xl font-bold text-primary line-clamp-1" dangerouslySetInnerHTML={{ __html: cleanHtmlWhitespace(survey.title) }} />
+          <div className="font-display text-xl font-bold text-primary line-clamp-1" dangerouslySetInnerHTML={{ __html: sanitizeHtml(survey.title) }} />
         </nav>
 
         <main className="flex-1 flex flex-col items-center justify-center p-6 relative z-10 animate-in zoom-in-95 duration-700">
@@ -918,7 +918,7 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
       <div className="min-h-screen bg-surface-background flex flex-col font-sans text-text-primary animate-in fade-in duration-500 selection:bg-secondary-fixed selection:text-on-secondary-fixed">
         <nav className="sticky top-0 z-50 bg-surface-background/90 backdrop-blur-md px-4 md:px-6 py-3 md:py-4 flex flex-col gap-2 border-b border-border-subtle/50">
           <div className="flex justify-between items-start md:items-center w-full gap-3">
-            <div className="font-display text-base sm:text-lg md:text-2xl font-bold text-primary flex-1 pr-2 sm:pr-4 line-clamp-2 break-all" dangerouslySetInnerHTML={{ __html: cleanHtmlWhitespace(survey.title) || 'Khảo sát thông minh' }} />
+            <div className="font-display text-base sm:text-lg md:text-2xl font-bold text-primary flex-1 pr-2 sm:pr-4 line-clamp-2 break-all" dangerouslySetInnerHTML={{ __html: sanitizeHtml(survey.title) || 'Khảo sát thông minh' }} />
             <div className="flex items-center gap-2 md:gap-3 shrink-0">
               {remainingSeconds !== null && (
                 <div className={`flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-xs sm:text-sm font-bold ${remainingSeconds <= 60 ? 'bg-sentiment-negative/10 text-sentiment-negative' : 'bg-primary-fixed text-primary'}`}>
@@ -948,12 +948,12 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
               <div className="bg-white border-t-[8px] sm:border-t-[10px] border-t-primary rounded-2xl shadow-sm p-4 sm:p-6 md:p-10 border border-border-subtle mb-5 sm:mb-8">
                 <h1 
                   className="font-display text-2xl sm:text-3xl md:text-4xl font-extrabold text-text-primary mb-3 sm:mb-4 leading-[1.1] sm:leading-tight rendered-html break-words"
-                  dangerouslySetInnerHTML={{ __html: cleanHtmlWhitespace(survey.title) || 'Khảo sát thông minh' }}
+                  dangerouslySetInnerHTML={{ __html: sanitizeHtml(survey.title) || 'Khảo sát thông minh' }}
                 />
                 {survey.description && (
                   <div 
                     className="text-sm sm:text-base md:text-lg text-text-secondary leading-relaxed rendered-html break-words"
-                    dangerouslySetInnerHTML={{ __html: cleanHtmlWhitespace(survey.description) }}
+                    dangerouslySetInnerHTML={{ __html: sanitizeHtml(survey.description) }}
                   />
                 )}
               </div>
@@ -979,7 +979,7 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
                       <span className="text-[11px] sm:text-xs md:text-sm font-bold text-primary bg-primary-fixed px-2.5 py-1 rounded-full">{question.label && question.label.trim() !== '' ? question.label : ''}</span>
                       {question.required && <span className="text-[11px] sm:text-xs md:text-sm text-sentiment-negative font-medium">* Bắt buộc</span>}
                     </div>
-                    <h2 className="font-display text-xl sm:text-2xl md:text-3xl font-bold text-text-primary tracking-tight leading-[1.2] sm:leading-tight break-words" dangerouslySetInnerHTML={{ __html: cleanHtmlWhitespace(question.text) || (question.label && question.label.trim() !== '' ? question.label : `Câu hỏi ${index + 1}`) }} />
+                    <h2 className="font-display text-xl sm:text-2xl md:text-3xl font-bold text-text-primary tracking-tight leading-[1.2] sm:leading-tight break-words" dangerouslySetInnerHTML={{ __html: sanitizeHtml(question.text) || sanitizeHtml(question.label?.trim() || `Câu hỏi ${index + 1}`) }} />
                   </header>
                   {question.screenOutAnswer && <p className="mb-4 text-sm italic text-text-secondary">Nếu chọn “{stripHtml(question.screenOutAnswer)}”, khảo sát sẽ kết thúc tại đây.</p>}
                   {renderQuestionInput(question, answers[question.id], question.id)}
@@ -989,7 +989,7 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
             ) : (
               <>
                 <header className="space-y-2">
-                  <h2 className="font-display text-xl sm:text-2xl md:text-3xl font-bold text-text-primary tracking-tight leading-[1.2] sm:leading-tight break-words" dangerouslySetInnerHTML={{ __html: cleanHtmlWhitespace(currentQuestion?.text || '') }} />
+                  <h2 className="font-display text-xl sm:text-2xl md:text-3xl font-bold text-text-primary tracking-tight leading-[1.2] sm:leading-tight break-words" dangerouslySetInnerHTML={{ __html: sanitizeHtml(currentQuestion?.text) }} />
                   {currentQuestion?.required && (
                     <p className="text-[11px] sm:text-xs md:text-sm text-sentiment-negative font-medium">* Bắt buộc</p>
                   )}

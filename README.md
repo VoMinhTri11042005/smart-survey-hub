@@ -85,6 +85,8 @@ Import chỉ thêm phản hồi; không cập nhật hay xóa response hiện c�
 
 Trong Firebase Console, bật phương thức **Email/Password** và tạo tài khoản quản trị với email/mật khẩu bạn muốn dùng. Thêm email đó vào cả `ADMIN_EMAILS` và `VITE_ADMIN_EMAILS`. Mật khẩu được Firebase xác thực, không lưu trong source code. Trong production, server từ chối khởi động nếu thiếu Firebase service account, danh sách email quản trị hoặc CORS origin. Không commit service-account JSON vào Git. API quản trị yêu cầu đăng nhập Firebase và email thuộc allowlist; đọc khảo sát và gửi phản hồi vẫn công khai.
 
+Nếu quên mật khẩu, ở màn hình đăng nhập nhập email rồi chọn **Quên mật khẩu?**. Firebase gửi liên kết đặt lại mật khẩu; kiểm tra cả thư mục Spam.
+
 ## 🌐 Deploy lên Vercel
 
 1. Tạo project trên Vercel.
@@ -98,6 +100,12 @@ Trong Firebase Console, bật phương thức **Email/Password** và tạo tài 
 6. Kết quả: frontend chạy trên Vercel, backend API chạy trên Render.
 
 Trên Render, đặt `FIREBASE_SERVICE_ACCOUNT`, `ADMIN_EMAILS`, `DATABASE_URL` và `CORS_ORIGIN` trong Environment. `ADMIN_EMAILS` và `VITE_ADMIN_EMAILS` phải khớp nhau.
+
+Trong **Cài đặt tài khoản → Sao lưu và khôi phục**, có thể tải JSON sao lưu hoặc gộp dữ liệu từ bản sao lưu trước đó. Hãy tải bản sao định kỳ và cất ở nơi an toàn. Khôi phục không ghi đè bản ghi trùng; cần sao lưu riêng tư vì tệp có câu trả lời khảo sát. Với môi trường production, bật lịch sao lưu tự động ở nhà cung cấp PostgreSQL nếu gói dịch vụ hỗ trợ; máy chủ Render không nên được dùng làm nơi lưu file backup lâu dài.
+
+API gửi phản hồi công khai giới hạn tối đa 15 lần/phút trên mỗi IP tại mỗi tiến trình và xác minh số lượt theo mã thiết bị ở backend. Giới hạn mã thiết bị có thể bị né nếu người trả lời xóa dữ liệu trình duyệt hoặc đổi thiết bị; với khảo sát cần danh tính/lượt tham gia chống giả mạo, yêu cầu đăng nhập hoặc tích hợp CAPTCHA.
+
+`/api/health` xác nhận tiến trình đang chạy; `/api/ready` kiểm tra kết nối database và được Render dùng làm health check.
 
 ## 🐳 Deploy bằng Docker
 

@@ -127,7 +127,9 @@ export const CreateSurveySchema = z.object({
 export const UpdateSurveySchema = CreateSurveySchema.partial();
 
 export const SubmitResponseSchema = z.object({
-  respondentId: z.string().min(1, 'Thiếu định danh người dùng.'),
+  respondentId: z.string()
+    .max(255)
+    .regex(/^device-[a-z0-9-]+-attempt-[1-9]\d*$/i, 'Định danh lượt làm khảo sát không hợp lệ.'),
   answers: z.record(z.string(), AnswerValueSchema),
 });
 

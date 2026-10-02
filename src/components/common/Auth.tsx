@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { ArrowRight, Eye, EyeOff, Info, Lock, Mail } from 'lucide-react';
-import { signInWithEmail, logOut } from '../../services/firebase';
+import { signInWithEmail, logOut, sendPasswordReset } from '../../services/firebase';
 import type { Role, UserProfile } from '../../types';
 
 interface AuthProps {
@@ -16,10 +16,13 @@ export function Auth({ onLogin }: AuthProps) {
   const [error, setError] = useState<string | null>(null);
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [email, setEmail] = useState('');
+  const [resetNotice, setResetNotice] = useState('');
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError(null);
+    setResetNotice('');
 
     if (allowedEmails.length === 0) {
       setError('Chưa cấu hình email quản trị. Vui lòng kiểm tra VITE_ADMIN_EMAILS.');
@@ -27,12 +30,12 @@ export function Auth({ onLogin }: AuthProps) {
     }
 
     const formData = new FormData(event.currentTarget);
-    const email = String(formData.get('email') || '').trim();
+    const loginEmail = String(formData.get('email') || '').trim();
     const password = String(formData.get('password') || '');
 
     setIsSigningIn(true);
     try {
-      const user = await signInWithEmail(email, password);
+      const user = await signInWithEmail(loginEmail, password);
       if (!user.email || !allowedEmails.includes(user.email.toLowerCase())) {
         await logOut();
         throw new Error('Tài khoản này chưa được cấp quyền quản trị.');
@@ -49,6 +52,27 @@ export function Auth({ onLogin }: AuthProps) {
       setError(signInError instanceof Error && signInError.message === 'Tài khoản này chưa được cấp quyền quản trị.'
         ? signInError.message
         : 'Email hoặc mật khẩu không chính xác.');
+    } finally {
+      setIsSigningIn(false);
+    }
+  };
+
+  const handlePasswordReset = async () => {
+    const resetEmail = email.trim();
+    setError(null);
+    setResetNotice('');
+    if (!resetEmail) {
+      setError('Nhập email của bạn trước khi yêu cầu đặt lại mật khẩu.');
+      return;
+    }
+
+    setIsSigningIn(true);
+    try {
+      await sendPasswordReset(resetEmail);
+      setResetNotice('Nếu email này đã đăng ký, hướng dẫn đặt lại mật khẩu sẽ được gửi đến hộp thư của bạn.');
+    } catch (resetError) {
+      console.error('Password reset request failed:', resetError);
+      setError('Không thể gửi email đặt lại mật khẩu. Hãy kiểm tra địa chỉ email và thử lại sau.');
     } finally {
       setIsSigningIn(false);
     }
@@ -76,6 +100,11 @@ export function Auth({ onLogin }: AuthProps) {
               <p className="text-sm text-sentiment-negative font-medium">{error}</p>
             </div>
           )}
+          {resetNotice && (
+            <div role="status" className="mb-6 rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm font-medium text-text-primary">
+              {resetNotice}
+            </div>
+          )}
           <form className="space-y-5" onSubmit={event => void handleSubmit(event)}>
             <div>
               <label htmlFor="email" className="block text-sm font-semibold text-text-primary">
@@ -91,6 +120,8 @@ export function Auth({ onLogin }: AuthProps) {
                   type="email"
                   autoComplete="username"
                   required
+                  value={email}
+                  onChange={event => setEmail(event.target.value)}
                   className="block w-full pl-10 pr-3 py-2.5 border border-border-subtle rounded-xl text-sm font-medium placeholder-text-secondary focus:outline-none focus:ring-2 focus:ring-secondary/50 focus:border-secondary transition-all"
                   placeholder="you@company.com"
                 />
@@ -133,6 +164,16 @@ export function Auth({ onLogin }: AuthProps) {
               {isSigningIn ? 'Đang đăng nhập...' : 'Đăng nhập'}
               {!isSigningIn && <ArrowRight size={18} />}
             </button>
+            <div className="text-center">
+              <button
+                type="button"
+                disabled={isSigningIn}
+                onClick={() => void handlePasswordReset()}
+                className="text-sm font-semibold text-primary hover:text-primary/80 disabled:opacity-60"
+              >
+                Quên mật khẩu?
+              </button>
+            </div>
           </form>
         </div>
       </div>

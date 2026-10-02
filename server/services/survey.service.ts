@@ -139,6 +139,21 @@ function assertRequiredAnswers(questions: any[], answers: Record<string, unknown
       throw Object.assign(new Error(`Vui lòng trả lời câu hỏi "${question.text}".`), { status: 400 });
     }
     if (empty) continue;
+    if (question.required !== false && (question.type === 'multiple_choice_grid' || question.type === 'checkbox_grid')) {
+      const gridAnswers = answer as Record<string, unknown>;
+      const hasEveryRow = (question.options || []).every((row: string) => {
+        const rowAnswer = gridAnswers[row];
+        return question.type === 'checkbox_grid'
+          ? Array.isArray(rowAnswer) && rowAnswer.length > 0
+          : typeof rowAnswer === 'string' && rowAnswer.length > 0;
+      });
+      if (!hasEveryRow) {
+        throw Object.assign(new Error(`Vui lòng trả lời đầy đủ các hàng của câu hỏi "${question.text}".`), { status: 400 });
+      }
+    }
+    if (question.type === 'text' && typeof answer !== 'string') {
+      throw Object.assign(new Error(`Câu hỏi "${question.text}" chỉ nhận câu trả lời dạng văn bản.`), { status: 400 });
+    }
     if ((question.type === 'single_choice' || question.type === 'dropdown')
       && (typeof answer !== 'string' || !question.options?.includes(answer))) {
       throw Object.assign(new Error(`Câu trả lời không khớp lựa chọn của câu hỏi "${question.text}".`), { status: 400 });
@@ -205,6 +220,37 @@ function isScreenedOut(questions: any[], answers: Record<string, unknown> | unde
     && typeof question.screenOutAnswer === 'string'
     && answers?.[question.id] === question.screenOutAnswer
   );
+}
+
+export function getRespondentDeviceId(respondentId: unknown): string {
+  if (typeof respondentId !== 'string') {
+    throw Object.assign(new Error('Thiếu định danh thiết bị hợp lệ.'), { status: 400 });
+  }
+  const match = respondentId.match(/^(device-[a-z0-9-]+)-attempt-[1-9]\d*$/i);
+  if (!match) {
+    throw Object.assign(new Error('Định danh lượt làm khảo sát không hợp lệ.'), { status: 400 });
+  }
+  return match[1];
+}
+
+export function assertResponseAttemptAllowed(
+  maxAttempts: number | null | undefined,
+  previousAttempts: number,
+  isExistingAttempt: boolean,
+) {
+  if (!isExistingAttempt && maxAttempts && maxAttempts > 0 && previousAttempts >= maxAttempts) {
+    throw Object.assign(
+      new Error(`Bạn đã sử dụng hết ${maxAttempts} lượt làm khảo sát trên thiết bị này.`),
+      { status: 429 },
+    );
+  }
+}
+
+export function validateResponseAnswers(questions: any[], answers: Record<string, unknown>) {
+  assertRequiredAnswers(questions, answers);
+  assertIntegerStarRatings(questions, answers);
+  assertMultipleChoiceLimits(questions, answers);
+  assertAdditionalQuestionAnswers(questions, answers);
 }
 
 // ─── Survey CRUD ───
@@ -319,6 +365,7 @@ export async function deleteSurvey(id: string) {
 
 export async function submitResponse(surveyId: string, data: any) {
   const { respondentId, answers } = data;
+  const deviceId = getRespondentDeviceId(respondentId);
 
   if (!process.env.DATABASE_URL) {
     const survey = inMemorySurveys[surveyId];
@@ -326,10 +373,7 @@ export async function submitResponse(surveyId: string, data: any) {
     if (survey.status !== 'live' || (survey.closesAt && new Date(survey.closesAt).getTime() <= Date.now())) {
       throw Object.assign(new Error('Khảo sát đã đóng hoặc chưa được phát hành.'), { status: 410 });
     }
-    assertRequiredAnswers(survey.questions, answers);
-    assertIntegerStarRatings(survey.questions, answers);
-    assertMultipleChoiceLimits(survey.questions, answers);
-    assertAdditionalQuestionAnswers(survey.questions, answers);
+    validateResponseAnswers(survey.questions, answers);
     const screenedOut = isScreenedOut(survey.questions, answers);
     let finalScore: number | null = null;
     let finalTotal: number | null = null;
@@ -339,6 +383,10 @@ export async function submitResponse(surveyId: string, data: any) {
     }
     inMemoryResponses[surveyId] = inMemoryResponses[surveyId] || [];
     const existing = inMemoryResponses[surveyId].find((r: any) => r.respondentId === respondentId);
+    const deviceAttempts = inMemoryResponses[surveyId].filter((response: any) =>
+      response.respondentId.startsWith(`${deviceId}-attempt-`),
+    ).length;
+    assertResponseAttemptAllowed(survey.maxAttemptsPerDevice, deviceAttempts, Boolean(existing));
     if (existing) {
       existing.answers = answers; existing.score = finalScore; existing.screenedOut = screenedOut;
       existing.totalQuizQuestions = finalTotal; existing.submittedAt = new Date().toISOString();
@@ -359,10 +407,7 @@ export async function submitResponse(surveyId: string, data: any) {
     throw Object.assign(new Error('Khảo sát đã đóng hoặc chưa được phát hành.'), { status: 410 });
   }
   const questions = typeof survey.questions === 'string' ? JSON.parse(survey.questions) : survey.questions;
-  assertRequiredAnswers(questions, answers);
-  assertIntegerStarRatings(questions, answers);
-  assertMultipleChoiceLimits(questions, answers);
-  assertAdditionalQuestionAnswers(questions, answers);
+  validateResponseAnswers(questions, answers);
   const screenedOut = isScreenedOut(questions, answers);
   let finalScore: number | null = null;
   let finalTotal: number | null = null;
@@ -371,24 +416,45 @@ export async function submitResponse(surveyId: string, data: any) {
     finalScore = computed.score; finalTotal = computed.totalPossible;
   }
 
-  const existingCheck = await pool.query('SELECT id FROM responses WHERE survey_id = $1 AND respondent_id = $2', [surveyId, respondentId]);
-  let row;
-  if (existingCheck.rows.length > 0) {
-    const result = await pool.query(
-      `UPDATE responses SET answers = $3, score = $4, total_quiz_questions = $5, screened_out = $6, submitted_at = CURRENT_TIMESTAMP
-       WHERE survey_id = $1 AND respondent_id = $2 RETURNING *`,
-      [surveyId, respondentId, JSON.stringify(answers || {}), finalScore, finalTotal, screenedOut]
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`response:${surveyId}:${deviceId}`]);
+    const existingCheck = await client.query(
+      'SELECT id FROM responses WHERE survey_id = $1 AND respondent_id = $2',
+      [surveyId, respondentId],
     );
-    row = result.rows[0];
-  } else {
-    const id = generateId();
-    const result = await pool.query(
-      `INSERT INTO responses (id, survey_id, respondent_id, answers, score, total_quiz_questions, screened_out) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-      [id, surveyId, respondentId, JSON.stringify(answers || {}), finalScore, finalTotal, screenedOut]
-    );
-    row = result.rows[0];
+    if (!existingCheck.rows.length && survey.max_attempts_per_device > 0) {
+      const attempts = await client.query<{ count: string }>(
+        'SELECT COUNT(*)::text AS count FROM responses WHERE survey_id = $1 AND respondent_id LIKE $2',
+        [surveyId, `${deviceId}-attempt-%`],
+      );
+      assertResponseAttemptAllowed(survey.max_attempts_per_device, Number(attempts.rows[0].count), false);
+    }
+
+    const result = existingCheck.rows.length
+      ? await client.query(
+        `UPDATE responses SET answers = $3, score = $4, total_quiz_questions = $5, screened_out = $6, submitted_at = CURRENT_TIMESTAMP
+         WHERE survey_id = $1 AND respondent_id = $2 RETURNING *`,
+        [surveyId, respondentId, JSON.stringify(answers || {}), finalScore, finalTotal, screenedOut],
+      )
+      : await client.query(
+        `INSERT INTO responses (id, survey_id, respondent_id, answers, score, total_quiz_questions, screened_out)
+         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+        [generateId(), surveyId, respondentId, JSON.stringify(answers || {}), finalScore, finalTotal, screenedOut],
+      );
+    await client.query('COMMIT');
+    return mapRowToResponse(result.rows[0]);
+  } catch (error) {
+    try {
+      await client.query('ROLLBACK');
+    } catch (rollbackError) {
+      console.error('Failed to roll back response submission transaction:', rollbackError);
+    }
+    throw error;
+  } finally {
+    client.release();
   }
-  return mapRowToResponse(row);
 }
 
 function canonicalJson(value: unknown): string {

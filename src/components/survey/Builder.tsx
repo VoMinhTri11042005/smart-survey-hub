@@ -7,7 +7,7 @@ import ReactMarkdown from 'react-markdown';
 import ReactQuill from 'react-quill-new';
 import 'react-quill-new/dist/quill.snow.css';
 import type { SurveyQuestion, QuestionType, SurveyDisplayMode, SurveySection } from '../../types';
-import { cleanHtmlWhitespace, stripHtml } from '../../utils/stringUtils';
+import { cleanHtmlWhitespace, sanitizeHtml, stripHtml } from '../../utils/stringUtils';
 
 const questionTypeLabels: Record<QuestionType, { label: string; icon: React.ReactNode }> = {
   single_choice: { label: 'Một lựa chọn', icon: <CircleDot size={16} className="text-primary" /> },
@@ -885,7 +885,7 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError }: { onP
                      ) : (
                        <div 
                          className="font-display text-xl font-semibold text-text-primary mb-4" 
-                         dangerouslySetInnerHTML={{ __html: q.text || 'Nhập nội dung câu hỏi...' }} 
+                         dangerouslySetInnerHTML={{ __html: sanitizeHtml(q.text) || 'Nhập nội dung câu hỏi...' }}
                        />
                      )}
 
