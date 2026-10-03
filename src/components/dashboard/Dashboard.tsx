@@ -20,6 +20,7 @@ export function Dashboard({
   const [shareModal, setShareModal] = useState<{ id: string; title: string } | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; title: string } | null>(null);
   const [deleteDraftConfirm, setDeleteDraftConfirm] = useState<{ id: string; title: string } | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const reportActivity = (message: string, type: 'success' | 'error' | 'info') => {
     onShowToast?.(message, type);
     onAddNotification?.(message);
@@ -242,21 +243,23 @@ export function Dashboard({
               </button>
               <button 
                 onClick={async () => {
+                  if (deletingId) return;
+                  setDeletingId(deleteConfirm.id);
                   try {
                     await deleteSurvey(deleteConfirm.id);
-                    if (onShowToast) onShowToast('Đã xóa khảo sát thành công!', 'success');
-                    if (onAddNotification) onAddNotification(`Bạn đã xóa khảo sát "${stripHtml(deleteConfirm.title)}"`);
+                    reportActivity(`Đã xóa khảo sát "${stripHtml(deleteConfirm.title)}".`, 'success');
                   } catch (error) {
-                    const message = 'Không thể xóa khảo sát. Vui lòng thử lại.';
-                    if (onShowToast) onShowToast(message, 'error');
-                    if (onAddNotification) onAddNotification(message);
+                    console.error('Failed to delete survey:', error);
+                    reportActivity(error instanceof Error ? error.message : 'Không thể xóa khảo sát. Vui lòng thử lại.', 'error');
                   } finally {
                     setDeleteConfirm(null);
+                    setDeletingId(null);
                   }
                 }} 
+                disabled={deletingId === deleteConfirm.id}
                 className="px-4 py-2 bg-sentiment-negative text-white rounded-lg font-semibold text-sm hover:bg-sentiment-negative/90 transition-colors shadow-sm cursor-pointer"
               >
-                Đồng ý xóa
+                {deletingId === deleteConfirm.id ? 'Đang xóa...' : 'Đồng ý xóa'}
               </button>
             </div>
           </div>
@@ -272,21 +275,23 @@ export function Dashboard({
               <button onClick={() => setDeleteDraftConfirm(null)} className="px-4 py-2 rounded-lg font-semibold text-sm text-text-secondary hover:bg-surface-container-high transition-colors cursor-pointer">Hủy</button>
               <button
                 onClick={async () => {
+                  if (deletingId) return;
+                  setDeletingId(deleteDraftConfirm.id);
                   try {
                     await deleteDraft(deleteDraftConfirm.id);
-                    onShowToast?.('Đã xóa bản nháp.', 'success');
-                    onAddNotification?.(`Bạn đã xóa bản nháp "${stripHtml(deleteDraftConfirm.title)}"`);
-                  } catch {
-                    const message = 'Không thể xóa bản nháp. Vui lòng thử lại.';
-                    onShowToast?.(message, 'error');
-                    onAddNotification?.(message);
+                    reportActivity(`Đã xóa bản nháp "${stripHtml(deleteDraftConfirm.title)}".`, 'success');
+                  } catch (error) {
+                    console.error('Failed to delete survey draft:', error);
+                    reportActivity(error instanceof Error ? error.message : 'Không thể xóa bản nháp. Vui lòng thử lại.', 'error');
                   } finally {
                     setDeleteDraftConfirm(null);
+                    setDeletingId(null);
                   }
                 }}
+                disabled={deletingId === deleteDraftConfirm.id}
                 className="px-4 py-2 bg-sentiment-negative text-white rounded-lg font-semibold text-sm hover:bg-sentiment-negative/90 transition-colors shadow-sm cursor-pointer"
               >
-                Đồng ý xóa
+                {deletingId === deleteDraftConfirm.id ? 'Đang xóa...' : 'Đồng ý xóa'}
               </button>
             </div>
           </div>

@@ -39,7 +39,7 @@ export function TopBar({ currentView, onViewChange, onPublish, userProfile, noti
   const unreadCount = notifications.filter(n => !n.read).length;
 
   return (
-    <header className="flex justify-between items-center px-4 md:px-6 py-4 bg-surface-background/90 backdrop-blur-md border-b border-border-subtle sticky top-0 z-10 gap-2 md:gap-4">
+    <header className="flex justify-between items-center px-4 md:px-6 py-4 bg-surface-background border-b border-border-subtle sticky top-0 z-[60] gap-2 md:gap-4">
       <div className="flex items-center gap-2 md:gap-4 w-full md:w-1/2 flex-1">
         <button 
           type="button"
@@ -115,7 +115,7 @@ export function TopBar({ currentView, onViewChange, onPublish, userProfile, noti
           </button>
           
           {showNotifications && (
-            <div className="absolute right-0 mt-2 w-[min(20rem,calc(100vw-1rem))] bg-white rounded-2xl shadow-xl border border-border-subtle overflow-hidden z-50 animate-in fade-in slide-in-from-top-4 duration-200">
+            <div className="absolute right-0 mt-2 w-[min(20rem,calc(100vw-1rem))] bg-white rounded-2xl shadow-xl border border-border-subtle overflow-hidden z-[70] animate-in fade-in slide-in-from-top-4 duration-200">
               <div className="p-4 border-b border-border-subtle flex justify-between items-center bg-white">
                 <h3 className="font-bold text-text-primary">Thông báo</h3>
                 {unreadCount > 0 && (
