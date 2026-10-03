@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Search, Bell, Eye, Check, Menu } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Search, Bell, Eye, Check, Menu, X } from 'lucide-react';
 import { View, UserProfile } from '../../types';
 import { useSurvey } from '../../context/SurveyContext';
 
@@ -35,8 +35,29 @@ interface TopBarProps {
 export function TopBar({ currentView, onViewChange, onPublish, userProfile, notifications = [], onMarkAllRead, onMarkRead, onMenuClick }: TopBarProps) {
   const { searchQuery, setSearchQuery } = useSurvey();
   const [showNotifications, setShowNotifications] = useState(false);
+  const notificationPanelRef = useRef<HTMLDivElement>(null);
   
   const unreadCount = notifications.filter(n => !n.read).length;
+
+  useEffect(() => {
+    if (!showNotifications) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (event.target instanceof Node && !notificationPanelRef.current?.contains(event.target)) {
+        setShowNotifications(false);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setShowNotifications(false);
+    };
+
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [showNotifications]);
 
   return (
     <header className="flex justify-between items-center px-4 md:px-6 py-4 bg-surface-background border-b border-border-subtle sticky top-0 z-[60] gap-2 md:gap-4">
@@ -102,7 +123,7 @@ export function TopBar({ currentView, onViewChange, onPublish, userProfile, noti
             />
           </div>
         )}
-        <div className="relative">
+        <div className="relative" ref={notificationPanelRef}>
           <button
             type="button"
             onClick={() => setShowNotifications(!showNotifications)}
@@ -118,11 +139,22 @@ export function TopBar({ currentView, onViewChange, onPublish, userProfile, noti
             <div className="absolute right-0 mt-2 w-[min(20rem,calc(100vw-1rem))] bg-white rounded-2xl shadow-xl border border-border-subtle overflow-hidden z-[70] animate-in fade-in slide-in-from-top-4 duration-200">
               <div className="p-4 border-b border-border-subtle flex justify-between items-center bg-white">
                 <h3 className="font-bold text-text-primary">Thông báo</h3>
-                {unreadCount > 0 && (
-                  <button onClick={onMarkAllRead} className="text-xs text-secondary font-medium hover:underline flex items-center gap-1 cursor-pointer">
-                    <Check size={12} /> Đọc tất cả
+                <div className="flex items-center gap-3">
+                  {unreadCount > 0 && (
+                    <button onClick={onMarkAllRead} className="text-xs text-secondary font-medium hover:underline flex items-center gap-1 cursor-pointer">
+                      <Check size={12} /> Đọc tất cả
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setShowNotifications(false)}
+                    aria-label="Đóng thông báo"
+                    title="Đóng"
+                    className="rounded-lg p-1 text-text-secondary transition-colors hover:bg-surface-container-high hover:text-text-primary"
+                  >
+                    <X size={18} />
                   </button>
-                )}
+                </div>
               </div>
               <div className="max-h-[320px] overflow-y-auto custom-scrollbar">
                 {notifications.length === 0 ? (
