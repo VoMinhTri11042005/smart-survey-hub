@@ -1,4 +1,4 @@
-import { Info, Sparkles, Timer, CheckCircle, TrendingUp, Download, ChevronDown, BarChart3, MessageSquare, RefreshCw, Trash2, Search, Users, ClipboardCheck, Clock3, ListChecks, Filter, FileSpreadsheet } from 'lucide-react';
+import { Info, Sparkles, Timer, CheckCircle, TrendingUp, Download, ChevronDown, BarChart3, MessageSquare, RefreshCw, Trash2, Search, Users, ClipboardCheck, Clock3, ListChecks, Filter, FileSpreadsheet, X } from 'lucide-react';
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { useSurvey } from '../../context/SurveyContext';
 import { computeSurveyAnalytics, exportResponsesToCsv, type TextCategoryDistribution } from '../../utils/analytics';
@@ -10,6 +10,7 @@ import type { ToastType } from '../common/Toast';
 
 const QUESTION_CHART_COLORS = ['#3730a3', '#006591', '#89ceff', '#c3c0ff', '#94a3b8', '#10b981', '#f59e0b', '#ef4444'];
 const getRatingLevels = (distribution: Record<number, number>) => Object.keys(distribution).map(Number).sort((a, b) => a - b);
+type WarningDismissal = { surveyId: string; fingerprint: string };
 
 export function Analytics({ onFeedback }: { onFeedback?: (message: string, type: ToastType) => void }) {
   const { surveys, currentSurvey, setCurrentSurvey, fetchSurveys, fetchSurveyById, fetchResponses, resetResponses } = useSurvey();
@@ -23,6 +24,7 @@ export function Analytics({ onFeedback }: { onFeedback?: (message: string, type:
   const [analysisSearch, setAnalysisSearch] = useState('');
   const [questionFilter, setQuestionFilter] = useState<'all' | 'choice' | 'rating' | 'nps' | 'text'>('all');
   const [sectionPages, setSectionPages] = useState<Record<string, number>>({});
+  const [dismissedWarning, setDismissedWarning] = useState<WarningDismissal | null>(null);
 
   useEffect(() => { fetchSurveys(); }, [fetchSurveys]);
 
@@ -71,6 +73,43 @@ export function Analytics({ onFeedback }: { onFeedback?: (message: string, type:
   const responses = allResponses.filter(response => !response.screenedOut);
   const screenedOutCount = allResponses.filter(response => response.screenedOut).length;
   const analytics = selectedSurvey ? computeSurveyAnalytics(selectedSurvey, responses) : null;
+  const hasAnalyticsWarning = Boolean(analytics && (
+    analytics.legacyResponsesWithoutSnapshot > 0
+    || analytics.responsesWithSchemaDifferences > 0
+    || analytics.invalidScoreCount > 0
+  ));
+  const warningFingerprint = analytics
+    ? `${analytics.legacyResponsesWithoutSnapshot}:${analytics.responsesWithSchemaDifferences}:${analytics.invalidScoreCount}`
+    : '';
+  const warningStorageKey = selectedSurvey ? `smart-survey:analytics-warning:${selectedSurvey.id}` : '';
+  const isWarningDismissed = dismissedWarning?.surveyId === selectedSurvey?.id
+    && dismissedWarning.fingerprint === warningFingerprint;
+
+  useEffect(() => {
+    if (!selectedSurvey || !hasAnalyticsWarning || !warningStorageKey) {
+      setDismissedWarning(null);
+      return;
+    }
+
+    try {
+      const savedFingerprint = localStorage.getItem(warningStorageKey);
+      setDismissedWarning(savedFingerprint === warningFingerprint
+        ? { surveyId: selectedSurvey.id, fingerprint: warningFingerprint }
+        : null);
+    } catch {
+      setDismissedWarning(null);
+    }
+  }, [hasAnalyticsWarning, selectedSurvey, warningFingerprint, warningStorageKey]);
+
+  const dismissAnalyticsWarning = () => {
+    if (!selectedSurvey || !warningStorageKey || !warningFingerprint) return;
+    try {
+      localStorage.setItem(warningStorageKey, warningFingerprint);
+    } catch {
+      // The banner can still be hidden for the active page if browser storage is unavailable.
+    }
+    setDismissedWarning({ surveyId: selectedSurvey.id, fingerprint: warningFingerprint });
+  };
   const normalizedSearch = analysisSearch.trim().toLocaleLowerCase('vi-VN');
   const matchesSearch = (...values: unknown[]) => !normalizedSearch || values.some(value => String(value ?? '').toLocaleLowerCase('vi-VN').includes(normalizedSearch));
   const questionMetrics = (analytics?.questionMetrics || []).flatMap(metric => {
@@ -364,9 +403,19 @@ export function Analytics({ onFeedback }: { onFeedback?: (message: string, type:
             <input value={analysisSearch} onChange={(e) => setAnalysisSearch(e.target.value)} placeholder="Tìm câu hỏi, đáp án, phản hồi..." className="w-full bg-transparent text-sm outline-none placeholder:text-text-secondary" />
           </label>
 
-          {(analytics.legacyResponsesWithoutSnapshot > 0 || analytics.responsesWithSchemaDifferences > 0 || analytics.invalidScoreCount) && (
+          {hasAnalyticsWarning && !isWarningDismissed && (
             <section className="rounded-2xl border border-amber-300 bg-amber-50 px-5 py-4 text-sm text-amber-950">
-              <p className="font-bold">Lưu ý về phiên bản câu hỏi</p>
+              <div className="flex items-start justify-between gap-4">
+                <p className="font-bold">Lưu ý về phiên bản câu hỏi</p>
+                <button
+                  type="button"
+                  onClick={dismissAnalyticsWarning}
+                  className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-amber-300 bg-white px-2.5 py-1.5 text-xs font-bold text-amber-950 transition-colors hover:bg-amber-100"
+                  title="Ẩn thông báo này cho khảo sát hiện tại"
+                >
+                  <X size={14} /> Đã hiểu, ẩn thông báo
+                </button>
+              </div>
               {analytics.legacyResponsesWithoutSnapshot > 0 && (
                 <p className="mt-1">{analytics.legacyResponsesWithoutSnapshot} phản hồi cũ được tạo trước khi hệ thống lưu phiên bản câu hỏi. Dữ liệu gốc vẫn được giữ nguyên; các chỉ số của nhóm này dùng cấu trúc hiện tại làm ước lượng và cần đối chiếu phản hồi thô nếu khảo sát đã từng sửa.</p>
               )}
