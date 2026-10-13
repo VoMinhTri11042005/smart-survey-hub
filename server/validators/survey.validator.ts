@@ -32,10 +32,27 @@ function validateQuestionConfiguration(
     scaleMax?: number;
     maxSelections?: number;
     screenOutAnswer?: string;
+    correctAnswer?: string | string[];
+    points?: number;
   },
   context: z.RefinementCtx,
 ) {
   const isGrid = question.type === 'multiple_choice_grid' || question.type === 'checkbox_grid';
+  const needsOptions = question.type === 'single_choice'
+    || question.type === 'multiple_choice'
+    || question.type === 'dropdown';
+  const optionKey = (value: string) => value.trim().toLocaleLowerCase('vi-VN');
+  const hasDuplicateOptions = Boolean(question.options && new Set(question.options.map(optionKey)).size !== question.options.length);
+
+  if (needsOptions && !question.options?.length) {
+    context.addIssue({ code: 'custom', path: ['options'], message: 'Câu hỏi lựa chọn cần ít nhất một đáp án.' });
+  }
+  if ((needsOptions || isGrid) && hasDuplicateOptions) {
+    context.addIssue({ code: 'custom', path: ['options'], message: 'Các lựa chọn trong câu hỏi phải khác nhau.' });
+  }
+  if ((needsOptions || isGrid) && question.options?.some(option => !option.trim())) {
+    context.addIssue({ code: 'custom', path: ['options'], message: 'Lựa chọn không được để trống.' });
+  }
   if (question.maxSelections !== undefined) {
     if (question.type !== 'multiple_choice') {
       context.addIssue({ code: 'custom', path: ['maxSelections'], message: 'Giới hạn chỉ dùng cho câu hỏi nhiều lựa chọn.' });
@@ -48,20 +65,11 @@ function validateQuestionConfiguration(
   )) {
     context.addIssue({ code: 'custom', path: ['screenOutAnswer'], message: 'Đáp án kết thúc phải thuộc câu hỏi một lựa chọn.' });
   }
-  if (question.type === 'dropdown' && !question.options?.length) {
-    context.addIssue({ code: 'custom', path: ['options'], message: 'Câu hỏi menu thả xuống cần ít nhất một lựa chọn.' });
-  }
   if (isGrid && !question.options?.length) {
     context.addIssue({ code: 'custom', path: ['options'], message: 'Câu hỏi lưới cần ít nhất một hàng.' });
   }
   if (isGrid && !question.gridColumns?.length) {
     context.addIssue({ code: 'custom', path: ['gridColumns'], message: 'Câu hỏi lưới cần ít nhất một cột.' });
-  }
-  if (isGrid && question.options && new Set(question.options).size !== question.options.length) {
-    context.addIssue({ code: 'custom', path: ['options'], message: 'Tên các hàng trong câu hỏi lưới phải khác nhau.' });
-  }
-  if (isGrid && question.options?.some(option => !option.trim())) {
-    context.addIssue({ code: 'custom', path: ['options'], message: 'Tên hàng trong câu hỏi lưới không được để trống.' });
   }
   if (isGrid && question.gridColumns && new Set(question.gridColumns).size !== question.gridColumns.length) {
     context.addIssue({ code: 'custom', path: ['gridColumns'], message: 'Tên các cột trong câu hỏi lưới phải khác nhau.' });
@@ -79,14 +87,34 @@ function validateQuestionConfiguration(
   } else if (question.scaleMin !== undefined || question.scaleMax !== undefined) {
     context.addIssue({ code: 'custom', path: ['scaleMin'], message: 'Chỉ câu hỏi thang tuyến tính mới có mức min/max.' });
   }
+
+  if (question.correctAnswer !== undefined) {
+    const answerValues = Array.isArray(question.correctAnswer) ? question.correctAnswer : [question.correctAnswer];
+    const supportsAnswerKey = question.type === 'single_choice'
+      || question.type === 'multiple_choice'
+      || question.type === 'dropdown';
+    if (!supportsAnswerKey) {
+      context.addIssue({ code: 'custom', path: ['correctAnswer'], message: 'Đáp án đúng chỉ dùng cho câu hỏi lựa chọn.' });
+    } else if (
+      (question.type === 'multiple_choice' ? !Array.isArray(question.correctAnswer) : Array.isArray(question.correctAnswer))
+      || answerValues.length === 0
+      || new Set(answerValues).size !== answerValues.length
+      || answerValues.some(answer => !question.options?.includes(answer))
+    ) {
+      context.addIssue({ code: 'custom', path: ['correctAnswer'], message: 'Đáp án đúng phải khớp với lựa chọn của câu hỏi.' });
+    }
+  }
+  if (question.points !== undefined && (!(question.points > 0) || !Number.isFinite(question.points))) {
+    context.addIssue({ code: 'custom', path: ['points'], message: 'Điểm số phải lớn hơn 0.' });
+  }
 }
 
 const SurveyQuestionSchema = z.object({
-  id: z.string(),
+  id: z.string().refine(value => value.trim().length > 0, 'Mã câu hỏi không được để trống.'),
   type: QuestionTypeSchema,
-  text: z.string(),
+  text: z.string().refine(value => value.trim().length > 0, 'Nội dung câu hỏi không được để trống.'),
   sectionId: z.string().optional(),
-  options: z.array(z.string()).optional(),
+  options: z.array(z.string().refine(value => value.trim().length > 0, 'Lựa chọn không được để trống.')).max(100).optional(),
   gridColumns: z.array(z.string()).max(100).optional(),
   scaleMin: z.number().int().min(0).max(100).optional(),
   scaleMax: z.number().int().min(0).max(100).optional(),
@@ -97,7 +125,7 @@ const SurveyQuestionSchema = z.object({
   screenOutMessage: z.string().max(500).optional(),
   required: z.boolean().optional().default(true),
   correctAnswer: z.union([z.string(), z.array(z.string())]).optional(),
-  points: z.number().optional(),
+  points: z.number().finite().positive().max(1_000_000).optional(),
   label: z.string().optional(),
   textAnalysisMode: z.enum(['auto', 'include', 'exclude']).optional(),
 }).superRefine(validateQuestionConfiguration);
@@ -108,8 +136,38 @@ const SurveySectionSchema = z.object({
   description: z.string().max(5000).optional(),
 });
 
+function validateSurveyPayload(
+  value: { questions?: Array<{ id: string; sectionId?: string }>; sections?: Array<{ id: string }> },
+  context: z.RefinementCtx,
+) {
+  if (value.questions) {
+    const ids = value.questions.map(question => question.id.trim());
+    if (new Set(ids).size !== ids.length) {
+      context.addIssue({ code: 'custom', path: ['questions'], message: 'Mã câu hỏi phải là duy nhất.' });
+    }
+  }
+  if (value.sections) {
+    const ids = value.sections.map(section => section.id.trim());
+    if (new Set(ids).size !== ids.length) {
+      context.addIssue({ code: 'custom', path: ['sections'], message: 'Mã phần phải là duy nhất.' });
+    }
+  }
+  if (value.questions && value.sections) {
+    const sectionIds = new Set(value.sections.map(section => section.id));
+    value.questions.forEach((question, index) => {
+      if (question.sectionId && !sectionIds.has(question.sectionId)) {
+        context.addIssue({
+          code: 'custom',
+          path: ['questions', index, 'sectionId'],
+          message: 'Câu hỏi đang tham chiếu đến phần không tồn tại.',
+        });
+      }
+    });
+  }
+}
+
 // ─── Survey ───
-export const CreateSurveySchema = z.object({
+const SurveyPayloadSchema = z.object({
   id: z.string().optional(),
   title: z.string().min(1, 'Tiêu đề không được để trống.'),
   description: z.string().optional().default(''),
@@ -119,12 +177,13 @@ export const CreateSurveySchema = z.object({
   displayMode: z.enum(['single', 'all']).optional().default('single'),
   showScore: z.boolean().optional().default(true),
   closesAt: z.string().nullable().optional().default(null),
-  maxAttemptsPerDevice: z.number().nullable().optional().default(null),
-  timeLimitMinutes: z.number().nullable().optional().default(null),
+  maxAttemptsPerDevice: z.number().int().positive().max(100).nullable().optional().default(null),
+  timeLimitMinutes: z.number().int().positive().max(1_440).nullable().optional().default(null),
   status: z.enum(['draft', 'live', 'closed']).optional().default('live'),
 });
 
-export const UpdateSurveySchema = CreateSurveySchema.partial();
+export const CreateSurveySchema = SurveyPayloadSchema.superRefine(validateSurveyPayload);
+export const UpdateSurveySchema = SurveyPayloadSchema.partial().superRefine(validateSurveyPayload);
 
 export const SubmitResponseSchema = z.object({
   respondentId: z.string()

@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import ExcelJS from 'exceljs';
-import { SubmitResponseSchema } from '../validators/survey.validator';
+import { CreateSurveySchema, SubmitResponseSchema, UpdateSurveySchema } from '../validators/survey.validator';
 import {
   assertResponseAttemptAllowed,
+  assertMergedSurveyStructure,
+  calculateImportedQuizScore,
   computeServerQuizScore,
   getRespondentDeviceId,
+  mapRowToResponse,
   validateResponseAnswers,
 } from './survey.service';
 
@@ -73,5 +76,75 @@ describe('response validation', () => {
       { id: 'one', type: 'single_choice', correctAnswer: 'A', points: 2 },
       { id: 'many', type: 'multiple_choice', correctAnswer: ['B', 'C'], points: 3 },
     ], { one: 'A', many: ['C', 'B'] })).toEqual({ score: 5, totalPossible: 5 });
+  });
+
+  it('calculates stored quiz scores for imported quiz responses only', () => {
+    const questions = [{ id: 'one', type: 'single_choice', correctAnswer: 'A', points: 2 }];
+    expect(calculateImportedQuizScore(true, false, questions, { one: 'A' }))
+      .toEqual({ score: 2, totalQuizQuestions: 2 });
+    expect(calculateImportedQuizScore(false, false, questions, { one: 'A' }))
+      .toEqual({ score: null, totalQuizQuestions: null });
+    expect(calculateImportedQuizScore(true, true, questions, { one: 'A' }))
+      .toEqual({ score: null, totalQuizQuestions: null });
+  });
+
+  it('rejects a merged survey that leaves a question pointing at a removed section', () => {
+    expect(() => assertMergedSurveyStructure(
+      [{ id: 'q1', sectionId: 'removed-section' }],
+      [{ id: 'current-section' }],
+    )).toThrow(/phần không tồn tại/);
+    expect(() => assertMergedSurveyStructure(
+      [{ id: 'q1', sectionId: 'current-section' }],
+      [{ id: 'current-section' }],
+    )).not.toThrow();
+  });
+
+  it('rejects duplicate question IDs and ambiguous choices before a survey is stored', () => {
+    const repeatedQuestionId = CreateSurveySchema.safeParse({
+      title: 'Survey',
+      questions: [
+        { id: 'q1', type: 'single_choice', text: 'One', options: ['A', 'B'] },
+        { id: 'q1', type: 'single_choice', text: 'Two', options: ['C', 'D'] },
+      ],
+    });
+    expect(repeatedQuestionId.success).toBe(false);
+
+    const duplicateChoice = CreateSurveySchema.safeParse({
+      title: 'Survey',
+      questions: [{ id: 'q1', type: 'single_choice', text: 'One', options: ['Có', ' có '] }],
+    });
+    expect(duplicateChoice.success).toBe(false);
+    expect(UpdateSurveySchema.safeParse({
+      questions: [{ id: 'q1', type: 'single_choice', text: 'One', options: ['A', 'B'] }],
+    }).success).toBe(true);
+  });
+
+  it('keeps an optional response schema snapshot distinct from legacy rows', () => {
+    const snapshot = {
+      schemaVersion: 1,
+      capturedAt: '2026-10-11T00:00:00.000Z',
+      isQuiz: false,
+      questions: [{ id: 'q1', type: 'text', text: 'Original wording' }],
+    };
+    expect(mapRowToResponse({
+      id: 'r1', survey_id: 's1', respondent_id: 'device-x-attempt-1', answers: {},
+      score: null, total_quiz_questions: null, submitted_at: '2026-10-11T00:00:00.000Z',
+      screened_out: false, survey_snapshot: snapshot,
+    }).surveySnapshot).toEqual(snapshot);
+    expect(mapRowToResponse({
+      id: 'legacy', survey_id: 's1', respondent_id: 'device-x-attempt-2', answers: {},
+      score: null, total_quiz_questions: null, submitted_at: '2026-10-11T00:00:00.000Z',
+      screened_out: false,
+    }).surveySnapshot).toBeNull();
+    expect(mapRowToResponse({
+      id: 'serialized', survey_id: 's1', respondent_id: 'device-x-attempt-3', answers: {},
+      score: null, total_quiz_questions: null, submitted_at: '2026-10-11T00:00:00.000Z',
+      screened_out: false, survey_snapshot: JSON.stringify(snapshot),
+    }).surveySnapshot).toEqual(snapshot);
+    expect(mapRowToResponse({
+      id: 'broken', survey_id: 's1', respondent_id: 'device-x-attempt-4', answers: {},
+      score: null, total_quiz_questions: null, submitted_at: '2026-10-11T00:00:00.000Z',
+      screened_out: false, survey_snapshot: '{not-json}',
+    }).surveySnapshot).toBeNull();
   });
 });

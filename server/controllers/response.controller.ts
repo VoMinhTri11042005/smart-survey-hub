@@ -4,11 +4,19 @@
 import type { Request, Response, NextFunction } from 'express';
 import * as surveyService from '../services/survey.service';
 
+// A response snapshot may contain the quiz answer key that was active at
+// submission time. Administrators need it for historical analysis; a public
+// respondent must never receive it back through submit/get-my-response.
+function toPublicResponse(response: Record<string, unknown>) {
+  const { surveySnapshot: _surveySnapshot, ...safeResponse } = response;
+  return safeResponse;
+}
+
 export async function submit(req: Request<{ id: string }>, res: Response, next: NextFunction) {
   try {
     const result = await surveyService.submitResponse(req.params.id, req.body);
     if (result === null) return res.status(404).json({ error: 'Không tìm thấy khảo sát.' });
-    res.json(result);
+    res.json(toPublicResponse(result));
   } catch (err) { next(err); }
 }
 
@@ -30,7 +38,7 @@ export async function list(req: Request<{ id: string }>, res: Response, next: Ne
 export async function getMine(req: Request<{ id: string; respondentId: string }>, res: Response, next: NextFunction) {
   try {
     const response = await surveyService.getMyResponse(req.params.id, req.params.respondentId);
-    res.json(response);
+    res.json(response ? toPublicResponse(response) : null);
   } catch (err) { next(err); }
 }
 

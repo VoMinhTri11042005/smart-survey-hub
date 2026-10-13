@@ -1,5 +1,5 @@
 import { Info, Sparkles, Timer, CheckCircle, TrendingUp, Download, ChevronDown, BarChart3, MessageSquare, RefreshCw, Trash2, Search, Users, ClipboardCheck, Clock3, ListChecks, Filter, FileSpreadsheet } from 'lucide-react';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { useSurvey } from '../../context/SurveyContext';
 import { computeSurveyAnalytics, exportResponsesToCsv, type TextCategoryDistribution } from '../../utils/analytics';
 import { cleanHtmlWhitespace, stripHtml, toUnaccented } from '../../utils/stringUtils';
@@ -9,12 +9,6 @@ import type { Survey, SurveyResponse } from '../../types';
 import type { ToastType } from '../common/Toast';
 
 const QUESTION_CHART_COLORS = ['#3730a3', '#006591', '#89ceff', '#c3c0ff', '#94a3b8', '#10b981', '#f59e0b', '#ef4444'];
-const hasAnswer = (value: unknown) => {
-  if (Array.isArray(value)) return value.length > 0;
-  if (value && typeof value === 'object') return Object.values(value).some(hasAnswer);
-  if (typeof value === 'string') return stripHtml(cleanHtmlWhitespace(value)).trim().length > 0;
-  return value !== undefined && value !== null;
-};
 const getRatingLevels = (distribution: Record<number, number>) => Object.keys(distribution).map(Number).sort((a, b) => a - b);
 
 export function Analytics({ onFeedback }: { onFeedback?: (message: string, type: ToastType) => void }) {
@@ -22,6 +16,7 @@ export function Analytics({ onFeedback }: { onFeedback?: (message: string, type:
   const [selectedSurvey, setSelectedSurvey] = useState<Survey | null>(currentSurvey);
   const [allResponses, setAllResponses] = useState<SurveyResponse[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [loadError, setLoadError] = useState('');
   const [isResetting, setIsResetting] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [showImportDialog, setShowImportDialog] = useState(false);
@@ -37,31 +32,50 @@ export function Analytics({ onFeedback }: { onFeedback?: (message: string, type:
     }
   }, [currentSurvey, selectedSurvey, surveys]);
 
+  const loadResponses = useCallback(async (surveyId: string) => {
+    setIsLoading(true);
+    setLoadError('');
+    try {
+      const loaded = await fetchResponses(surveyId);
+      setAllResponses(loaded);
+    } catch (error) {
+      console.error('Unable to load analytics responses:', error);
+      setAllResponses([]);
+      setLoadError('Không thể tải phản hồi từ máy chủ. Số liệu sẽ không được hiển thị cho đến khi tải lại thành công.');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [fetchResponses]);
+
   useEffect(() => {
     if (!selectedSurvey) return;
+    let active = true;
     setIsLoading(true);
+    setLoadError('');
     fetchResponses(selectedSurvey.id)
-      .then(setAllResponses)
-      .finally(() => setIsLoading(false));
-  }, [selectedSurvey, fetchResponses]);
+      .then(loaded => {
+        if (active) setAllResponses(loaded);
+      })
+      .catch(error => {
+        console.error('Unable to load analytics responses:', error);
+        if (!active) return;
+        setAllResponses([]);
+        setLoadError('Không thể tải phản hồi từ máy chủ. Số liệu sẽ không được hiển thị cho đến khi tải lại thành công.');
+      })
+      .finally(() => {
+        if (active) setIsLoading(false);
+      });
+    return () => { active = false; };
+  }, [selectedSurvey?.id, fetchResponses]);
 
   const responses = allResponses.filter(response => !response.screenedOut);
   const screenedOutCount = allResponses.filter(response => response.screenedOut).length;
   const analytics = selectedSurvey ? computeSurveyAnalytics(selectedSurvey, responses) : null;
   const normalizedSearch = analysisSearch.trim().toLocaleLowerCase('vi-VN');
   const matchesSearch = (...values: unknown[]) => !normalizedSearch || values.some(value => String(value ?? '').toLocaleLowerCase('vi-VN').includes(normalizedSearch));
-  const questionMetrics = (selectedSurvey?.questions || []).map(question => {
-    const answered = responses.filter(response => {
-      const answer = response.answers[question.id];
-      if (question.type === 'multiple_choice_grid' || question.type === 'checkbox_grid') {
-        return !!answer
-          && typeof answer === 'object'
-          && !Array.isArray(answer)
-          && (question.options ?? []).every(row => hasAnswer((answer as Record<string, unknown>)[row]));
-      }
-      return hasAnswer(answer);
-    }).length;
-    return { question, answered, missing: responses.length - answered, rate: responses.length ? Math.round((answered / responses.length) * 100) : 0 };
+  const questionMetrics = (analytics?.questionMetrics || []).flatMap(metric => {
+    const question = selectedSurvey?.questions.find(item => item.id === metric.questionId);
+    return question ? [{ question, ...metric, rate: metric.answerRate }] : [];
   });
   const filteredChoiceDistributions = analytics?.choiceDistributions.filter(item => matchesSearch(stripHtml(item.questionText), ...item.options.map(option => option.label))) || [];
   const filteredRatings = analytics?.starRatings.filter(item => matchesSearch(stripHtml(item.questionText))) || [];
@@ -75,14 +89,23 @@ export function Analytics({ onFeedback }: { onFeedback?: (message: string, type:
   }) || [];
   const filteredRecentResponses = analytics?.recentResponses.filter(response => matchesSearch(response.id, new Date(response.submittedAt).toLocaleString('vi-VN'), ...Object.values(response.answers))) || [];
   const filteredQuestionMetrics = questionMetrics.filter(item => matchesSearch(stripHtml(item.question.text), item.question.label, item.question.type));
-  const responseDays = new Set(responses.map(response => new Date(response.submittedAt).toLocaleDateString('vi-VN'))).size;
+  const toDayKey = (timestamp: string) => {
+    const date = new Date(timestamp);
+    if (Number.isNaN(date.getTime())) return null;
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+  };
+  const responseDays = new Set(responses.map(response => toDayKey(response.submittedAt)).filter((value): value is string => Boolean(value))).size;
   const latestResponse = analytics?.recentResponses[0];
   const responseTimeline = responses.reduce<Record<string, number>>((timeline, response) => {
-    const day = new Date(response.submittedAt).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' });
+    const day = toDayKey(response.submittedAt);
+    if (!day) return timeline;
     timeline[day] = (timeline[day] || 0) + 1;
     return timeline;
   }, {});
-  const timelineEntries = Object.entries(responseTimeline).slice(-14) as [string, number][];
+  const timelineEntries = Object.entries(responseTimeline)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .slice(-14)
+    .map(([day, count]) => [new Date(`${day}T00:00:00`).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' }), count] as [string, number]);
   const maxTimelineResponses = Math.max(...timelineEntries.map(([, count]) => Number(count)), 1);
   const visibleQuestionMetrics = filteredQuestionMetrics.filter(({ question }) => {
     if (questionFilter === 'all') return true;
@@ -157,7 +180,7 @@ export function Analytics({ onFeedback }: { onFeedback?: (message: string, type:
     const importedSurvey = await fetchSurveyById(surveyId, true);
     if (!importedSurvey) throw new Error('Dữ liệu đã được nhập nhưng không tải lại được khảo sát.');
     handleSelectSurvey(importedSurvey);
-    setAllResponses(await fetchResponses(surveyId));
+    await loadResponses(surveyId);
   };
 
   const handleResetResponses = async () => {
@@ -245,7 +268,7 @@ export function Analytics({ onFeedback }: { onFeedback?: (message: string, type:
               />
             </label>
             <button
-              onClick={() => selectedSurvey && fetchResponses(selectedSurvey.id).then(setAllResponses)}
+              onClick={() => selectedSurvey && void loadResponses(selectedSurvey.id)}
               className="p-2.5 bg-white border border-border-subtle rounded-xl hover:bg-surface-container-low transition-colors cursor-pointer"
               title="Làm mới"
             >
@@ -308,6 +331,17 @@ export function Analytics({ onFeedback }: { onFeedback?: (message: string, type:
         <div className="flex items-center justify-center py-20">
           <RefreshCw size={32} className="animate-spin text-primary" />
         </div>
+      ) : loadError ? (
+        <div role="alert" className="flex flex-col items-center justify-center gap-4 rounded-3xl border border-sentiment-negative/30 bg-sentiment-negative/5 px-6 py-16 text-center">
+          <MessageSquare size={40} className="text-sentiment-negative" />
+          <div>
+            <h3 className="font-display text-xl font-bold text-text-primary">Chưa thể tải số liệu</h3>
+            <p className="mt-2 max-w-lg text-sm text-text-secondary">{loadError}</p>
+          </div>
+          <button onClick={() => selectedSurvey && void loadResponses(selectedSurvey.id)} className="rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-white hover:bg-primary/90">
+            Thử tải lại
+          </button>
+        </div>
       ) : analytics && analytics.totalResponses === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 bg-white rounded-3xl border border-border-subtle">
           <MessageSquare size={40} className="text-text-secondary mb-4" />
@@ -325,14 +359,29 @@ export function Analytics({ onFeedback }: { onFeedback?: (message: string, type:
             <input value={analysisSearch} onChange={(e) => setAnalysisSearch(e.target.value)} placeholder="Tìm câu hỏi, đáp án, phản hồi..." className="w-full bg-transparent text-sm outline-none placeholder:text-text-secondary" />
           </label>
 
+          {(analytics.legacyResponsesWithoutSnapshot > 0 || analytics.responsesWithSchemaDifferences > 0 || analytics.invalidScoreCount) && (
+            <section className="rounded-2xl border border-amber-300 bg-amber-50 px-5 py-4 text-sm text-amber-950">
+              <p className="font-bold">Lưu ý về phiên bản câu hỏi</p>
+              {analytics.legacyResponsesWithoutSnapshot > 0 && (
+                <p className="mt-1">{analytics.legacyResponsesWithoutSnapshot} phản hồi cũ được tạo trước khi hệ thống lưu phiên bản câu hỏi. Dữ liệu gốc vẫn được giữ nguyên; các chỉ số của nhóm này dùng cấu trúc hiện tại làm ước lượng và cần đối chiếu phản hồi thô nếu khảo sát đã từng sửa.</p>
+              )}
+              {analytics.responsesWithSchemaDifferences > 0 && (
+                <p className="mt-1">{analytics.responsesWithSchemaDifferences} phản hồi dùng phiên bản câu hỏi khác phiên bản hiện tại. Tỷ lệ hoàn thành và đúng/sai dùng đúng cấu trúc đã chụp khi nộp; biểu đồ của phiên bản hiện tại không gộp sai dữ liệu cũ.</p>
+              )}
+              {analytics.invalidScoreCount && (
+                <p className="mt-1">{analytics.invalidScoreCount} điểm nằm ngoài khoảng 0–100% nên đã được loại khỏi thống kê điểm chuẩn hóa; dữ liệu gốc không bị thay đổi.</p>
+              )}
+            </section>
+          )}
+
           <section className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
-            <InsightCard icon={<Users size={19} />} label="Người trả lời" value={analytics.totalResponses} detail="Tổng phản hồi" tone="text-secondary-container bg-secondary-fixed/30" />
+            <InsightCard icon={<Users size={19} />} label="Phản hồi đã nộp" value={analytics.totalResponses} detail="Không suy diễn số người duy nhất" tone="text-secondary-container bg-secondary-fixed/30" />
             <InsightCard icon={<ListChecks size={19} />} label="Câu hỏi" value={selectedSurvey?.questions.length ?? 0} detail={`${selectedSurvey?.questions.filter(q => q.required).length ?? 0} câu bắt buộc`} tone="text-primary bg-primary-fixed" />
-            <InsightCard icon={<ClipboardCheck size={19} />} label="Hoàn thành" value={`${analytics.completionRate}%`} detail={`${Math.round((analytics.completionRate / 100) * analytics.totalResponses)} bài đầy đủ`} tone="text-sentiment-positive bg-sentiment-positive/10" />
+            <InsightCard icon={<ClipboardCheck size={19} />} label="Hoàn thành" value={`${analytics.completionRate}%`} detail={`${analytics.completedResponses} bài đầy đủ${analytics.legacyCompletionResponses ? ` · ${analytics.legacyCompletionResponses} dữ liệu cũ` : ''}`} tone="text-sentiment-positive bg-sentiment-positive/10" />
             <InsightCard icon={<Clock3 size={19} />} label="Ngày có phản hồi" value={responseDays} detail={latestResponse ? `Mới nhất: ${new Date(latestResponse.submittedAt).toLocaleDateString('vi-VN')}` : 'Chưa có dữ liệu'} tone="text-primary bg-primary-fixed" />
             <InsightCard icon={<MessageSquare size={19} />} label="Nhóm văn bản" value={analytics.textCategoryDistributions.length} detail={`${analytics.textCategoryDistributions.reduce((sum, item) => sum + item.totalAnswered, 0)} phản hồi đã tổng hợp`} tone="text-on-secondary-fixed bg-secondary-fixed" />
-            <InsightCard icon={<TrendingUp size={19} />} label="Tỷ lệ trả lời" value={`${questionMetrics.length ? Math.round(questionMetrics.reduce((sum, item) => sum + item.rate, 0) / questionMetrics.length) : 0}%`} detail="Trung bình toàn bộ câu hỏi" tone="text-sentiment-neutral bg-sentiment-neutral/10" />
-            {selectedSurvey?.isQuiz && analytics.passRate !== undefined && <InsightCard icon={<CheckCircle size={19} />} label="Đạt từ 50%" value={`${analytics.passRate}%`} detail={`Trung vị: ${analytics.medianScore ?? 0} điểm`} tone="text-sentiment-positive bg-sentiment-positive/10" />}
+            <InsightCard icon={<TrendingUp size={19} />} label="Tỷ lệ trả lời" value={`${questionMetrics.length ? (Math.round(questionMetrics.reduce((sum, item) => sum + item.rate, 0) / questionMetrics.length * 10) / 10) : 0}%`} detail="Trung bình toàn bộ câu hỏi" tone="text-sentiment-neutral bg-sentiment-neutral/10" />
+            {selectedSurvey?.isQuiz && analytics.passRate !== undefined && <InsightCard icon={<CheckCircle size={19} />} label="Đạt từ 50%" value={`${analytics.passRate}%`} detail={`Trung vị chuẩn hóa: ${analytics.medianScorePercent ?? 0}%`} tone="text-sentiment-positive bg-sentiment-positive/10" />}
           </section>
 
           <section className="bg-surface-container-lowest rounded-3xl border border-border-subtle shadow-sm overflow-hidden">
@@ -343,7 +392,18 @@ export function Analytics({ onFeedback }: { onFeedback?: (message: string, type:
             <div className="overflow-x-auto">
               <table className="w-full min-w-[720px] text-left">
                 <thead className="bg-surface-container-low text-[11px] uppercase tracking-wider text-text-secondary"><tr><th className="px-6 py-3 font-bold">Câu hỏi</th><th className="px-4 py-3 font-bold">Loại</th><th className="px-4 py-3 font-bold">Bắt buộc</th><th className="px-4 py-3 font-bold">Đã trả lời</th><th className="px-6 py-3 font-bold">Độ phủ dữ liệu</th></tr></thead>
-                <tbody>{qualityPage.items.map(({ question, answered, missing, rate }, index) => <tr key={question.id} className="border-t border-border-subtle text-sm"><td className="px-6 py-4"><span className="mr-2 text-text-secondary font-mono text-xs">{qualityPage.page * qualityPage.pageSize + index + 1}.</span><span className="font-semibold text-text-primary">{stripHtml(question.text) || question.label || 'Chưa đặt nội dung'}</span></td><td className="px-4 py-4 text-text-secondary">{question.type.replace('_', ' ')}</td><td className="px-4 py-4">{question.required ? <span className="text-sentiment-negative font-bold">Có</span> : <span className="text-text-secondary">Không</span>}</td><td className="px-4 py-4 font-semibold">{answered} <span className="text-text-secondary font-normal">/ {analytics.totalResponses}</span></td><td className="px-6 py-4 min-w-48"><div className="flex items-center gap-3"><div className="h-2 flex-1 bg-surface-container rounded-full overflow-hidden"><div className="h-full bg-primary rounded-full" style={{ width: `${rate}%` }} /></div><span className="w-16 text-right font-bold text-primary">{rate}%</span><span className="text-xs text-text-secondary">thiếu {missing}</span></div></td></tr>)}</tbody>
+                <tbody>{qualityPage.items.map(({
+                  question, answered, missing, rate, comparableResponses,
+                  versionDifferentResponses, incompatibleVersionResponses, legacyUnversionedResponses,
+                }, index) => (
+                  <tr key={question.id} className="border-t border-border-subtle text-sm">
+                    <td className="px-6 py-4"><span className="mr-2 text-text-secondary font-mono text-xs">{qualityPage.page * qualityPage.pageSize + index + 1}.</span><span className="font-semibold text-text-primary">{stripHtml(question.text) || question.label || 'Chưa đặt nội dung'}</span></td>
+                    <td className="px-4 py-4 text-text-secondary">{question.type.replace('_', ' ')}</td>
+                    <td className="px-4 py-4">{question.required ? <span className="text-sentiment-negative font-bold">Có</span> : <span className="text-text-secondary">Không</span>}</td>
+                    <td className="px-4 py-4 font-semibold">{answered} <span className="text-text-secondary font-normal">/ {comparableResponses}</span>{(versionDifferentResponses > 0 || legacyUnversionedResponses > 0) && <p className="mt-1 text-[11px] font-normal text-amber-800">{versionDifferentResponses > 0 ? `${versionDifferentResponses} phiên bản khác` : ''}{versionDifferentResponses > 0 && legacyUnversionedResponses > 0 ? ' · ' : ''}{legacyUnversionedResponses > 0 ? `${legacyUnversionedResponses} chưa phiên bản` : ''}{incompatibleVersionResponses > 0 ? ` · loại khác: ${incompatibleVersionResponses}` : ''}</p>}</td>
+                    <td className="px-6 py-4 min-w-48"><div className="flex items-center gap-3"><div className="h-2 flex-1 bg-surface-container rounded-full overflow-hidden"><div className="h-full bg-primary rounded-full" style={{ width: `${rate}%` }} /></div><span className="w-16 text-right font-bold text-primary">{rate}%</span><span className="text-xs text-text-secondary">thiếu {missing}</span></div></td>
+                  </tr>
+                ))}</tbody>
               </table>
             </div>
             <PaginationControls page={qualityPage.page} totalPages={qualityPage.totalPages} totalItems={qualityPage.totalItems} pageSize={qualityPage.pageSize} onPageChange={page => updatePage('quality', page)} />
@@ -412,7 +472,10 @@ export function Analytics({ onFeedback }: { onFeedback?: (message: string, type:
               <span className="text-xs font-bold text-primary bg-primary-fixed px-3 py-1.5 rounded-full">{visibleQuestionMetrics.length} câu hỏi</span>
             </div>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-              {detailPage.items.map(({ question, answered, missing, rate }, index) => {
+              {detailPage.items.map(({
+                question, answered, missing, rate, comparableResponses,
+                versionDifferentResponses, incompatibleVersionResponses, legacyUnversionedResponses,
+              }, index) => {
                 const choice = analytics.choiceDistributions.find(item => item.questionId === question.id);
                 const rating = analytics.starRatings.find(item => item.questionId === question.id);
                 const ratingLevels = rating ? getRatingLevels(rating.distribution) : [];
@@ -432,17 +495,18 @@ export function Analytics({ onFeedback }: { onFeedback?: (message: string, type:
                       <span className="shrink-0 text-xs font-bold text-primary bg-primary-fixed px-2.5 py-1 rounded-full">{rate}%</span>
                     </div>
                     <div className="flex gap-4 text-xs text-text-secondary mb-5">
-                      <span>Đã trả lời <strong className="text-text-primary">{answered}</strong>/{responses.length}</span>
+                      <span>Đã trả lời <strong className="text-text-primary">{answered}</strong>/{comparableResponses}</span>
                       <span>Bỏ qua <strong className="text-sentiment-negative">{missing}</strong></span>
                     </div>
+                    {(versionDifferentResponses > 0 || legacyUnversionedResponses > 0) && <p className="-mt-3 mb-4 text-[11px] text-amber-800">{versionDifferentResponses > 0 ? `${versionDifferentResponses} phản hồi từ phiên bản khác được tách hoặc tính theo cấu trúc gốc.` : ''}{legacyUnversionedResponses > 0 ? `${versionDifferentResponses > 0 ? ' ' : ''}${legacyUnversionedResponses} phản hồi cũ chưa có phiên bản.` : ''}{incompatibleVersionResponses > 0 ? ` ${incompatibleVersionResponses} phản hồi có loại câu hỏi không tương thích nên không gộp vào biểu đồ này.` : ''}</p>}
                     {choice && (
                       <div className="grid grid-cols-1 sm:grid-cols-[150px_1fr] gap-5 items-center">
                         <DonutChart options={choice.options} />
                         <div className="space-y-3">
                           {choice.options.map((option, optionIndex) => (
-                            <div key={option.label} className="space-y-1">
+                            <div key={option.id} className="space-y-1">
                               <div className="flex justify-between gap-3 text-xs">
-                                <span className="truncate text-text-primary">{stripHtml(option.label)}</span>
+                                <span className={`truncate ${option.isUnknown || option.isHistorical ? 'text-amber-800' : 'text-text-primary'}`}>{option.isUnknown || option.isHistorical ? '⚠ ' : ''}{stripHtml(option.label)}{option.isAmbiguous ? ' (trùng nhãn cũ)' : ''}</span>
                                 <span className="shrink-0 font-bold text-primary">{option.count} · {option.percent}%</span>
                               </div>
                               <div className="h-2.5 rounded-full bg-surface-container overflow-hidden">
@@ -457,6 +521,7 @@ export function Analytics({ onFeedback }: { onFeedback?: (message: string, type:
                             </div>
                           ))}
                         </div>
+                        {(choice.historicalVersionAnswered > 0 || choice.legacyUnversionedAnswered > 0 || choice.incompatibleVersionAnswered > 0) && <p className="text-[11px] text-amber-800">{choice.historicalVersionAnswered > 0 ? `${choice.historicalVersionAnswered} phản hồi phiên bản cũ được hiển thị riêng.` : ''}{choice.legacyUnversionedAnswered > 0 ? `${choice.historicalVersionAnswered > 0 ? ' ' : ''}${choice.legacyUnversionedAnswered} phản hồi cũ chưa có phiên bản dùng nhãn hiện tại có ghi chú.` : ''}{choice.incompatibleVersionAnswered > 0 ? ` ${choice.incompatibleVersionAnswered} phản hồi không tương thích không được gộp.` : ''}</p>}
                         {question.type === 'multiple_choice' && <p className="text-[11px] text-text-secondary pt-1">Có thể chọn nhiều đáp án; tổng tỷ lệ có thể vượt 100%.</p>}
                       </div>
                     )}
@@ -539,9 +604,9 @@ export function Analytics({ onFeedback }: { onFeedback?: (message: string, type:
                   <div key={dist.questionId} className="space-y-3">
                     <p className="text-xs font-semibold text-text-secondary">{stripHtml(dist.questionText)}</p>
                     {dist.options.map((opt, i) => (
-                      <div key={opt.label}>
+                      <div key={opt.id}>
                         <ProgressBar
-                          label={stripHtml(opt.label)}
+                          label={`${opt.isUnknown || opt.isHistorical ? '⚠ ' : ''}${stripHtml(opt.label)}${opt.isAmbiguous ? ' (trùng nhãn cũ)' : ''}`}
                           count={`${opt.count} phản hồi`}
                           percent={opt.percent}
                           color={['bg-primary-container', 'bg-secondary-container', 'bg-primary-fixed-dim', 'bg-surface-container-highest'][i % 4]}
@@ -653,15 +718,16 @@ export function Analytics({ onFeedback }: { onFeedback?: (message: string, type:
                 <p className="font-display text-3xl font-bold text-text-primary">{analytics.completionRate}%</p>
               </div>
             </div>
-            {selectedSurvey?.isQuiz && analytics.averageScore !== undefined && (
+            {selectedSurvey?.isQuiz && analytics.averageScorePercent !== undefined && (
               <div className="col-span-2 bg-primary-fixed/20 p-6 rounded-3xl border border-primary/20 shadow-sm flex items-center justify-between">
                 <div className="flex items-center gap-4">
                   <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center text-primary shadow-sm">
                     <CheckCircle className="text-primary" size={24} />
                   </div>
                   <div>
-                    <p className="text-xs font-semibold text-primary uppercase tracking-widest mb-1">Điểm số trung bình</p>
-                    <p className="font-display text-2xl font-bold text-primary">{analytics.averageScore} / {analytics.quizTotalQuestions}</p>
+                    <p className="text-xs font-semibold text-primary uppercase tracking-widest mb-1">Điểm trung bình chuẩn hóa</p>
+                    <p className="font-display text-2xl font-bold text-primary">{analytics.averageScorePercent}%</p>
+                    {analytics.averageScore !== undefined && analytics.quizTotalQuestions !== undefined && <p className="text-xs text-primary/75">Tương đương {analytics.averageScore} / {analytics.quizTotalQuestions} điểm</p>}
                   </div>
                 </div>
               </div>
@@ -670,7 +736,7 @@ export function Analytics({ onFeedback }: { onFeedback?: (message: string, type:
             {selectedSurvey?.isQuiz && analytics.scoreDistribution && (
               <div className="col-span-2 bg-surface-container-lowest p-6 rounded-3xl border border-border-subtle shadow-sm">
                 <div className="flex items-center justify-between mb-4">
-                  <div><p className="text-xs font-semibold text-text-secondary uppercase tracking-widest">Phân bố kết quả</p><p className="text-sm text-text-primary font-bold mt-1">Điểm trung vị {analytics.medianScore ?? 0} · Đạt từ 50%: {analytics.passRate ?? 0}%</p></div>
+                  <div><p className="text-xs font-semibold text-text-secondary uppercase tracking-widest">Phân bố kết quả</p><p className="text-sm text-text-primary font-bold mt-1">Trung vị chuẩn hóa {analytics.medianScorePercent ?? 0}% · Đạt từ 50%: {analytics.passRate ?? 0}%</p></div>
                   <BarChart3 className="text-primary" size={22} />
                 </div>
                 <div className="grid grid-cols-4 gap-3 items-end h-28">

@@ -2,6 +2,12 @@ import DOMPurify from 'dompurify';
 
 export const stripHtml = (html: string | undefined) => {
   if (!html) return "";
+  // Analytics is also exercised in Node (tests/export preparation), where a
+  // browser DOM does not exist. Keep the browser path for full entity parsing
+  // and use a conservative tag-strip fallback outside the browser.
+  if (typeof document === 'undefined') {
+    return cleanHtmlWhitespace(html).replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+  }
   const tmp = document.createElement("DIV");
   tmp.innerHTML = html;
   return (tmp.textContent || tmp.innerText || "").replace(/\s+/g, ' ').trim();

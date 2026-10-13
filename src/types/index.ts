@@ -71,11 +71,29 @@ export interface Survey {
 export interface SurveyResponse {
   id: string;
   surveyId: string;
+  /**
+   * Opaque identifier generated for a browser/device attempt. It is available
+   * to administrators only and must never be used as a person identifier.
+   */
+  respondentId?: string;
   answers: Record<string, SurveyAnswer>;
-  score?: number;
-  totalQuizQuestions?: number;
+  score?: number | null;
+  /** Maximum score recorded when this response was submitted. */
+  totalQuizQuestions?: number | null;
   submittedAt: string;
   screenedOut?: boolean;
+  /**
+   * Question schema captured by the server at submission time. Legacy
+   * responses intentionally have no snapshot, so callers can surface that
+   * limitation instead of pretending they were collected with the current
+   * questionnaire version.
+   */
+  surveySnapshot?: {
+    schemaVersion: number;
+    capturedAt: string;
+    isQuiz: boolean;
+    questions: SurveyQuestion[];
+  } | null;
 }
 
 // ===== API Types =====

@@ -1,25 +1,15 @@
 import { Timer, Undo2, Sparkles, CircleDot, CheckSquare, CheckCircle2, Home, Edit3, LogOut, X, Trash2, AlertTriangle } from 'lucide-react';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSurvey } from '../../context/SurveyContext';
 import { stripHtml, cleanHtmlWhitespace, sanitizeHtml } from '../../utils/stringUtils';
 import type { Survey, SurveyQuestion } from '../../types';
-import { roundLegacyStarRating } from '../../../shared/starRating';
+import { parseStoredStarRating } from '../../../shared/starRating';
 
 interface RespondentProps {
   survey: Survey | null;
   onExit: () => void;
   onComplete?: () => void;
   isPublic?: boolean;
-}
-
-function normalizeSavedStarRatings(survey: Survey, source: Record<string, any>) {
-  const normalized = { ...source };
-  for (const question of survey.questions) {
-    if (question.type !== 'star_rating') continue;
-    const rating = roundLegacyStarRating(normalized[question.id]);
-    if (rating !== null) normalized[question.id] = rating;
-  }
-  return normalized;
 }
 
 const DEFAULT_SCREEN_OUT_MESSAGE = 'Cảm ơn bạn đã tham gia. Dựa trên câu trả lời của bạn, bạn không thuộc đối tượng khảo sát này.';
@@ -43,6 +33,12 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
   const [showCloseHint, setShowCloseHint] = useState(false);
   const [remainingSeconds, setRemainingSeconds] = useState<number | null>(null);
   const [hasStartedTimedSurvey, setHasStartedTimedSurvey] = useState(false);
+  const hasAnswerProgressRef = useRef(false);
+  // The timer runs independently of React renders. Keep the newest answers
+  // and submission state in refs so expiry never submits a stale render.
+  const answersRef = useRef<Record<string, any>>({});
+  const isCompletedRef = useRef(false);
+  const submissionInFlightRef = useRef(false);
 
   const getDeviceId = useCallback(() => {
     const key = `survey-device-id:${survey?.id ?? 'anon'}`;
@@ -96,7 +92,8 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
           if (savedDraft) {
             const savedAnswers = JSON.parse(savedDraft);
             if (savedAnswers && typeof savedAnswers === 'object') {
-              setAnswers(normalizeSavedStarRatings(survey, savedAnswers));
+              answersRef.current = savedAnswers;
+              setAnswers(savedAnswers);
             }
           }
         } catch (error) {
@@ -106,7 +103,8 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
         try {
           const existingResponse = await fetchMyResponse(survey.id, rid);
           if (existingResponse && existingResponse.answers && Object.keys(existingResponse.answers).length > 0) {
-            setAnswers(normalizeSavedStarRatings(survey, existingResponse.answers));
+            answersRef.current = existingResponse.answers;
+            setAnswers(existingResponse.answers);
             if (existingResponse.screenedOut) {
               const screeningQuestion = survey.questions.find(question =>
                 question.type === 'single_choice'
@@ -118,6 +116,7 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
             }
             if (existingResponse.score !== undefined) setQuizScore(existingResponse.score);
             if (existingResponse.totalQuizQuestions !== undefined) setQuizTotal(existingResponse.totalQuizQuestions);
+            isCompletedRef.current = true;
             setIsCompleted(true);
           }
         } catch (e) {
@@ -164,7 +163,10 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
       setRemainingSeconds(seconds);
       if (seconds === 0 && !hasExpired) {
         hasExpired = true;
-        void submitSurvey();
+        // `answers` in this effect would be the value from the render that
+        // started the timer. Use the ref so every answer typed afterwards is
+        // retained in the automatic submission.
+        void submitSurvey(answersRef.current);
       }
     };
 
@@ -220,6 +222,7 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
     if (survey && respondentId) {
       localStorage.removeItem(`survey-draft:${survey.id}:${respondentId}`);
     }
+    answersRef.current = {};
     setAnswers({});
     setDraftSavedAt(null);
     setShowExitConfirm(false);
@@ -246,8 +249,9 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
     setHasStartedTimedSurvey(true);
   };
 
-  const hasAnswerProgressRef = { current: hasAnswerProgress };
   hasAnswerProgressRef.current = hasAnswerProgress;
+  answersRef.current = answers;
+  isCompletedRef.current = isCompleted;
 
   // Handle browser back button — prevent accidental exit when there's progress
   useEffect(() => {
@@ -353,16 +357,26 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
 
   const setAnswerForQuestion = (questionId: string, value: any) => {
     setErrorMsg('');
-    setAnswers(prev => ({ ...prev, [questionId]: value }));
+    setAnswers(prev => {
+      const next = { ...prev, [questionId]: value };
+      answersRef.current = next;
+      return next;
+    });
   };
 
   const clearAnswerForQuestion = (questionId: string) => {
     setErrorMsg('');
-    setAnswers(prev => { const next = { ...prev }; delete next[questionId]; return next; });
+    setAnswers(prev => {
+      const next = { ...prev };
+      delete next[questionId];
+      answersRef.current = next;
+      return next;
+    });
   };
 
   const clearAllDraft = () => {
     if (!survey || !respondentId) return;
+    answersRef.current = {};
     setAnswers({});
     localStorage.removeItem(`survey-draft:${survey.id}:${respondentId}`);
     setDraftSavedAt(null);
@@ -383,6 +397,7 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
     setAnswers(previous => {
       const next = { ...previous };
       currentPageQuestions.forEach(question => delete next[question.id]);
+      answersRef.current = next;
       return next;
     });
   };
@@ -428,21 +443,18 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
   };
 
   async function submitSurvey(answerOverrides?: Record<string, any>, isScreenOutResponse = false) {
-    if (isSubmitting || isCompleted) return;
+    if (submissionInFlightRef.current || isCompletedRef.current) return;
     if (survey?.closesAt && new Date(survey.closesAt).getTime() <= Date.now()) {
       setErrorMsg('Khảo sát đã hết thời gian cho phép gửi phản hồi.');
       return;
     }
 
+    submissionInFlightRef.current = true;
     setIsSubmitting(true);
     try {
-      const submittedAnswers = answerOverrides ?? answers;
+      const submittedAnswers = answerOverrides ?? answersRef.current;
 
-      const normalizedAnswers = normalizeSavedStarRatings(survey, submittedAnswers);
-      if (Object.keys(normalizedAnswers).some(key => normalizedAnswers[key] !== submittedAnswers[key])) {
-        setAnswers(normalizedAnswers);
-      }
-      const submittedResponse = await submitResponse(survey.id, respondentId, normalizedAnswers);
+      const submittedResponse = await submitResponse(survey.id, respondentId, submittedAnswers);
       if (survey?.isQuiz && !isScreenOutResponse) {
         setQuizScore(typeof submittedResponse.score === 'number' ? submittedResponse.score : 0);
         setQuizTotal(typeof submittedResponse.totalQuizQuestions === 'number' ? submittedResponse.totalQuizQuestions : 0);
@@ -460,6 +472,7 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
       }
 
       if (isScreenOutResponse) setIsScreenedOut(true);
+      isCompletedRef.current = true;
       setIsCompleted(true);
       if (onComplete) onComplete();
     } catch (e) {
@@ -470,6 +483,7 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
         setScreenOutNotice('');
       }
     } finally {
+      submissionInFlightRef.current = false;
       setIsSubmitting(false);
     }
   }
@@ -479,7 +493,7 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
     selectedAnswer: string,
     currentAnswers: Record<string, any>,
   ) => {
-    if (!survey || isSubmitting || isCompleted || isScreeningOut) return;
+    if (!survey || submissionInFlightRef.current || isCompletedRef.current || isScreeningOut) return;
     if (maxAttemptsPerDevice && maxAttemptsPerDevice > 0 && currentDeviceAttempts >= maxAttemptsPerDevice) {
       setErrorMsg(`Bạn chỉ được làm tối đa ${maxAttemptsPerDevice} lần trên thiết bị này.`);
       return;
@@ -490,6 +504,7 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
       Object.entries(currentAnswers).filter(([questionId]) => allowedQuestionIds.has(questionId)),
     );
     screeningAnswers[question.id] = selectedAnswer;
+    answersRef.current = screeningAnswers;
     setAnswers(screeningAnswers);
     setScreenOutNotice(question.screenOutMessage?.trim() || DEFAULT_SCREEN_OUT_MESSAGE);
     setIsScreeningOut(true);
@@ -589,7 +604,7 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
           <div className="flex flex-col items-center gap-6 py-8 bg-white border border-border-subtle rounded-2xl shadow-sm">
             <div className="flex flex-row gap-2">
               {[1, 2, 3, 4, 5].map((star) => {
-                const rating = roundLegacyStarRating(answer) ?? 0;
+                const rating = parseStoredStarRating(answer) ?? 0;
                 const selected = rating >= star;
                 return (
                   <button

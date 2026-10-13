@@ -49,6 +49,22 @@ export function mapRowToSurvey(row: any) {
   };
 }
 
+function parseSurveySnapshot(value: unknown) {
+  // PostgreSQL JSONB is normally decoded by node-postgres.  A backup created
+  // by an older tool can still contain JSON serialized one extra time, so do
+  // not let one malformed historic value break analytics for the whole survey.
+  let parsed = value;
+  if (typeof parsed === 'string') {
+    try {
+      parsed = JSON.parse(parsed);
+    } catch {
+      return null;
+    }
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+  return Array.isArray((parsed as { questions?: unknown }).questions) ? parsed : null;
+}
+
 export function mapRowToResponse(row: any) {
   return {
     id: row.id,
@@ -59,6 +75,26 @@ export function mapRowToResponse(row: any) {
     totalQuizQuestions: row.total_quiz_questions !== null && row.total_quiz_questions !== undefined ? roundQuizScore(parseFloat(row.total_quiz_questions)) : null,
     submittedAt: row.submitted_at,
     screenedOut: Boolean(row.screened_out),
+    // Legacy rows intentionally remain null. This distinguishes them from
+    // responses whose question wording/options were captured at submit time.
+    surveySnapshot: parseSurveySnapshot(row.survey_snapshot),
+  };
+}
+
+/**
+ * Preserve the exact instrument used for a response. Surveys may be edited
+ * after publication, so analytics must not reinterpret an old answer through
+ * a newer question/options/answer-key definition.
+ */
+function createSurveySnapshot(questions: unknown, isQuiz: unknown) {
+  const questionSnapshot = Array.isArray(questions)
+    ? JSON.parse(JSON.stringify(questions))
+    : [];
+  return {
+    schemaVersion: 1,
+    capturedAt: new Date().toISOString(),
+    isQuiz: Boolean(isQuiz),
+    questions: questionSnapshot,
   };
 }
 
@@ -93,6 +129,50 @@ export function computeServerQuizScore(questions: any[], answers: Record<string,
     }
   }
   return { score: roundQuizScore(score), totalPossible: roundQuizScore(totalPossible) };
+}
+
+/**
+ * Imported responses do not pass through the normal submission path, but quiz
+ * analytics must use the same server-owned answer key and denominator. Keep
+ * non-quiz and screened-out responses unscored, exactly as submitResponse does.
+ */
+export function calculateImportedQuizScore(
+  isQuiz: boolean,
+  screenedOut: boolean,
+  questions: any[],
+  answers: Record<string, unknown>,
+) {
+  if (!isQuiz || screenedOut) {
+    return { score: null, totalQuizQuestions: null };
+  }
+  const computed = computeServerQuizScore(questions, answers);
+  return { score: computed.score, totalQuizQuestions: computed.totalPossible };
+}
+
+/**
+ * updateSurvey accepts PATCH payloads, so field-level validation alone cannot
+ * see a section removed in one request while its questions are retained from
+ * the stored survey. Validate the merged structure before persisting it.
+ */
+export function assertMergedSurveyStructure(questions: unknown, sections: unknown) {
+  if (!Array.isArray(questions) || !Array.isArray(sections)) {
+    throw Object.assign(new Error('Cấu trúc câu hỏi hoặc phần khảo sát không hợp lệ.'), { status: 400 });
+  }
+
+  const sectionIds = new Set(
+    sections
+      .map(section => section && typeof section === 'object' ? (section as { id?: unknown }).id : undefined)
+      .filter((id): id is string => typeof id === 'string'),
+  );
+  for (const question of questions) {
+    if (!question || typeof question !== 'object') {
+      throw Object.assign(new Error('Cấu trúc câu hỏi khảo sát không hợp lệ.'), { status: 400 });
+    }
+    const sectionId = (question as { sectionId?: unknown }).sectionId;
+    if (typeof sectionId === 'string' && sectionId.length > 0 && !sectionIds.has(sectionId)) {
+      throw Object.assign(new Error('Câu hỏi đang tham chiếu đến phần không tồn tại.'), { status: 400 });
+    }
+  }
 }
 
 function assertIntegerStarRatings(questions: any[], answers: Record<string, unknown> | undefined) {
@@ -320,6 +400,9 @@ export async function updateSurvey(id: string, data: any) {
       maxAttemptsPerDevice: data.maxAttemptsPerDevice ?? existing.maxAttemptsPerDevice,
       timeLimitMinutes: data.timeLimitMinutes ?? existing.timeLimitMinutes,
     };
+    if (data.questions !== undefined || data.sections !== undefined) {
+      assertMergedSurveyStructure(survey.questions, survey.sections);
+    }
     inMemorySurveys[id] = survey;
     return survey;
   }
@@ -342,6 +425,9 @@ export async function updateSurvey(id: string, data: any) {
     maxAttemptsPerDevice: data.maxAttemptsPerDevice ?? current.maxAttemptsPerDevice,
     timeLimitMinutes: data.timeLimitMinutes ?? current.timeLimitMinutes,
   };
+  if (data.questions !== undefined || data.sections !== undefined) {
+    assertMergedSurveyStructure(merged.questions, merged.sections);
+  }
   const maxAttempts = Number.isFinite(Number(merged.maxAttemptsPerDevice)) ? Number(merged.maxAttemptsPerDevice) : null;
   const timeLimit = Number.isFinite(Number(merged.timeLimitMinutes)) ? Number(merged.timeLimitMinutes) : null;
 
@@ -375,6 +461,7 @@ export async function submitResponse(surveyId: string, data: any) {
     }
     validateResponseAnswers(survey.questions, answers);
     const screenedOut = isScreenedOut(survey.questions, answers);
+    const surveySnapshot = createSurveySnapshot(survey.questions, survey.isQuiz);
     let finalScore: number | null = null;
     let finalTotal: number | null = null;
     if (survey?.isQuiz && !screenedOut) {
@@ -390,10 +477,11 @@ export async function submitResponse(surveyId: string, data: any) {
     if (existing) {
       existing.answers = answers; existing.score = finalScore; existing.screenedOut = screenedOut;
       existing.totalQuizQuestions = finalTotal; existing.submittedAt = new Date().toISOString();
+      existing.surveySnapshot = surveySnapshot;
       return existing;
     }
     const id = generateId();
-    const obj = { id, surveyId, respondentId, answers, score: finalScore, totalQuizQuestions: finalTotal, submittedAt: new Date().toISOString(), screenedOut };
+    const obj = { id, surveyId, respondentId, answers, score: finalScore, totalQuizQuestions: finalTotal, submittedAt: new Date().toISOString(), screenedOut, surveySnapshot };
     inMemoryResponses[surveyId].push(obj);
     return obj;
   }
@@ -409,6 +497,7 @@ export async function submitResponse(surveyId: string, data: any) {
   const questions = typeof survey.questions === 'string' ? JSON.parse(survey.questions) : survey.questions;
   validateResponseAnswers(questions, answers);
   const screenedOut = isScreenedOut(questions, answers);
+  const surveySnapshot = createSurveySnapshot(questions, survey.is_quiz);
   let finalScore: number | null = null;
   let finalTotal: number | null = null;
   if (survey.is_quiz && !screenedOut) {
@@ -434,14 +523,14 @@ export async function submitResponse(surveyId: string, data: any) {
 
     const result = existingCheck.rows.length
       ? await client.query(
-        `UPDATE responses SET answers = $3, score = $4, total_quiz_questions = $5, screened_out = $6, submitted_at = CURRENT_TIMESTAMP
+        `UPDATE responses SET answers = $3, score = $4, total_quiz_questions = $5, screened_out = $6, survey_snapshot = $7, submitted_at = CURRENT_TIMESTAMP
          WHERE survey_id = $1 AND respondent_id = $2 RETURNING *`,
-        [surveyId, respondentId, JSON.stringify(answers || {}), finalScore, finalTotal, screenedOut],
+        [surveyId, respondentId, JSON.stringify(answers || {}), finalScore, finalTotal, screenedOut, JSON.stringify(surveySnapshot)],
       )
       : await client.query(
-        `INSERT INTO responses (id, survey_id, respondent_id, answers, score, total_quiz_questions, screened_out)
-         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-        [generateId(), surveyId, respondentId, JSON.stringify(answers || {}), finalScore, finalTotal, screenedOut],
+        `INSERT INTO responses (id, survey_id, respondent_id, answers, score, total_quiz_questions, screened_out, survey_snapshot)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+        [generateId(), surveyId, respondentId, JSON.stringify(answers || {}), finalScore, finalTotal, screenedOut, JSON.stringify(surveySnapshot)],
       );
     await client.query('COMMIT');
     return mapRowToResponse(result.rows[0]);
@@ -569,6 +658,7 @@ export async function importResponses(data: any) {
 
     let surveyId = data.surveyId;
     let questions = data.newSurvey?.questions;
+    let isQuiz = false;
     if (data.mode === 'create') {
       surveyId = generateId();
       const survey = data.newSurvey;
@@ -578,7 +668,7 @@ export async function importResponses(data: any) {
         [surveyId, survey.title, survey.description || '', JSON.stringify(survey.questions)],
       );
     } else {
-      const surveyResult = await client.query('SELECT questions FROM surveys WHERE id = $1 FOR SHARE', [surveyId]);
+      const surveyResult = await client.query('SELECT questions, is_quiz FROM surveys WHERE id = $1 FOR SHARE', [surveyId]);
       if (!surveyResult.rows.length) {
         await client.query('ROLLBACK');
         return null;
@@ -586,6 +676,7 @@ export async function importResponses(data: any) {
       questions = typeof surveyResult.rows[0].questions === 'string'
         ? JSON.parse(surveyResult.rows[0].questions)
         : surveyResult.rows[0].questions;
+      isQuiz = Boolean(surveyResult.rows[0].is_quiz);
     }
 
     let imported = 0;
@@ -596,11 +687,13 @@ export async function importResponses(data: any) {
         .update(`${data.idempotencyKey}:${index}`)
         .digest('hex')}`;
       const screenedOut = isScreenedOut(questions, response.answers);
+      const surveySnapshot = createSurveySnapshot(questions, isQuiz);
+      const quizScore = calculateImportedQuizScore(isQuiz, screenedOut, questions, response.answers);
       const inserted = await client.query(
-        `INSERT INTO responses (id, survey_id, respondent_id, answers, submitted_at, screened_out)
-         VALUES ($1, $2, $3, $4, COALESCE($5::timestamp, CURRENT_TIMESTAMP), $6)
+        `INSERT INTO responses (id, survey_id, respondent_id, answers, score, total_quiz_questions, submitted_at, screened_out, survey_snapshot)
+         VALUES ($1, $2, $3, $4, $5, $6, COALESCE($7::timestamp, CURRENT_TIMESTAMP), $8, $9)
          RETURNING id`,
-        [generateId(), surveyId, respondentId, JSON.stringify(response.answers), response.submittedAt || null, screenedOut],
+        [generateId(), surveyId, respondentId, JSON.stringify(response.answers), quizScore.score, quizScore.totalQuizQuestions, response.submittedAt || null, screenedOut, JSON.stringify(surveySnapshot)],
       );
       if (inserted.rowCount) imported++;
     }
@@ -740,9 +833,9 @@ export async function importBackup(data: any) {
   }
   for (const row of responses) {
     await client.query(
-      `INSERT INTO responses (id, survey_id, respondent_id, answers, score, total_quiz_questions, submitted_at, screened_out) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+      `INSERT INTO responses (id, survey_id, respondent_id, answers, score, total_quiz_questions, submitted_at, screened_out, survey_snapshot) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
        ON CONFLICT (id) DO NOTHING`,
-      [row.id, row.survey_id, row.respondent_id, JSON.stringify(row.answers || {}), row.score ?? null, row.total_quiz_questions ?? null, row.submitted_at || new Date().toISOString(), Boolean(row.screened_out)]
+      [row.id, row.survey_id, row.respondent_id, JSON.stringify(row.answers || {}), row.score ?? null, row.total_quiz_questions ?? null, row.submitted_at || new Date().toISOString(), Boolean(row.screened_out), row.survey_snapshot ? JSON.stringify(row.survey_snapshot) : null]
     );
   }
   for (const row of teams) {

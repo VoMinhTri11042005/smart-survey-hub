@@ -425,17 +425,22 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
   const fetchResponses = useCallback(async (surveyId: string): Promise<SurveyResponse[]> => {
     try {
       const res = await apiFetch(`${API_BASE}/surveys/${surveyId}/responses`);
-      if (res.ok) {
-        const contentType = res.headers.get('content-type');
-        if (contentType && !contentType.includes('application/json')) {
-          return [];
-        }
-        return await res.json();
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.error || `Không thể tải phản hồi (${res.status}).`);
       }
-      return [];
+      const contentType = res.headers.get('content-type');
+      if (contentType && !contentType.includes('application/json')) {
+        throw new Error('Máy chủ trả về dữ liệu không hợp lệ khi tải phản hồi.');
+      }
+      const data = await res.json();
+      if (!Array.isArray(data)) {
+        throw new Error('Dữ liệu phản hồi từ máy chủ không đúng định dạng.');
+      }
+      return data;
     } catch (error) {
       console.error('Error fetching responses via API:', error);
-      return [];
+      throw error;
     }
   }, []);
 
