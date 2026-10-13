@@ -1,4 +1,5 @@
 import type { SurveyQuestion } from '../types';
+import { allocateExclusivePercents } from './percent';
 
 export type TextAnalyticsReason = 'not_text' | 'personal_data' | 'disabled' | 'not_categorical';
 
@@ -165,17 +166,23 @@ export function summarizeTextCategories(values: unknown[]): TextCategorySummary 
     categories.set(normalized.key, category);
   }
 
-  const options = [...categories.entries()]
+  const unsortedOptions = [...categories.entries()]
     .map(([key, category]) => {
       const label = [...category.labels.entries()]
         .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'vi'))[0]?.[0] ?? key;
       return {
         label,
         count: category.count,
-        percent: totalAnswered ? Math.round((category.count / totalAnswered) * 1000) / 10 : 0,
+        percent: 0,
       };
     })
     .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label, 'vi'));
+
+  // Each free-text response is assigned to exactly one category here, so use
+  // largest remainder rather than independent rounding. The visible values
+  // now always sum to 100.0% when there is at least one response.
+  const percents = allocateExclusivePercents(unsortedOptions.map(option => option.count), totalAnswered);
+  const options = unsortedOptions.map((option, index) => ({ ...option, percent: percents[index] ?? 0 }));
 
   return { totalAnswered, options };
 }

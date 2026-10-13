@@ -8,6 +8,8 @@ import type { ToastType } from '../common/Toast';
 interface ImportedResponse {
   answers: Record<string, SurveyAnswer>;
   submittedAt?: string;
+  score?: number;
+  totalQuizQuestions?: number;
 }
 
 interface Props {
@@ -30,6 +32,17 @@ const QUESTION_TYPES: { value: QuestionType; label: string }[] = [
 
 const normalize = (value: string) => toUnaccented(stripHtml(value)).trim().toLocaleLowerCase('vi-VN').replace(/\s+/g, ' ');
 const isBlank = (value: unknown) => value === undefined || value === null || String(value).trim() === '';
+
+type ImportMetadataColumn = 'id' | 'score' | 'maxScore' | 'scorePercent' | null;
+
+function getImportMetadataColumn(header: string): ImportMetadataColumn {
+  const key = normalize(header);
+  if (/^(id|ma phan hoi|response id)$/.test(key)) return 'id';
+  if (/^(diem so|score|quiz score)$/.test(key)) return 'score';
+  if (/^(diem toi da|tong diem|maximum score|max score)$/.test(key)) return 'maxScore';
+  if (/^(ty le %|ty le diem|score percent|score percentage)$/.test(key)) return 'scorePercent';
+  return null;
+}
 
 function cellText(value: unknown): string {
   if (value instanceof Date) return value.toISOString();
@@ -95,6 +108,13 @@ function parseTimestamp(value: unknown): string | undefined {
   return text && !Number.isNaN(parsed.getTime()) ? parsed.toISOString() : undefined;
 }
 
+function parseNonNegativeNumber(value: unknown): number | undefined {
+  if (isBlank(value)) return undefined;
+  const text = cellText(value).replace(/\s/g, '').replace(',', '.').replace(/%$/, '');
+  const number = Number(text);
+  return Number.isFinite(number) && number >= 0 ? number : undefined;
+}
+
 function inferType(values: string[], header: string): QuestionType {
   const nonEmpty = values.filter(Boolean);
   if (nonEmpty.length && nonEmpty.every(value => /^\d+(?:[.,]\d+)?$/.test(value))) {
@@ -146,6 +166,7 @@ export function ImportResponsesDialog({ surveys, onClose, onImported, onFeedback
   const [mode, setMode] = useState<'create' | 'existing'>('create');
   const [targetSurveyId, setTargetSurveyId] = useState(surveys[0]?.id || '');
   const [title, setTitle] = useState('');
+  const [createAsQuiz, setCreateAsQuiz] = useState(false);
   const [questionTypes, setQuestionTypes] = useState<Record<number, QuestionType>>({});
   const [columnMappings, setColumnMappings] = useState<Record<number, string>>({});
   const [fileName, setFileName] = useState('');
@@ -155,7 +176,10 @@ export function ImportResponsesDialog({ surveys, onClose, onImported, onFeedback
   const [isImporting, setIsImporting] = useState(false);
 
   const selectedSurvey = surveys.find(survey => survey.id === targetSurveyId);
-  const dataColumns = headers.map((header, index) => ({ header, index })).filter(column => column.index !== timestampColumn);
+  const scoreColumn = headers.findIndex(header => getImportMetadataColumn(header) === 'score');
+  const maxScoreColumn = headers.findIndex(header => getImportMetadataColumn(header) === 'maxScore');
+  const hasRecordedQuizScores = scoreColumn >= 0 && maxScoreColumn >= 0;
+  const dataColumns = headers.map((header, index) => ({ header, index })).filter(column => column.index !== timestampColumn && !getImportMetadataColumn(column.header));
   const initializedTypes = useMemo(() => Object.fromEntries(dataColumns.map(({ header, index }) => [
     index,
     questionTypes[index] || inferType(rows.map(row => cellText(row[index])), header),
@@ -186,6 +210,7 @@ export function ImportResponsesDialog({ surveys, onClose, onImported, onFeedback
     const issues: string[] = [];
     let issueCount = 0;
     const imported: ImportedResponse[] = [];
+    let skippedBlankRows = 0;
     const questionById = new Map((selectedSurvey?.questions || []).map(question => [question.id, question]));
     const mappedColumns = mode === 'create'
       ? dataColumns.map(column => ({
@@ -264,10 +289,31 @@ export function ImportResponsesDialog({ surveys, onClose, onImported, onFeedback
       if (timestampColumn !== null && !isBlank(timeValue) && !submittedAt) {
         addIssue(`Dòng ${rowIndex + 2}: không đọc được thời gian gửi.`);
       }
-      imported.push({ answers, ...(submittedAt ? { submittedAt } : {}) });
+      let score: number | undefined;
+      let totalQuizQuestions: number | undefined;
+      if (mode === 'create' && createAsQuiz && hasRecordedQuizScores) {
+        const scoreCell = row[scoreColumn];
+        const totalCell = row[maxScoreColumn];
+        score = parseNonNegativeNumber(scoreCell);
+        totalQuizQuestions = parseNonNegativeNumber(totalCell);
+        if (isBlank(scoreCell) !== isBlank(totalCell)) {
+          addIssue(`Dòng ${rowIndex + 2}: điểm và điểm tối đa phải có cùng lúc.`);
+        } else if (!isBlank(scoreCell) && (score === undefined || !totalQuizQuestions || score > totalQuizQuestions)) {
+          addIssue(`Dòng ${rowIndex + 2}: điểm bài kiểm tra không hợp lệ.`);
+        }
+      }
+      if (Object.keys(answers).length === 0) {
+        skippedBlankRows++;
+        return;
+      }
+      imported.push({
+        answers,
+        ...(submittedAt ? { submittedAt } : {}),
+        ...(score !== undefined && totalQuizQuestions !== undefined ? { score, totalQuizQuestions } : {}),
+      });
     });
-    return { rows: imported, issues, issueCount };
-  }, [dataColumns, mode, questions, rows, selectedSurvey, suggestedMappings, timestampColumn]);
+    return { rows: imported, issues, issueCount, skippedBlankRows };
+  }, [createAsQuiz, dataColumns, hasRecordedQuizScores, maxScoreColumn, mode, questions, rows, scoreColumn, selectedSurvey, suggestedMappings, timestampColumn]);
 
   const handleFile = async (file?: File) => {
     if (!file) return;
@@ -287,7 +333,7 @@ export function ImportResponsesDialog({ surveys, onClose, onImported, onFeedback
         const ExcelJS = (await import('exceljs')).default;
         const workbook = new ExcelJS.Workbook();
         await workbook.xlsx.load(await file.arrayBuffer());
-        const worksheet = workbook.worksheets[0];
+        const worksheet = workbook.worksheets.find(sheet => normalize(sheet.name).startsWith('du lieu phan hoi')) ?? workbook.worksheets[0];
         if (!worksheet) throw new Error('File Excel không có trang tính.');
         sheetRows = [];
         worksheet.eachRow({ includeEmpty: false }, row => {
@@ -319,6 +365,9 @@ export function ImportResponsesDialog({ surveys, onClose, onImported, onFeedback
       setColumnMappings({});
       setFileName(file.name);
       setTitle(file.name.replace(/\.[^.]+$/, '').slice(0, 255));
+      const includesScore = parsedHeaders.some(header => getImportMetadataColumn(header) === 'score');
+      const includesMaxScore = parsedHeaders.some(header => getImportMetadataColumn(header) === 'maxScore');
+      setCreateAsQuiz(includesScore && includesMaxScore);
       setIdempotencyKey(crypto.randomUUID());
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : 'Không thể đọc file dữ liệu.';
@@ -341,7 +390,7 @@ export function ImportResponsesDialog({ surveys, onClose, onImported, onFeedback
         idempotencyKey,
         mode,
         ...(mode === 'existing' ? { surveyId: targetSurveyId } : {
-          newSurvey: { title: title.trim(), description: `Được tạo từ file ${fileName}`, questions },
+          newSurvey: { title: title.trim(), description: `Được tạo từ file ${fileName}`, questions, isQuiz: createAsQuiz },
         }),
         responses: builtRows.rows,
       };
@@ -359,7 +408,7 @@ export function ImportResponsesDialog({ surveys, onClose, onImported, onFeedback
       await onImported(data.surveyId);
       onFeedback(data.replayed
         ? `Lượt nhập này đã được xử lý trước đó (${data.imported} phản hồi). Không thêm trùng dữ liệu.`
-        : `Đã thêm ${data.imported} phản hồi${data.skipped ? `, bỏ qua ${data.skipped} phản hồi trùng` : ''}.`, 'success');
+        : `Đã thêm ${data.imported} phản hồi${data.skipped ? `, bỏ qua ${data.skipped} dòng không có câu trả lời` : ''}.`, 'success');
       onClose();
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : 'Không nhập được dữ liệu. Vui lòng thử lại.';
@@ -425,7 +474,7 @@ export function ImportResponsesDialog({ surveys, onClose, onImported, onFeedback
               </div>
 
               {timestampColumn !== null && <p className="text-xs text-text-secondary bg-surface-container-low rounded-xl p-3">Đã nhận diện cột thời gian “{headers[timestampColumn]}”; thời gian gốc được giữ lại khi nhập.</p>}
-              {mode === 'create' && <p className="text-xs text-text-secondary bg-surface-container-low rounded-xl p-3">Loại câu hỏi được đề xuất tự động và có thể chỉnh bên dưới. Câu mới không bắt buộc vì không thể suy ra thiết lập Google Forms.</p>}
+              {mode === 'create' && <div className="space-y-2 text-xs text-text-secondary bg-surface-container-low rounded-xl p-3"><p>Loại câu hỏi được đề xuất tự động và có thể chỉnh bên dưới. Câu mới không bắt buộc vì không thể suy ra thiết lập Google Forms.</p>{hasRecordedQuizScores && <label className="flex cursor-pointer items-start gap-2 text-text-primary"><input type="checkbox" checked={createAsQuiz} onChange={event => setCreateAsQuiz(event.target.checked)} className="mt-0.5" /><span><strong>Giữ đây là bài kiểm tra.</strong> Điểm và điểm tối đa trong file sẽ được giữ lại; đáp án đúng không thể suy ra từ bảng phản hồi.</span></label>}</div>}
 
               <div className="rounded-2xl border border-border-subtle overflow-hidden">
                 <div className="p-4 bg-surface-container-low flex justify-between gap-3">
@@ -460,7 +509,7 @@ export function ImportResponsesDialog({ surveys, onClose, onImported, onFeedback
               <div className={`rounded-xl p-3 text-sm ${builtRows.issueCount ? 'bg-sentiment-negative/10 text-sentiment-negative' : 'bg-sentiment-positive/10 text-text-primary'}`}>
                 {builtRows.issueCount ? (
                   <div className="flex gap-2"><AlertTriangle size={18} className="shrink-0" /><div><strong>Cần xử lý {builtRows.issueCount} lỗi trước khi nhập</strong><ul className="mt-1 list-disc pl-5">{builtRows.issues.map((issue, index) => <li key={index}>{issue}</li>)}</ul></div></div>
-                ) : <p className="flex items-center gap-2"><CheckCircle2 size={18} />Dữ liệu hợp lệ: sẵn sàng thêm {builtRows.rows.length} phản hồi. Dữ liệu cũ sẽ được giữ nguyên.</p>}
+                ) : <p className="flex items-center gap-2"><CheckCircle2 size={18} />Dữ liệu hợp lệ: sẵn sàng thêm {builtRows.rows.length} phản hồi{builtRows.skippedBlankRows ? `; bỏ qua ${builtRows.skippedBlankRows} dòng trống` : ''}. Dữ liệu cũ sẽ được giữ nguyên.</p>}
               </div>
             </>
           )}

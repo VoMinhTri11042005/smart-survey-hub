@@ -5,10 +5,16 @@ import type { Request, Response, NextFunction } from 'express';
 import * as surveyService from '../services/survey.service';
 
 // A response snapshot may contain the quiz answer key that was active at
-// submission time. Administrators need it for historical analysis; a public
-// respondent must never receive it back through submit/get-my-response.
+// submission time. The full answer set can also contain direct identifiers.
+// Administrators need both for historical analysis; a public participant only
+// needs completion/screen-out/score state to reopen their result page.
 function toPublicResponse(response: Record<string, unknown>) {
-  const { surveySnapshot: _surveySnapshot, ...safeResponse } = response;
+  const {
+    surveySnapshot: _surveySnapshot,
+    answers: _answers,
+    respondentId: _respondentId,
+    ...safeResponse
+  } = response;
   return safeResponse;
 }
 

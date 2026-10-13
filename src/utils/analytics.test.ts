@@ -135,7 +135,13 @@ describe('computeSurveyAnalytics', () => {
   });
 
   it('keeps quiz correctness denominated by answered responses', () => {
-    const analytics = computeSurveyAnalytics(makeSurvey(questions, { isQuiz: true }), responses);
+    const snapshot = {
+      schemaVersion: 1,
+      capturedAt: '2026-01-01T00:00:00.000Z',
+      isQuiz: true,
+      questions,
+    };
+    const analytics = computeSurveyAnalytics(makeSurvey(questions, { isQuiz: true }), responses.map(response => ({ ...response, surveySnapshot: snapshot })));
     const single = analytics.questionMetrics.find(metric => metric.questionId === 'single');
     const multiple = analytics.questionMetrics.find(metric => metric.questionId === 'multiple');
 
@@ -144,6 +150,19 @@ describe('computeSurveyAnalytics', () => {
     expect(single?.correctRate).toBeLessThan(68);
     expect(multiple).toMatchObject({ answered: 2, correctCount: 1 });
     expect(multiple?.correctRate).toBe(50);
+  });
+
+  it('does not grade ordinary surveys or snapshot-less historical answers as a quiz', () => {
+    const keyedQuestion: SurveyQuestion = {
+      id: 'keyed', type: 'single_choice', text: 'Câu có đáp án cũ', required: false, options: ['A', 'B'], correctAnswer: 'A',
+    };
+    const ordinary = computeSurveyAnalytics(makeSurvey([keyedQuestion]), [makeResponse('ordinary', { keyed: 'A' })]);
+    expect(ordinary.questionMetrics[0]?.correctRate).toBeUndefined();
+    expect(ordinary.questionMetrics[0]?.correctCount).toBeUndefined();
+
+    const legacyQuiz = computeSurveyAnalytics(makeSurvey([keyedQuestion], { isQuiz: true }), [makeResponse('legacy', { keyed: 'A' })]);
+    expect(legacyQuiz.questionMetrics[0]).toMatchObject({ correctCount: 0, correctSampleSize: 0 });
+    expect(legacyQuiz.questionMetrics[0]?.correctRate).toBeUndefined();
   });
 
   it('keeps legacy values visible rather than folding them into a current option or star level', () => {
@@ -228,5 +247,18 @@ describe('computeSurveyAnalytics', () => {
     const csv = exportResponsesToCsv(survey, [makeResponse('csv-1', { comment: '=1+1' })]);
 
     expect(csv).toContain("\"'=1+1\"");
+  });
+
+  it('omits recognized direct-identifier fields from standard CSV exports', () => {
+    const survey = makeSurvey([
+      { id: 'email', type: 'text', text: 'Email của bạn', required: false },
+      { id: 'comment', type: 'text', text: 'Ý kiến', required: false },
+    ]);
+    const csv = exportResponsesToCsv(survey, [makeResponse('csv-pii', { email: 'person@example.com', comment: 'Giữ lại' })]);
+
+    expect(csv).not.toContain('Email của bạn');
+    expect(csv).not.toContain('person@example.com');
+    expect(csv).toContain('Ý kiến');
+    expect(csv).toContain('Giữ lại');
   });
 });

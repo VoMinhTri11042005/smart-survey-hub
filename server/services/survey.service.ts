@@ -141,12 +141,25 @@ export function calculateImportedQuizScore(
   screenedOut: boolean,
   questions: any[],
   answers: Record<string, unknown>,
+  recordedScore?: unknown,
+  recordedTotal?: unknown,
 ) {
   if (!isQuiz || screenedOut) {
     return { score: null, totalQuizQuestions: null };
   }
   const computed = computeServerQuizScore(questions, answers);
-  return { score: computed.score, totalQuizQuestions: computed.totalPossible };
+  if (computed.totalPossible > 0) {
+    return { score: computed.score, totalQuizQuestions: computed.totalPossible };
+  }
+  // Do not invent a 0/0 score for an imported quiz without answer keys. A
+  // validated historical score is a better representation and keeps reports
+  // from losing the result recorded by the original questionnaire.
+  const score = Number(recordedScore);
+  const total = Number(recordedTotal);
+  if (Number.isFinite(score) && Number.isFinite(total) && total > 0 && score >= 0 && score <= total) {
+    return { score: roundQuizScore(score), totalQuizQuestions: roundQuizScore(total) };
+  }
+  return { score: null, totalQuizQuestions: null };
 }
 
 /**
@@ -662,10 +675,11 @@ export async function importResponses(data: any) {
     if (data.mode === 'create') {
       surveyId = generateId();
       const survey = data.newSurvey;
+      isQuiz = Boolean(survey.isQuiz);
       await client.query(
         `INSERT INTO surveys (id, title, description, questions, is_quiz, display_mode, show_score, status)
-         VALUES ($1, $2, $3, $4, FALSE, 'single', TRUE, 'live')`,
-        [surveyId, survey.title, survey.description || '', JSON.stringify(survey.questions)],
+         VALUES ($1, $2, $3, $4, $5, 'single', TRUE, 'live')`,
+        [surveyId, survey.title, survey.description || '', JSON.stringify(survey.questions), isQuiz],
       );
     } else {
       const surveyResult = await client.query('SELECT questions, is_quiz FROM surveys WHERE id = $1 FOR SHARE', [surveyId]);
@@ -682,13 +696,24 @@ export async function importResponses(data: any) {
     let imported = 0;
     let skipped = 0;
     for (const [index, response] of data.responses.entries()) {
+      if (Object.keys(response.answers || {}).length === 0) {
+        skipped++;
+        continue;
+      }
       validateImportedAnswers(questions, response.answers);
       const respondentId = `import-${createHash('sha256')
         .update(`${data.idempotencyKey}:${index}`)
         .digest('hex')}`;
       const screenedOut = isScreenedOut(questions, response.answers);
       const surveySnapshot = createSurveySnapshot(questions, isQuiz);
-      const quizScore = calculateImportedQuizScore(isQuiz, screenedOut, questions, response.answers);
+      const quizScore = calculateImportedQuizScore(
+        isQuiz,
+        screenedOut,
+        questions,
+        response.answers,
+        response.score,
+        response.totalQuizQuestions,
+      );
       const inserted = await client.query(
         `INSERT INTO responses (id, survey_id, respondent_id, answers, score, total_quiz_questions, submitted_at, screened_out, survey_snapshot)
          VALUES ($1, $2, $3, $4, $5, $6, COALESCE($7::timestamp, CURRENT_TIMESTAMP), $8, $9)

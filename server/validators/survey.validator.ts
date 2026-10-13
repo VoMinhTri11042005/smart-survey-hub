@@ -206,9 +206,30 @@ const ImportedQuestionSchema = z.object({
   screenOutAnswer: z.string().min(1).optional(),
   screenOutMessage: z.string().max(500).optional(),
   required: z.boolean().default(false),
+  correctAnswer: z.union([z.string(), z.array(z.string())]).optional(),
+  points: z.number().finite().positive().max(1_000_000).optional(),
   label: z.string().optional(),
   textAnalysisMode: z.enum(['auto', 'include', 'exclude']).optional(),
 }).superRefine(validateQuestionConfiguration);
+
+const ImportedResponseSchema = z.object({
+  answers: z.record(z.string(), AnswerValueSchema),
+  submittedAt: z.string().datetime({ offset: true }).optional(),
+  // A self-exported quiz can carry its historical score even when the import
+  // file does not contain answer keys. The service recalculates whenever keys
+  // exist and only accepts this recorded value as a lossless fallback.
+  score: z.number().finite().min(0).optional(),
+  totalQuizQuestions: z.number().finite().positive().optional(),
+}).superRefine((response, context) => {
+  const hasScore = response.score !== undefined;
+  const hasTotal = response.totalQuizQuestions !== undefined;
+  if (hasScore !== hasTotal) {
+    context.addIssue({ code: 'custom', path: ['score'], message: 'Điểm và điểm tối đa phải đi cùng nhau.' });
+  }
+  if (hasScore && hasTotal && response.score! > response.totalQuizQuestions!) {
+    context.addIssue({ code: 'custom', path: ['score'], message: 'Điểm không được lớn hơn điểm tối đa.' });
+  }
+});
 
 export const ImportResponsesSchema = z.object({
   idempotencyKey: z.string().min(16).max(128),
@@ -218,11 +239,9 @@ export const ImportResponsesSchema = z.object({
     title: z.string().trim().min(1).max(255),
     description: z.string().max(5000).optional().default(''),
     questions: z.array(ImportedQuestionSchema).min(1).max(100),
+    isQuiz: z.boolean().optional().default(false),
   }).optional(),
-  responses: z.array(z.object({
-    answers: z.record(z.string(), AnswerValueSchema),
-    submittedAt: z.string().datetime({ offset: true }).optional(),
-  })).min(1).max(5000),
+  responses: z.array(ImportedResponseSchema).min(1).max(5000),
 }).superRefine((value, context) => {
   if (value.mode === 'existing' && !value.surveyId) {
     context.addIssue({ code: 'custom', path: ['surveyId'], message: 'Hãy chọn khảo sát nhận dữ liệu.' });

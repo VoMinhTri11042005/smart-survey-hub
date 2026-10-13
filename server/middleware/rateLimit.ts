@@ -54,3 +54,12 @@ export const limitPublicResponseSubmissions = createRateLimit({
   windowMs: 60_000,
   maxRequests: 15,
 });
+
+// The "my response" endpoint is intentionally public so a participant can
+// reopen a completed attempt without an account. Limit it separately to make
+// respondent-ID enumeration impractical even before an application-wide
+// session system is introduced.
+export const limitPublicResponseReads = createRateLimit({
+  windowMs: 60_000,
+  maxRequests: 30,
+});

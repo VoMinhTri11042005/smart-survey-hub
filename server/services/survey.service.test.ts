@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import ExcelJS from 'exceljs';
-import { CreateSurveySchema, SubmitResponseSchema, UpdateSurveySchema } from '../validators/survey.validator';
+import { CreateSurveySchema, ImportResponsesSchema, SubmitResponseSchema, UpdateSurveySchema } from '../validators/survey.validator';
 import {
   assertResponseAttemptAllowed,
   assertMergedSurveyStructure,
@@ -86,6 +86,30 @@ describe('response validation', () => {
       .toEqual({ score: null, totalQuizQuestions: null });
     expect(calculateImportedQuizScore(true, true, questions, { one: 'A' }))
       .toEqual({ score: null, totalQuizQuestions: null });
+    expect(calculateImportedQuizScore(true, false, [{ id: 'free-text', type: 'text' }], { 'free-text': 'Imported' }, 7, 10))
+      .toEqual({ score: 7, totalQuizQuestions: 10 });
+  });
+
+  it('accepts explicit quiz metadata and validated historical scores on imported data', () => {
+    const parsed = ImportResponsesSchema.safeParse({
+      idempotencyKey: '1234567890abcdef',
+      mode: 'create',
+      newSurvey: {
+        title: 'Quiz nhập lại',
+        isQuiz: true,
+        questions: [{ id: 'q1', type: 'single_choice', text: 'Câu 1', options: ['A', 'B'], correctAnswer: 'A', points: 2 }],
+      },
+      responses: [{ answers: { q1: 'A' }, score: 2, totalQuizQuestions: 2 }],
+    });
+    expect(parsed.success).toBe(true);
+
+    const invalid = ImportResponsesSchema.safeParse({
+      idempotencyKey: '1234567890abcdef',
+      mode: 'create',
+      newSurvey: { title: 'Quiz nhập lại', questions: [{ id: 'q1', type: 'text', text: 'Câu 1' }] },
+      responses: [{ answers: { q1: 'A' }, score: 3, totalQuizQuestions: 2 }],
+    });
+    expect(invalid.success).toBe(false);
   });
 
   it('rejects a merged survey that leaves a question pointing at a removed section', () => {

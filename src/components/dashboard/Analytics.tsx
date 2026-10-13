@@ -88,6 +88,7 @@ export function Analytics({ onFeedback }: { onFeedback?: (message: string, type:
     return (!question || !isPersonalIdentifierQuestion(question)) && matchesSearch(stripHtml(item.questionText), ...item.responses);
   }) || [];
   const filteredRecentResponses = analytics?.recentResponses.filter(response => matchesSearch(response.id, new Date(response.submittedAt).toLocaleString('vi-VN'), ...Object.values(response.answers))) || [];
+  const hasRedactedPersonalData = Boolean(selectedSurvey?.questions.some(question => isPersonalIdentifierQuestion(question)));
   const filteredQuestionMetrics = questionMetrics.filter(item => matchesSearch(stripHtml(item.question.text), item.question.label, item.question.type));
   const toDayKey = (timestamp: string) => {
     const date = new Date(timestamp);
@@ -151,7 +152,9 @@ export function Analytics({ onFeedback }: { onFeedback?: (message: string, type:
       link.download = `${safeTitle}_responses.csv`;
       link.click();
       URL.revokeObjectURL(url);
-      onFeedback?.('Đã xuất phản hồi thành file CSV.', 'success');
+      onFeedback?.(hasRedactedPersonalData
+        ? 'Đã xuất phản hồi thành file CSV. Các cột định danh cá nhân đã được ẩn.'
+        : 'Đã xuất phản hồi thành file CSV.', 'success');
     } catch (error) {
       console.error('CSV export failed:', error);
       onFeedback?.('Không thể tạo file CSV. Vui lòng thử lại.', 'error');
@@ -163,7 +166,9 @@ export function Analytics({ onFeedback }: { onFeedback?: (message: string, type:
     try {
       const { exportSurveyAnalysisToExcel } = await import('../../utils/excelExport');
       await exportSurveyAnalysisToExcel(selectedSurvey, responses);
-      onFeedback?.('Đã xuất báo cáo thành file Excel.', 'success');
+      onFeedback?.(hasRedactedPersonalData
+        ? 'Đã xuất báo cáo Excel. Các cột định danh cá nhân đã được ẩn khỏi dữ liệu thô.'
+        : 'Đã xuất báo cáo thành file Excel.', 'success');
     } catch (error) {
       console.error('Excel export failed:', error);
       onFeedback?.('Không thể tạo file Excel. Vui lòng thử lại.', 'error');
@@ -500,8 +505,8 @@ export function Analytics({ onFeedback }: { onFeedback?: (message: string, type:
                     </div>
                     {(versionDifferentResponses > 0 || legacyUnversionedResponses > 0) && <p className="-mt-3 mb-4 text-[11px] text-amber-800">{versionDifferentResponses > 0 ? `${versionDifferentResponses} phản hồi từ phiên bản khác được tách hoặc tính theo cấu trúc gốc.` : ''}{legacyUnversionedResponses > 0 ? `${versionDifferentResponses > 0 ? ' ' : ''}${legacyUnversionedResponses} phản hồi cũ chưa có phiên bản.` : ''}{incompatibleVersionResponses > 0 ? ` ${incompatibleVersionResponses} phản hồi có loại câu hỏi không tương thích nên không gộp vào biểu đồ này.` : ''}</p>}
                     {choice && (
-                      <div className="grid grid-cols-1 sm:grid-cols-[150px_1fr] gap-5 items-center">
-                        <DonutChart options={choice.options} />
+                      <div className={question.type === 'multiple_choice' ? 'space-y-3' : 'grid grid-cols-1 sm:grid-cols-[150px_1fr] gap-5 items-center'}>
+                        {question.type !== 'multiple_choice' && <DonutChart options={choice.options} totalLabel="phản hồi" />}
                         <div className="space-y-3">
                           {choice.options.map((option, optionIndex) => (
                             <div key={option.id} className="space-y-1">
@@ -522,7 +527,7 @@ export function Analytics({ onFeedback }: { onFeedback?: (message: string, type:
                           ))}
                         </div>
                         {(choice.historicalVersionAnswered > 0 || choice.legacyUnversionedAnswered > 0 || choice.incompatibleVersionAnswered > 0) && <p className="text-[11px] text-amber-800">{choice.historicalVersionAnswered > 0 ? `${choice.historicalVersionAnswered} phản hồi phiên bản cũ được hiển thị riêng.` : ''}{choice.legacyUnversionedAnswered > 0 ? `${choice.historicalVersionAnswered > 0 ? ' ' : ''}${choice.legacyUnversionedAnswered} phản hồi cũ chưa có phiên bản dùng nhãn hiện tại có ghi chú.` : ''}{choice.incompatibleVersionAnswered > 0 ? ` ${choice.incompatibleVersionAnswered} phản hồi không tương thích không được gộp.` : ''}</p>}
-                        {question.type === 'multiple_choice' && <p className="text-[11px] text-text-secondary pt-1">Có thể chọn nhiều đáp án; tổng tỷ lệ có thể vượt 100%.</p>}
+                        {question.type === 'multiple_choice' && <p className="text-[11px] text-text-secondary pt-1">Tỷ lệ = số người chọn / {choice.totalAnswered} người đã trả lời câu này; có thể chọn nhiều đáp án nên tổng tỷ lệ có thể vượt 100%.</p>}
                       </div>
                     )}
                     {rating && (

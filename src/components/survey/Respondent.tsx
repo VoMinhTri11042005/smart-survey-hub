@@ -102,14 +102,20 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
 
         try {
           const existingResponse = await fetchMyResponse(survey.id, rid);
-          if (existingResponse && existingResponse.answers && Object.keys(existingResponse.answers).length > 0) {
-            answersRef.current = existingResponse.answers;
-            setAnswers(existingResponse.answers);
+          if (existingResponse) {
+            // Public response recovery intentionally omits raw answers to
+            // avoid exposing personal data through a leaked respondent ID.
+            // A locally saved draft is restored above when available; a
+            // submitted attempt only needs its completion and score state.
+            if (existingResponse.answers && Object.keys(existingResponse.answers).length > 0) {
+              answersRef.current = existingResponse.answers;
+              setAnswers(existingResponse.answers);
+            }
             if (existingResponse.screenedOut) {
               const screeningQuestion = survey.questions.find(question =>
                 question.type === 'single_choice'
                 && question.screenOutAnswer
-                && existingResponse.answers[question.id] === question.screenOutAnswer
+                && existingResponse.answers?.[question.id] === question.screenOutAnswer
               );
               setIsScreenedOut(true);
               setScreenOutNotice(screeningQuestion?.screenOutMessage?.trim() || DEFAULT_SCREEN_OUT_MESSAGE);

@@ -209,6 +209,19 @@ function responseUsesSnapshot(response: SurveyResponse): boolean {
   return getSnapshotQuestions(response) !== null;
 }
 
+/**
+ * A questionnaire can be switched into quiz mode after earlier survey
+ * responses have already been collected.  Use the captured mode for those
+ * responses so a newly-added answer key never retroactively grades them.
+ */
+function responseWasCollectedAsQuiz(response: SurveyResponse): boolean {
+  // Snapshot-less legacy rows do not contain durable evidence that quiz mode
+  // (and this exact answer key) was active at submission time. Excluding them
+  // from per-question correctness is safer than retroactively grading them
+  // after a survey is later converted to a quiz.
+  return responseUsesSnapshot(response) && Boolean(response.surveySnapshot?.isQuiz);
+}
+
 function isQuestionSchemaDifferent(
   snapshotQuestion: Survey['questions'][number] | undefined,
   currentQuestion: Survey['questions'][number],
@@ -352,7 +365,11 @@ export function computeSurveyAnalytics(survey: Survey, responses: SurveyResponse
     let versionDifferentResponses = 0;
     let incompatibleVersionResponses = 0;
     let legacyUnversionedResponses = 0;
-    let hasScoringSchema = isScoreableQuestion(question);
+    // A leftover answer key on an ordinary survey must not turn a coverage
+    // table into a quiz report.  Correctness is meaningful only when this
+    // survey is currently a quiz, and for snapshot-backed rows that were
+    // submitted while quiz mode was enabled.
+    let hasScoringSchema = Boolean(survey.isQuiz && isScoreableQuestion(question));
     for (const response of responses) {
       const snapshotBacked = responseUsesSnapshot(response);
       const snapshotQuestion = getSnapshotQuestion(response, question.id);
@@ -375,7 +392,7 @@ export function computeSurveyAnalytics(survey: Survey, responses: SurveyResponse
       const answer = response.answers[question.id];
       if (!hasQuestionAnswer(responseQuestion, answer)) continue;
       answered++;
-      if (isScoreableQuestion(responseQuestion)) {
+      if (survey.isQuiz && responseWasCollectedAsQuiz(response) && isScoreableQuestion(responseQuestion)) {
         hasScoringSchema = true;
         correctSampleSize++;
         if (isCorrectAnswer(responseQuestion, answer)) correctCount++;
@@ -400,7 +417,7 @@ export function computeSurveyAnalytics(survey: Survey, responses: SurveyResponse
       ...(hasScoringSchema ? {
         correctCount,
         correctSampleSize,
-        correctRate: correctSampleSize ? roundPercent((correctCount / correctSampleSize) * 100) : 0,
+        ...(correctSampleSize ? { correctRate: roundPercent((correctCount / correctSampleSize) * 100) } : {}),
       } : {}),
     };
   });
@@ -728,10 +745,17 @@ export function computeSurveyAnalytics(survey: Survey, responses: SurveyResponse
   };
 }
 
-export function exportResponsesToCsv(survey: Survey, responses: SurveyResponse[]): string {
+/**
+ * The standard data export deliberately omits text fields that the builder
+ * recognises as direct identifiers (name, email, phone, student ID, …).
+ * They remain unchanged in the database; this only keeps a normal analytics
+ * download from becoming an accidental PII disclosure.
+ */
+export function exportResponsesToCsv(survey: Survey, responses: SurveyResponse[], includePersonalData = false): string {
+  const exportQuestions = survey.questions.filter(question => includePersonalData || !isPersonalIdentifierQuestion(question));
   const headers = ['ID', 'Ngày gửi'];
   if (survey.isQuiz) headers.push('Điểm số', 'Điểm tối đa', 'Tỷ lệ %');
-  headers.push(...survey.questions.map(q => stripHtml(cleanHtmlWhitespace(q.text))));
+  headers.push(...exportQuestions.map(q => stripHtml(cleanHtmlWhitespace(q.text))));
 
   const rows = responses.map(r => {
     const d = new Date(r.submittedAt);
@@ -756,7 +780,7 @@ export function exportResponsesToCsv(survey: Survey, responses: SurveyResponse[]
     }
 
     cells.push(
-      ...survey.questions.map(q => {
+      ...exportQuestions.map(q => {
         const ans = r.answers[q.id];
         if (Array.isArray(ans)) return stripHtml(cleanHtmlWhitespace(ans.join('; ')));
         if (ans && typeof ans === 'object') {
