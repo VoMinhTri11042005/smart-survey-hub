@@ -562,8 +562,13 @@ export function Analytics({ onFeedback }: { onFeedback?: (message: string, type:
                         <div className="space-y-3">
                           {choice.options.map((option, optionIndex) => (
                             <div key={option.id} className="space-y-1">
-                              <div className="flex justify-between gap-3 text-xs">
-                                <span className={`truncate ${option.isUnknown || option.isHistorical ? 'text-amber-800' : 'text-text-primary'}`}>{option.isUnknown || option.isHistorical ? '⚠ ' : ''}{stripHtml(option.label)}{option.isAmbiguous ? ' (trùng nhãn cũ)' : ''}</span>
+                              <div className="flex min-w-0 items-baseline gap-3 text-xs">
+                                <span
+                                  className={`min-w-0 flex-1 truncate ${option.isUnknown || option.isHistorical ? 'text-amber-800' : 'text-text-primary'}`}
+                                  title={`${option.isUnknown || option.isHistorical ? '⚠ ' : ''}${stripHtml(option.label)}${option.isAmbiguous ? ' (trùng nhãn cũ)' : ''}`}
+                                >
+                                  {option.isUnknown || option.isHistorical ? '⚠ ' : ''}{stripHtml(option.label)}{option.isAmbiguous ? ' (trùng nhãn cũ)' : ''}
+                                </span>
                                 <span className="shrink-0 font-bold text-primary">{option.count} · {option.percent}%</span>
                               </div>
                               <div className="h-2.5 rounded-full bg-surface-container overflow-hidden">
@@ -894,9 +899,9 @@ export function Analytics({ onFeedback }: { onFeedback?: (message: string, type:
 function ProgressBar({ label, count, percent, color }: { label: string; count: string; percent: number; color: string }) {
   return (
     <div className="space-y-2">
-      <div className="flex justify-between text-sm font-medium">
-        <span className="text-text-primary truncate mr-2">{label}</span>
-        <span className="text-text-secondary flex-shrink-0">{count}</span>
+      <div className="flex min-w-0 items-baseline gap-3 text-sm font-medium">
+        <span className="min-w-0 flex-1 truncate text-text-primary" title={label}>{label}</span>
+        <span className="shrink-0 text-text-secondary tabular-nums">{count}</span>
       </div>
       <div className="h-4 w-full bg-surface-container rounded-md overflow-hidden">
         <div className={`h-full ${color} rounded-r-md transition-all duration-1000 ease-out`} style={{ width: `${percent}%` }} />
@@ -954,8 +959,8 @@ function TextCategorySummary({ distribution }: { distribution: TextCategoryDistr
         <div className="space-y-3 max-h-56 overflow-y-auto custom-scrollbar pr-1">
           {distribution.options.map((option, optionIndex) => (
             <div key={option.label} className="space-y-1">
-              <div className="flex justify-between gap-3 text-xs">
-                <span className="truncate text-text-primary" title={option.label}>{option.label}</span>
+              <div className="flex min-w-0 items-baseline gap-3 text-xs">
+                <span className="min-w-0 flex-1 truncate text-text-primary" title={option.label}>{option.label}</span>
                 <span className="shrink-0 font-bold text-primary">{option.count} · {option.percent.toLocaleString('vi-VN', { maximumFractionDigits: 1 })}%</span>
               </div>
               <div className="h-2.5 rounded-full bg-surface-container overflow-hidden">
