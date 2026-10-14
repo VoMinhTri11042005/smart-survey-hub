@@ -82,8 +82,11 @@ export function Analytics({ onFeedback }: { onFeedback?: (message: string, type:
     ? `${analytics.legacyResponsesWithoutSnapshot}:${analytics.responsesWithSchemaDifferences}:${analytics.invalidScoreCount}`
     : '';
   const warningStorageKey = selectedSurvey ? `smart-survey:analytics-warning:${selectedSurvey.id}` : '';
-  const isWarningDismissed = dismissedWarning?.surveyId === selectedSurvey?.id
-    && dismissedWarning.fingerprint === warningFingerprint;
+  const isWarningDismissed = Boolean(
+    dismissedWarning
+    && dismissedWarning.surveyId === selectedSurvey?.id
+    && dismissedWarning.fingerprint === warningFingerprint
+  );
 
   useEffect(() => {
     if (!selectedSurvey || !hasAnalyticsWarning || !warningStorageKey) {
