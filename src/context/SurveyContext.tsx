@@ -569,12 +569,13 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const fetchTeamMembers = useCallback(async () => {
-    try {
-      const res = await apiFetch(`${API_BASE}/teams`);
-      if (res.ok) setTeamMembers(await res.json());
-    } catch (error) {
-      console.error('Error fetching team:', error);
+    const res = await apiFetch(`${API_BASE}/teams`);
+    if (!res.ok) {
+      const payload = await res.json().catch(() => null);
+      throw new Error(payload?.error || 'Không thể tải danh sách thành viên.');
     }
+    const members = await res.json();
+    setTeamMembers(Array.isArray(members) ? members : []);
   }, []);
 
   const inviteTeamMember = useCallback(async (name: string, email: string, role: TeamRole): Promise<TeamMember> => {
@@ -605,7 +606,11 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const removeTeamMember = useCallback(async (id: string) => {
-    await apiFetch(`${API_BASE}/teams/${id}`, { method: 'DELETE' });
+    const res = await apiFetch(`${API_BASE}/teams/${id}`, { method: 'DELETE' });
+    if (!res.ok) {
+      const payload = await res.json().catch(() => null);
+      throw new Error(payload?.error || 'Không thể xóa thành viên.');
+    }
     setTeamMembers(prev => prev.filter(m => m.id !== id));
   }, []);
 
