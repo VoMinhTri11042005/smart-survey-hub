@@ -33,7 +33,7 @@ export interface ChoiceDistributionOption {
   percent: number;
   /** The answer no longer exists in the question's current option list. */
   isUnknown?: boolean;
-  /** More than one configured option has the same stored label. */
+  /** More than one configured option has the same rendered label. */
   isAmbiguous?: boolean;
   /** Answer comes from an older schema or a row with no captured schema. */
   isHistorical?: boolean;
@@ -173,6 +173,22 @@ function hasRequiredQuestionAnswer(question: Survey['questions'][number], answer
   return (question.options ?? []).every(row => hasAnswer((answer as Record<string, unknown>)[row]));
 }
 
+/**
+ * Choice answers were historically stored as the option's text.  Older rows
+ * can therefore differ from the current option only by HTML, non-breaking
+ * spaces, or Unicode composition.  Use the rendered text as a comparison key,
+ * but deliberately preserve case, accents, and punctuation: those can carry
+ * meaning in an option and must never be merged automatically.
+ */
+export function choiceDisplayKey(value: unknown): string {
+  return cleanTextAnswer(value);
+}
+
+function choiceAnswerSchemaValue(value: unknown): string | string[] | null {
+  if (Array.isArray(value)) return value.map(choiceDisplayKey);
+  return typeof value === 'string' ? choiceDisplayKey(value) : null;
+}
+
 function questionSchemaSignature(question: Survey['questions'][number]): string {
   // Keep only fields that change how an answer is interpreted. Presentation-only
   // fields such as labels do not make an existing response statistically
@@ -180,13 +196,17 @@ function questionSchemaSignature(question: Survey['questions'][number]): string 
   return JSON.stringify({
     id: question.id,
     type: question.type,
-    text: question.text,
+    // HTML/spacing-only edits change presentation, not the instrument.  Keep
+    // meaningful text, option, or behaviour changes distinct.
+    text: choiceDisplayKey(question.text),
     required: Boolean(question.required),
-    options: question.options ?? [],
-    gridColumns: question.gridColumns ?? [],
+    options: (question.options ?? []).map(choiceDisplayKey),
+    gridColumns: (question.gridColumns ?? []).map(choiceDisplayKey),
     scaleMin: question.scaleMin ?? null,
     scaleMax: question.scaleMax ?? null,
-    correctAnswer: question.correctAnswer ?? null,
+    maxSelections: question.maxSelections ?? null,
+    screenOutAnswer: choiceAnswerSchemaValue(question.screenOutAnswer),
+    correctAnswer: choiceAnswerSchemaValue(question.correctAnswer),
     points: question.points ?? null,
   });
 }
@@ -476,19 +496,74 @@ export function computeSurveyAnalytics(survey: Survey, responses: SurveyResponse
 
   const choiceDistributions: ChoiceDistribution[] = [];
   for (const q of survey.questions.filter(isChoiceQuestion)) {
-    const configuredGroups = new Map<string, { id: string; label: string; count: number; isAmbiguous: boolean }>();
+    type ConfiguredChoiceGroup = { id: string; label: string; count: number; isAmbiguous: boolean };
+    const configuredGroups = new Map<string, ConfiguredChoiceGroup>();
+    const configuredGroupsByDisplayKey = new Map<string, ConfiguredChoiceGroup[]>();
     for (const [index, label] of (q.options || []).entries()) {
       const existing = configuredGroups.get(label);
       if (existing) {
         existing.isAmbiguous = true;
       } else {
-        configuredGroups.set(label, { id: `option-${index}`, label, count: 0, isAmbiguous: false });
+        const group: ConfiguredChoiceGroup = { id: `option-${index}`, label, count: 0, isAmbiguous: false };
+        configuredGroups.set(label, group);
+
+        const displayKey = choiceDisplayKey(label);
+        if (displayKey) {
+          const sameRenderedOptions = configuredGroupsByDisplayKey.get(displayKey) ?? [];
+          if (sameRenderedOptions.length) {
+            // A legacy value that only identifies the rendered text cannot be
+            // attributed safely when the live question contains duplicates.
+            group.isAmbiguous = true;
+            sameRenderedOptions.forEach(option => { option.isAmbiguous = true; });
+          }
+          sameRenderedOptions.push(group);
+          configuredGroupsByDisplayKey.set(displayKey, sameRenderedOptions);
+        }
       }
     }
-    const unknownCounts = new Map<string, number>();
+    const unknownCounts = new Map<string, { label: string; count: number }>();
     const historicalCounts = new Map<string, { id: string; label: string; count: number }>();
     const historicalVersions = new Map<string, number>();
     let nextHistoricalVersion = 1;
+
+    const findConfiguredGroup = (selection: string): ConfiguredChoiceGroup | undefined => {
+      const exact = configuredGroups.get(selection);
+      if (exact) return exact;
+
+      const displayKey = choiceDisplayKey(selection);
+      const candidates = displayKey ? configuredGroupsByDisplayKey.get(displayKey) ?? [] : [];
+      // Only merge formatting-only variants when they point to exactly one
+      // configured option.  Ambiguous or truly retired values remain visible.
+      return candidates.length === 1 ? candidates[0] : undefined;
+    };
+
+    const recordUnknownSelection = (selection: string) => {
+      const displayKey = choiceDisplayKey(selection);
+      const key = displayKey ? `display:${displayKey}` : `raw:${selection}`;
+      const existing = unknownCounts.get(key);
+      if (existing) {
+        existing.count++;
+      } else {
+        unknownCounts.set(key, { label: displayKey || selection, count: 1 });
+      }
+    };
+
+    const recordConfiguredSelections = (selections: string[]) => {
+      const recordedOptionIds = new Set<string>();
+      for (const selection of selections) {
+        const configured = findConfiguredGroup(selection);
+        if (configured) {
+          // A malformed multi-select row can contain the same displayed option
+          // twice (for example, once as HTML and once as plain text).  It is
+          // still one respondent selecting that option.
+          if (recordedOptionIds.has(configured.id)) continue;
+          recordedOptionIds.add(configured.id);
+          configured.count++;
+        } else {
+          recordUnknownSelection(selection);
+        }
+      }
+    };
 
     let answeredForThisQ = 0;
     let currentVersionAnswered = 0;
@@ -518,24 +593,17 @@ export function computeSurveyAnalytics(survey: Survey, responses: SurveyResponse
         : (typeof ans === 'string' ? [ans] : []);
       // A malformed old response may repeat a selection. Count one respondent
       // once per option, exactly as a valid submission does.
-      const selections = [...new Set(rawSelections.filter((value): value is string => typeof value === 'string' && value.trim().length > 0))];
+      const selections = [...new Set(rawSelections.filter((value): value is string => typeof value === 'string' && choiceDisplayKey(value).length > 0))];
       if (!selections.length) continue;
 
       answeredForThisQ++;
       const schemaDifferent = snapshotBacked && isQuestionSchemaDifferent(snapshotQuestion, q);
       if (!snapshotBacked) {
         legacyUnversionedAnswered++;
-        for (const selection of selections) {
-          // Legacy rows have no captured instrument. Use the current labels as
-          // a best-effort display only, while exposing their count separately
-          // so this unavoidable uncertainty is never hidden from the reader.
-          const configured = configuredGroups.get(selection);
-          if (configured) {
-            configured.count++;
-          } else {
-            unknownCounts.set(selection, (unknownCounts.get(selection) ?? 0) + 1);
-          }
-        }
+        // Legacy rows have no captured instrument. Map only rendered-text
+        // equivalents to one unambiguous current label; all other values stay
+        // visibly separate so a past wording change is never hidden.
+        recordConfiguredSelections(selections);
       } else if (schemaDifferent) {
         historicalVersionAnswered++;
         const signature = questionSchemaSignature(responseQuestion);
@@ -544,29 +612,26 @@ export function computeSurveyAnalytics(survey: Survey, responses: SurveyResponse
           version = nextHistoricalVersion++;
           historicalVersions.set(signature, version);
         }
+        const recordedHistoricalKeys = new Set<string>();
         for (const selection of selections) {
-          const key = `${signature}\u0000${selection}`;
+          const displayedSelection = choiceDisplayKey(selection) || selection;
+          const key = `${signature}\u0000${displayedSelection}`;
+          if (recordedHistoricalKeys.has(key)) continue;
+          recordedHistoricalKeys.add(key);
           const existing = historicalCounts.get(key);
           if (existing) {
             existing.count++;
           } else {
             historicalCounts.set(key, {
               id: `historical-${historicalCounts.size}`,
-              label: `Phiên bản cũ #${version}: ${selection}`,
+              label: `Phiên bản cũ #${version}: ${displayedSelection}`,
               count: 1,
             });
           }
         }
       } else {
         currentVersionAnswered++;
-        for (const selection of selections) {
-          const configured = configuredGroups.get(selection);
-          if (configured) {
-            configured.count++;
-          } else {
-            unknownCounts.set(selection, (unknownCounts.get(selection) ?? 0) + 1);
-          }
-        }
+        recordConfiguredSelections(selections);
       }
     }
 
@@ -578,7 +643,7 @@ export function computeSurveyAnalytics(survey: Survey, responses: SurveyResponse
       percent: 0,
       ...(option.isAmbiguous ? { isAmbiguous: true } : {}),
     }));
-    const unknownOptions: ChoiceDistributionOption[] = [...unknownCounts.entries()].map(([label, count], index) => ({
+    const unknownOptions: ChoiceDistributionOption[] = [...unknownCounts.values()].map(({ label, count }, index) => ({
       id: `unknown-${index}`,
       label: `Lựa chọn cũ/không còn trong cấu hình: ${label}`,
       count,

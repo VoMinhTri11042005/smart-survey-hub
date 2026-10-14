@@ -183,6 +183,88 @@ describe('computeSurveyAnalytics', () => {
     expect(analytics.starRatings[0].average).toBe(3.8);
   });
 
+  it('merges formatting-only legacy choice values into their one current option', () => {
+    const analytics = computeSurveyAnalytics(makeSurvey([
+      { id: 'choice', type: 'single_choice', text: 'Lựa chọn', required: false, options: ['Có', 'Không'] },
+    ]), [
+      makeResponse('html-yes', { choice: '<p>Có&nbsp;</p>' }),
+      makeResponse('nfd-yes', { choice: 'Co\u0301' }),
+      makeResponse('space-no', { choice: '\u00a0Không\u00a0' }),
+      makeResponse('nfd-no', { choice: 'Kho\u0302ng' }),
+    ]);
+
+    const choice = analytics.choiceDistributions[0];
+    expect(choice).toMatchObject({ totalAnswered: 4, legacyUnversionedAnswered: 4 });
+    expect(choice.options).toEqual(expect.arrayContaining([
+      expect.objectContaining({ label: 'Có', count: 2, percent: 50 }),
+      expect.objectContaining({ label: 'Không', count: 2, percent: 50 }),
+    ]));
+    expect(choice.options).toHaveLength(2);
+    expect(choice.options.some(option => option.isUnknown)).toBe(false);
+  });
+
+  it('does not double count formatting-only duplicates in an old multi-select response', () => {
+    const analytics = computeSurveyAnalytics(makeSurvey([
+      { id: 'multi', type: 'multiple_choice', text: 'Lựa chọn', required: false, options: ['Có', 'Không'] },
+    ]), [
+      makeResponse('legacy-a', { multi: ['Có', '<strong>Có</strong>', ' Không '] }),
+      makeResponse('legacy-b', { multi: ['<em>Có</em>'] }),
+    ]);
+
+    const choice = analytics.choiceDistributions[0];
+    expect(choice).toMatchObject({ totalAnswered: 2, legacyUnversionedAnswered: 2 });
+    expect(choice.options).toEqual(expect.arrayContaining([
+      expect.objectContaining({ label: 'Có', count: 2, percent: 100 }),
+      expect.objectContaining({ label: 'Không', count: 1, percent: 50 }),
+    ]));
+    expect(choice.options.some(option => option.isUnknown)).toBe(false);
+  });
+
+  it('keeps a legacy formatting variant separate when the configured display label is ambiguous', () => {
+    const analytics = computeSurveyAnalytics(makeSurvey([
+      { id: 'choice', type: 'single_choice', text: 'Lựa chọn', required: false, options: ['Có', '<p>Có</p>', 'Không'] },
+    ]), [
+      makeResponse('legacy', { choice: '<i>Có</i>' }),
+    ]);
+
+    const choice = analytics.choiceDistributions[0];
+    expect(choice.options.filter(option => option.isAmbiguous)).toHaveLength(2);
+    expect(choice.options).toEqual(expect.arrayContaining([
+      expect.objectContaining({ isUnknown: true, count: 1 }),
+    ]));
+  });
+
+  it('treats snapshot questions with formatting-only changes as the same instrument', () => {
+    const currentQuestion: SurveyQuestion = {
+      id: 'choice', type: 'single_choice', text: '<p>Bạn chọn đáp án nào?</p>', required: true, options: ['Có', 'Không'],
+    };
+    const capturedQuestion: SurveyQuestion = {
+      ...currentQuestion,
+      text: 'Bạn chọn đáp án nào?',
+      options: ['<strong>Có</strong>', 'Không&nbsp;'],
+    };
+    const snapshot = (questions: SurveyQuestion[]) => ({
+      schemaVersion: 1,
+      capturedAt: '2026-01-01T00:00:00.000Z',
+      isQuiz: false,
+      questions,
+    });
+
+    const analytics = computeSurveyAnalytics(makeSurvey([currentQuestion]), [
+      makeResponse('old-format', { choice: '<strong>Có</strong>' }, { surveySnapshot: snapshot([capturedQuestion]) }),
+      makeResponse('new-format', { choice: 'Không' }, { surveySnapshot: snapshot([currentQuestion]) }),
+    ]);
+
+    const choice = analytics.choiceDistributions[0];
+    expect(analytics.responsesWithSchemaDifferences).toBe(0);
+    expect(choice).toMatchObject({ currentVersionAnswered: 2, historicalVersionAnswered: 0 });
+    expect(choice.options).toEqual(expect.arrayContaining([
+      expect.objectContaining({ label: 'Có', count: 1 }),
+      expect.objectContaining({ label: 'Không', count: 1 }),
+    ]));
+    expect(choice.options.some(option => option.isHistorical || option.isUnknown)).toBe(false);
+  });
+
   it('uses each captured question version for completion and correctness without merging old choices', () => {
     const currentQuestion: SurveyQuestion = {
       id: 'knowledge',

@@ -1,6 +1,6 @@
 import ExcelJS from 'exceljs';
 import type { Survey, SurveyQuestion, SurveyResponse } from '../types';
-import { computeSurveyAnalytics } from './analytics';
+import { choiceDisplayKey, computeSurveyAnalytics } from './analytics';
 import { cleanHtmlWhitespace } from './stringUtils';
 import { parseStoredStarRating } from '../../shared/starRating';
 import { isPersonalIdentifierQuestion, normalizeTextCategoryValue } from './textAnalytics';
@@ -344,18 +344,19 @@ function writeAnalysisTable(sheet: ExcelJS.Worksheet, startRow: number, headers:
 
 function responseHasSelection(response: SurveyResponse, questionId: string, label: string) {
   const answer = response.answers[questionId];
-  const target = displayText(label);
-  if (Array.isArray(answer)) return answer.some(value => displayText(String(value)) === target);
+  const target = choiceDisplayKey(label);
+  if (!target) return false;
+  if (Array.isArray(answer)) return answer.some(value => choiceDisplayKey(value) === target);
   // Answers created by the application are either a single exact value or an
   // array.  Splitting a scalar on “;” makes an option such as “A; B” match a
   // different option and corrupts a cross-tab.
-  return typeof answer === 'string' && displayText(answer) === target;
+  return typeof answer === 'string' && choiceDisplayKey(answer) === target;
 }
 
 function groupAnswerKey(question: SurveyQuestion, answer: unknown) {
   if (question.type === 'text') return normalizeTextCategoryValue(displayText(String(answer ?? '')))?.key ?? null;
   if (Array.isArray(answer)) return null;
-  return displayText(String(answer ?? '')).toLocaleLowerCase('vi-VN') || null;
+  return choiceDisplayKey(answer) || null;
 }
 
 function buildProfessionalSheets(workbook: ExcelJS.Workbook, survey: Survey, responses: SurveyResponse[], analytics: ReturnType<typeof computeSurveyAnalytics>) {
@@ -582,7 +583,12 @@ function buildProfessionalSheets(workbook: ExcelJS.Workbook, survey: Survey, res
     if (groups.length && outcome.length) {
       cross.mergeCells(`A${crossRow}:H${crossRow}`); cross.getCell(`A${crossRow}`).value = `Tỷ lệ chọn “${displayText(outcomeQuestion.text)}” theo “${displayText(groupQuestion.text)}”`; cross.getCell(`A${crossRow}`).font = { bold: true, color: { argb: `FF${BRAND}` } }; cross.getCell(`A${crossRow}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEDE9FE' } };
       const groupHeaders = [`Lựa chọn trong “${displayText(outcomeQuestion.text)}”`, ...groups.map(group => group.label)]; cross.getRow(crossRow + 1).values = groupHeaders; styleTableHeader(cross.getRow(crossRow + 1));
-      const groupKeys = groups.map(group => ({ label: group.label, key: normalizeTextCategoryValue(group.label)?.key ?? group.label.toLocaleLowerCase('vi-VN') }));
+      const groupKeys = groups.map(group => ({
+        label: group.label,
+        key: groupQuestion.type === 'text'
+          ? normalizeTextCategoryValue(group.label)?.key ?? ''
+          : choiceDisplayKey(group.label),
+      }));
       const rows = outcome.map(option => {
         const values = groupKeys.map(group => {
           const inGroup = responses.filter(response => groupAnswerKey(groupQuestion, response.answers[groupQuestion.id]) === group.key);
