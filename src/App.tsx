@@ -139,7 +139,7 @@ function AppContent() {
   });
   const [shareError, setShareError] = useState<string | null>(null);
 
-  const { fetchSurveyById, currentSurvey, setCurrentSurvey } = useSurvey();
+  const { fetchSurveyById, currentSurvey, setCurrentSurvey, startFreshSurvey } = useSurvey();
 
   useEffect(() => onAuthChange(user => {
     if (!user?.email) {
@@ -298,7 +298,7 @@ function AppContent() {
           <Sidebar
             currentView={currentView}
             onViewChange={setCurrentView}
-            onNewSurvey={() => setCurrentSurvey(null)}
+            onNewSurvey={startFreshSurvey}
             onLogout={handleLogout}
             userProfile={userProfile}
             isOpen={isMobileMenuOpen}

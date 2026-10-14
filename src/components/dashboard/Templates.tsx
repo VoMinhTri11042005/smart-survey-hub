@@ -26,7 +26,7 @@ interface TemplatesProps {
 export function Templates({ onViewChange, onFeedback }: TemplatesProps) {
   const [category, setCategory] = useState('Tất cả');
   const [search, setSearch] = useState('');
-  const { loadTemplate } = useSurvey();
+  const { loadTemplate, startFreshSurvey } = useSurvey();
 
   const handleUseTemplate = (templateId: string) => {
     const template = SURVEY_TEMPLATES.find(t => t.id === templateId);
@@ -51,7 +51,7 @@ export function Templates({ onViewChange, onFeedback }: TemplatesProps) {
           <p className="text-sm text-text-secondary mt-1">Bắt đầu nhanh với {SURVEY_TEMPLATES.length} mẫu khảo sát được thiết kế sẵn.</p>
         </div>
         <button
-          onClick={() => onViewChange?.('builder')}
+          onClick={() => { startFreshSurvey(); onViewChange?.('builder'); }}
           className="px-5 py-2.5 bg-primary text-white font-bold rounded-xl shadow-md hover:bg-primary/90 transition-all flex items-center gap-2 cursor-pointer self-start"
         >
           <Sparkles size={18} />

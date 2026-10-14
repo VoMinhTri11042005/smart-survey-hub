@@ -66,6 +66,8 @@ export interface Survey {
   displayMode?: SurveyDisplayMode;
   maxAttemptsPerDevice?: number | null;
   timeLimitMinutes?: number | null;
+  /** Number of valid, submitted responses returned by the dashboard API. */
+  responseCount?: number;
 }
 
 export interface SurveyResponse {

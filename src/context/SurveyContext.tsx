@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react';
+import { createContext, useContext, useState, useCallback, useEffect, useRef, type ReactNode } from 'react';
 import type { Survey, SurveyAnswer, SurveyQuestion, SurveyResponse, SurveySection, SurveyTemplateData, TeamMember, TeamRole, SurveyDisplayMode } from '../types';
 import { API_BASE, apiFetch } from '../utils/api';
 
@@ -32,6 +32,13 @@ interface SurveyContextType {
   updateSurvey: (id: string, survey: Omit<Survey, 'id' | 'createdAt' | 'status'> & { status?: string; closesAt?: string | null; displayMode?: SurveyDisplayMode }) => Promise<Survey>;
   deleteSurvey: (id: string) => Promise<void>;
   setCurrentSurvey: (survey: Survey | null) => void;
+  /**
+   * Opens a clean builder session without deleting or altering saved drafts.
+   * The incrementing request id lets an already-mounted builder reset safely.
+   */
+  startFreshSurvey: () => void;
+  freshBuilderRequestId: number | null;
+  consumeFreshBuilderRequest: (requestId: number) => void;
   setSearchQuery: (query: string) => void;
   fetchDrafts: () => Promise<SurveyDraft[]>;
   saveDraft: (draft: Partial<SurveyDraft> & { title?: string; description?: string; questions?: SurveyQuestion[] }) => Promise<SurveyDraft>;
@@ -115,11 +122,30 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
   }, [surveys]);
 
   const [currentSurvey, setCurrentSurvey] = useState<Survey | null>(null);
+  const [freshBuilderRequestId, setFreshBuilderRequestId] = useState<number | null>(null);
+  const freshBuilderSequenceRef = useRef(0);
   const [isLoading, setIsLoading] = useState(false);
   const [pendingTemplate, setPendingTemplate] = useState<SurveyTemplateData | null>(null);
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [drafts, setDrafts] = useState<any[]>([]);
+
+  const requestFreshBuilder = useCallback(() => {
+    freshBuilderSequenceRef.current += 1;
+    setFreshBuilderRequestId(freshBuilderSequenceRef.current);
+  }, []);
+
+  const consumeFreshBuilderRequest = useCallback((requestId: number) => {
+    setFreshBuilderRequestId(current => current === requestId ? null : current);
+  }, []);
+
+  const startFreshSurvey = useCallback(() => {
+    // This deliberately does not delete an existing draft. It only tells the
+    // builder to open a new, blank session instead of restoring the latest one.
+    setCurrentSurvey(null);
+    setPendingTemplate(null);
+    requestFreshBuilder();
+  }, [requestFreshBuilder]);
 
   const readLocalDrafts = useCallback(() => {
     const keys = ['smart-survey-hub-builder-draft', 'smart-survey-hub-drafts'];
@@ -533,8 +559,10 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const loadTemplate = useCallback((template: SurveyTemplateData) => {
+    setCurrentSurvey(null);
+    requestFreshBuilder();
     setPendingTemplate(template);
-  }, []);
+  }, [requestFreshBuilder]);
 
   const clearPendingTemplate = useCallback(() => {
     setPendingTemplate(null);
@@ -595,6 +623,9 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
       updateSurvey,
       deleteSurvey,
       setCurrentSurvey,
+      startFreshSurvey,
+      freshBuilderRequestId,
+      consumeFreshBuilderRequest,
       setSearchQuery,
       drafts,
       fetchDrafts,

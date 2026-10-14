@@ -47,7 +47,7 @@ const normalizeAttempts = (value: number | null | undefined) => (
 );
 
 export function Builder({ onPublished, onUpdated, onDraftSaved, onError, onActivity }: { onPublished?: () => void; onUpdated?: () => void; onDraftSaved?: () => void; onError?: (msg: string) => void; onActivity?: (message: string) => void }) {
-  const { parseDocx, createSurvey, updateSurvey, currentSurvey, setCurrentSurvey, isLoading, pendingTemplate, clearPendingTemplate, chatWithAI, fetchDrafts, saveDraft, deleteDraft } = useSurvey();
+  const { parseDocx, createSurvey, updateSurvey, currentSurvey, setCurrentSurvey, isLoading, pendingTemplate, clearPendingTemplate, chatWithAI, fetchDrafts, saveDraft, deleteDraft, freshBuilderRequestId, consumeFreshBuilderRequest } = useSurvey();
   const DRAFT_STORAGE_KEY = 'smart-survey-hub-builder-draft';
   const LEGACY_DRAFT_STORAGE_KEY = 'smart-survey-hub-drafts';
 
@@ -100,6 +100,9 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError, onActiv
   const [maxAttemptsPerDevice, setMaxAttemptsPerDevice] = useState<number | null>(1);
   const [timeLimitMinutes, setTimeLimitMinutes] = useState<number | null>(null);
   const draftSyncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const draftSessionRef = useRef(0);
+  const handledFreshBuilderRequestRef = useRef<number | null>(null);
+  const skipDraftRestoreRef = useRef(false);
 
   // Drag state for question reordering
   const [dragOverId, setDragOverId] = useState<string | null>(null);
@@ -235,6 +238,41 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError, onActiv
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    if (freshBuilderRequestId === null || freshBuilderRequestId === handledFreshBuilderRequestRef.current) return;
+
+    handledFreshBuilderRequestRef.current = freshBuilderRequestId;
+    skipDraftRestoreRef.current = true;
+    draftSessionRef.current += 1;
+    if (draftSyncTimer.current) {
+      clearTimeout(draftSyncTimer.current);
+      draftSyncTimer.current = null;
+    }
+
+    // Reset only the local editor state. Existing server/local drafts are left
+    // untouched so a person can return to them from the dashboard later.
+    setShowSurvey(false);
+    setTopic('');
+    setSelectedFile(null);
+    setSurveyTitle('');
+    setSurveyDescription('');
+    setQuestions([]);
+    setSections([{ id: 'section-1', title: 'Phần 1' }]);
+    setActiveQuestionId(null);
+    setIsQuiz(false);
+    setShowScore(true);
+    setDisplayMode('single');
+    setClosesAt(null);
+    setMaxAttemptsPerDevice(1);
+    setTimeLimitMinutes(null);
+    setDraftId(null);
+    setDraftSavedAt(null);
+    setPublishedSurvey(null);
+    setAiMessages([]);
+    setAiInput('');
+    consumeFreshBuilderRequest(freshBuilderRequestId);
+  }, [consumeFreshBuilderRequest, freshBuilderRequestId]);
+
+  useEffect(() => {
     if (pendingTemplate) {
       setSurveyTitle(pendingTemplate.title);
       setSurveyDescription(pendingTemplate.description);
@@ -267,8 +305,9 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError, onActiv
 
   useEffect(() => {
     const loadDrafts = async () => {
-      if (currentSurvey) return;
+      if (currentSurvey || pendingTemplate || skipDraftRestoreRef.current) return;
       const drafts = await fetchDrafts();
+      if (skipDraftRestoreRef.current) return;
       if (!drafts || drafts.length === 0) {
         const savedDrafts = readDraftsFromStorage();
         const saved = savedDrafts[0];
@@ -333,7 +372,7 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError, onActiv
     };
 
     void loadDrafts();
-  }, [fetchDrafts, currentSurvey]);
+  }, [fetchDrafts, currentSurvey, pendingTemplate, freshBuilderRequestId]);
 
   useEffect(() => {
     if (!showSurvey) return;
@@ -360,10 +399,11 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError, onActiv
       console.error('Failed to save draft', error);
     }
     if (draftSyncTimer.current) clearTimeout(draftSyncTimer.current);
+    const draftSession = draftSessionRef.current;
     if (!currentSurvey && (surveyTitle.trim() || questions.length > 0)) {
       draftSyncTimer.current = setTimeout(() => {
         void saveDraft({ id: draftId || undefined, title: surveyTitle || 'Khảo sát nháp', description: surveyDescription, questions, sections, isQuiz, showScore, displayMode, closesAt, maxAttemptsPerDevice, timeLimitMinutes }).then(saved => {
-          if (!draftId && saved?.id) setDraftId(saved.id);
+          if (!draftId && saved?.id && draftSessionRef.current === draftSession) setDraftId(saved.id);
         }).catch(error => console.warn('Background draft sync failed', error));
       }, 700);
     }
@@ -403,6 +443,7 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError, onActiv
     if (isSavingDraft) return;
 
     setIsSavingDraft(true);
+    const draftSession = draftSessionRef.current;
     const draft = {
       id: draftId || `draft-${Date.now()}`,
       title: surveyTitle || 'Khảo sát nháp',
@@ -421,9 +462,11 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError, onActiv
       // The legacy key stored the same draft a second time, causing duplicate cards.
       localStorage.removeItem(LEGACY_DRAFT_STORAGE_KEY);
       const saved = await saveDraft(draft);
-      setDraftId(saved.id || draft.id);
-      setDraftSavedAt(new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }));
-      onDraftSaved?.();
+      if (draftSessionRef.current === draftSession) {
+        setDraftId(saved.id || draft.id);
+        setDraftSavedAt(new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }));
+        onDraftSaved?.();
+      }
     } catch (error) {
       onError?.(error instanceof Error ? error.message : 'Không thể lưu bản nháp. Vui lòng thử lại.');
     } finally {
