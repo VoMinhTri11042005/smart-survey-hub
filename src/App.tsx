@@ -303,6 +303,7 @@ function AppContent() {
             userProfile={userProfile}
             isOpen={isMobileMenuOpen}
             isCollapsed={isSidebarCollapsed}
+            onCollapseToggle={() => setIsSidebarCollapsed(previous => !previous)}
             onClose={() => setIsMobileMenuOpen(false)}
           />
           <div className="flex-1 flex flex-col overflow-hidden relative w-full">
@@ -315,8 +316,6 @@ function AppContent() {
               onMarkRead={id => setNotifications(prev => prev.map(notification => notification.id === id ? { ...notification, read: true } : notification))}
               onMarkAllRead={() => setNotifications(prev => prev.map(n => ({ ...n, read: true })))}
               onMenuClick={() => setIsMobileMenuOpen(true)}
-              isSidebarCollapsed={isSidebarCollapsed}
-              onSidebarToggle={() => setIsSidebarCollapsed(previous => !previous)}
             />
             <main className="flex-1 overflow-y-auto relative bg-surface-background">
               <Suspense fallback={<AppFallback />}>
