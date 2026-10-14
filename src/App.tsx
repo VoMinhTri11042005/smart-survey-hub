@@ -26,6 +26,7 @@ const Chatbot = lazy(() => import('./components/survey/Chatbot').then((m) => ({ 
 const Settings = lazy(() => import('./components/dashboard/Settings').then((m) => ({ default: m.Settings })));
 
 const NOTIFICATIONS_STORAGE_KEY = 'smart-survey-notifications';
+const SIDEBAR_COLLAPSED_STORAGE_KEY = 'smart-survey-sidebar-collapsed';
 
 const AppFallback = () => (
   <div className="flex h-screen items-center justify-center bg-surface-background text-text-primary">
@@ -48,6 +49,23 @@ function AppContent() {
   }, [currentView]);
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) === 'true';
+    } catch (error) {
+      console.error('Failed to load sidebar preference:', error);
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, String(isSidebarCollapsed));
+    } catch (error) {
+      console.error('Failed to save sidebar preference:', error);
+    }
+  }, [isSidebarCollapsed]);
+
   const [notifications, setNotifications] = useState<{ id: string; message: string; time: string; read: boolean }[]>(() => {
     try {
       const saved = localStorage.getItem(NOTIFICATIONS_STORAGE_KEY);
@@ -277,7 +295,16 @@ function AppContent() {
         </Suspense>
       ) : (
         <div className="flex h-screen bg-surface-background text-text-primary font-sans overflow-hidden selection:bg-secondary-fixed selection:text-on-secondary-fixed relative">
-          <Sidebar currentView={currentView} onViewChange={setCurrentView} onNewSurvey={() => setCurrentSurvey(null)} onLogout={handleLogout} userProfile={userProfile} isOpen={isMobileMenuOpen} onClose={() => setIsMobileMenuOpen(false)} />
+          <Sidebar
+            currentView={currentView}
+            onViewChange={setCurrentView}
+            onNewSurvey={() => setCurrentSurvey(null)}
+            onLogout={handleLogout}
+            userProfile={userProfile}
+            isOpen={isMobileMenuOpen}
+            isCollapsed={isSidebarCollapsed}
+            onClose={() => setIsMobileMenuOpen(false)}
+          />
           <div className="flex-1 flex flex-col overflow-hidden relative w-full">
             <TopBar 
               currentView={currentView} 
@@ -288,6 +315,8 @@ function AppContent() {
               onMarkRead={id => setNotifications(prev => prev.map(notification => notification.id === id ? { ...notification, read: true } : notification))}
               onMarkAllRead={() => setNotifications(prev => prev.map(n => ({ ...n, read: true })))}
               onMenuClick={() => setIsMobileMenuOpen(true)}
+              isSidebarCollapsed={isSidebarCollapsed}
+              onSidebarToggle={() => setIsSidebarCollapsed(previous => !previous)}
             />
             <main className="flex-1 overflow-y-auto relative bg-surface-background">
               <Suspense fallback={<AppFallback />}>

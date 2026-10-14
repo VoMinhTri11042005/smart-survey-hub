@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Search, Bell, Eye, Check, Menu, X } from 'lucide-react';
+import { Search, Bell, Eye, Check, Menu, X, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { View, UserProfile } from '../../types';
 import { useSurvey } from '../../context/SurveyContext';
 
@@ -30,9 +30,11 @@ interface TopBarProps {
   onMarkAllRead?: () => void;
   onMarkRead?: (id: string) => void;
   onMenuClick?: () => void;
+  isSidebarCollapsed?: boolean;
+  onSidebarToggle?: () => void;
 }
 
-export function TopBar({ currentView, onViewChange, onPublish, userProfile, notifications = [], onMarkAllRead, onMarkRead, onMenuClick }: TopBarProps) {
+export function TopBar({ currentView, onViewChange, onPublish, userProfile, notifications = [], onMarkAllRead, onMarkRead, onMenuClick, isSidebarCollapsed = false, onSidebarToggle }: TopBarProps) {
   const { searchQuery, setSearchQuery } = useSurvey();
   const [showNotifications, setShowNotifications] = useState(false);
   const notificationPanelRef = useRef<HTMLDivElement>(null);
@@ -70,6 +72,19 @@ export function TopBar({ currentView, onViewChange, onPublish, userProfile, noti
         >
           <Menu size={24} className="pointer-events-none" />
         </button>
+        {onSidebarToggle && (
+          <button
+            type="button"
+            onClick={onSidebarToggle}
+            className="hidden md:inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-surface-container text-text-secondary transition-colors hover:bg-surface-container-high hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 cursor-pointer"
+            aria-label={isSidebarCollapsed ? 'Mở thanh điều hướng' : 'Thu gọn thanh điều hướng'}
+            aria-controls="app-sidebar"
+            aria-expanded={!isSidebarCollapsed}
+            title={isSidebarCollapsed ? 'Mở thanh điều hướng' : 'Thu gọn thanh điều hướng'}
+          >
+            {isSidebarCollapsed ? <PanelLeftOpen size={20} /> : <PanelLeftClose size={20} />}
+          </button>
+        )}
         {currentView === 'analytics' && (
           <>
             <span className="font-display text-xl font-bold text-primary tracking-tight hidden md:inline">Smart Survey</span>

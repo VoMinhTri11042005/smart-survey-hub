@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { LayoutDashboard, FileText, PieChart, Users, Plus, LogOut, Settings, X } from 'lucide-react';
 import { View, UserProfile } from '../../types';
 
@@ -7,11 +8,37 @@ interface SidebarProps {
   onLogout: () => void;
   userProfile?: UserProfile;
   isOpen?: boolean;
+  isCollapsed?: boolean;
   onClose?: () => void;
   onNewSurvey?: () => void;
 }
 
-export function Sidebar({ currentView, onViewChange, onLogout, userProfile, isOpen, onClose, onNewSurvey }: SidebarProps) {
+function useDesktopViewport() {
+  const [isDesktop, setIsDesktop] = useState(() =>
+    typeof window !== 'undefined'
+      && typeof window.matchMedia === 'function'
+      && window.matchMedia('(min-width: 768px)').matches,
+  );
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+      return undefined;
+    }
+
+    const media = window.matchMedia('(min-width: 768px)');
+    const update = () => setIsDesktop(media.matches);
+    update();
+    media.addEventListener('change', update);
+    return () => media.removeEventListener('change', update);
+  }, []);
+
+  return isDesktop;
+}
+
+export function Sidebar({ currentView, onViewChange, onLogout, userProfile, isOpen, isCollapsed = false, onClose, onNewSurvey }: SidebarProps) {
+  const isDesktop = useDesktopViewport();
+  const isDesktopCollapsed = isCollapsed && isDesktop;
+
   return (
     <>
       {/* Mobile Backdrop */}
@@ -23,7 +50,13 @@ export function Sidebar({ currentView, onViewChange, onLogout, userProfile, isOp
       )}
 
       {/* Sidebar Content */}
-      <aside className={`absolute md:relative inset-y-0 w-64 bg-surface-container border-r border-border-subtle flex flex-col h-full flex-shrink-0 transition-all duration-300 ease-in-out z-[100] ${isOpen ? 'left-0' : '-left-64 md:left-0'}`}>
+      <aside
+        id="app-sidebar"
+        aria-label="Điều hướng chính"
+        aria-hidden={isDesktopCollapsed || undefined}
+        inert={isDesktopCollapsed || undefined}
+        className={`absolute md:relative inset-y-0 w-64 bg-surface-container border-r border-border-subtle flex flex-col h-full flex-shrink-0 overflow-hidden transition-[width,opacity] duration-300 ease-in-out z-[100] ${isOpen ? 'left-0' : '-left-64 md:left-0'} ${isCollapsed ? 'md:w-0 md:border-r-0 md:opacity-0 md:pointer-events-none' : 'md:w-64 md:opacity-100'}`}
+      >
         <div className="p-6 pb-4 flex items-center justify-between">
           <div>
             <h1 className="font-display text-4xl font-bold text-primary tracking-tight leading-none">SH</h1>
