@@ -30,6 +30,15 @@ const inMemoryResponses: Record<string, any[]> = {};
 
 const roundQuizScore = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
 
+function toOptionalPositiveInteger(value: unknown, maximum: number): number | null {
+  const parsed = typeof value === 'number' ? value : Number(value);
+  return Number.isInteger(parsed) && parsed > 0 && parsed <= maximum ? parsed : null;
+}
+
+function valueWhenProvided<T>(data: Record<string, unknown>, key: string, currentValue: T): T {
+  return Object.prototype.hasOwnProperty.call(data, key) ? data[key] as T : currentValue;
+}
+
 export function mapRowToSurvey(row: any) {
   return {
     id: row.id,
@@ -43,8 +52,8 @@ export function mapRowToSurvey(row: any) {
     isQuiz: row.is_quiz || false,
     displayMode: row.display_mode || 'single',
     showScore: row.show_score !== false,
-    maxAttemptsPerDevice: row.max_attempts_per_device ?? null,
-    timeLimitMinutes: row.time_limit_minutes ?? null,
+    maxAttemptsPerDevice: toOptionalPositiveInteger(row.max_attempts_per_device, 100),
+    timeLimitMinutes: toOptionalPositiveInteger(row.time_limit_minutes, 1_440),
     responseCount: row.responseCount !== undefined ? parseInt(row.responseCount, 10) : undefined,
   };
 }
@@ -351,8 +360,8 @@ export function validateResponseAnswers(questions: any[], answers: Record<string
 export async function createSurvey(data: any) {
   const id = data.id || generateId();
   const { title, description, questions, sections, status, isQuiz, displayMode, showScore, closesAt, maxAttemptsPerDevice, timeLimitMinutes } = data;
-  const maxAttempts = Number.isFinite(Number(maxAttemptsPerDevice)) ? Number(maxAttemptsPerDevice) : null;
-  const timeLimit = Number.isFinite(Number(timeLimitMinutes)) ? Number(timeLimitMinutes) : null;
+  const maxAttempts = toOptionalPositiveInteger(maxAttemptsPerDevice, 100);
+  const timeLimit = toOptionalPositiveInteger(timeLimitMinutes, 1_440);
 
   if (!process.env.DATABASE_URL) {
     const survey = {
@@ -409,9 +418,9 @@ export async function updateSurvey(id: string, data: any) {
       isQuiz: data.isQuiz ?? existing.isQuiz,
       displayMode: data.displayMode ?? existing.displayMode,
       showScore: data.showScore ?? existing.showScore,
-      closesAt: data.closesAt ?? existing.closesAt,
-      maxAttemptsPerDevice: data.maxAttemptsPerDevice ?? existing.maxAttemptsPerDevice,
-      timeLimitMinutes: data.timeLimitMinutes ?? existing.timeLimitMinutes,
+      closesAt: valueWhenProvided(data, 'closesAt', existing.closesAt),
+      maxAttemptsPerDevice: toOptionalPositiveInteger(valueWhenProvided(data, 'maxAttemptsPerDevice', existing.maxAttemptsPerDevice), 100),
+      timeLimitMinutes: toOptionalPositiveInteger(valueWhenProvided(data, 'timeLimitMinutes', existing.timeLimitMinutes), 1_440),
     };
     if (data.questions !== undefined || data.sections !== undefined) {
       assertMergedSurveyStructure(survey.questions, survey.sections);
@@ -434,15 +443,15 @@ export async function updateSurvey(id: string, data: any) {
     isQuiz: data.isQuiz ?? current.isQuiz,
     displayMode: data.displayMode ?? current.displayMode,
     showScore: data.showScore ?? current.showScore,
-    closesAt: data.closesAt ?? current.closesAt,
-    maxAttemptsPerDevice: data.maxAttemptsPerDevice ?? current.maxAttemptsPerDevice,
-    timeLimitMinutes: data.timeLimitMinutes ?? current.timeLimitMinutes,
+    closesAt: valueWhenProvided(data, 'closesAt', current.closesAt),
+    maxAttemptsPerDevice: toOptionalPositiveInteger(valueWhenProvided(data, 'maxAttemptsPerDevice', current.maxAttemptsPerDevice), 100),
+    timeLimitMinutes: toOptionalPositiveInteger(valueWhenProvided(data, 'timeLimitMinutes', current.timeLimitMinutes), 1_440),
   };
   if (data.questions !== undefined || data.sections !== undefined) {
     assertMergedSurveyStructure(merged.questions, merged.sections);
   }
-  const maxAttempts = Number.isFinite(Number(merged.maxAttemptsPerDevice)) ? Number(merged.maxAttemptsPerDevice) : null;
-  const timeLimit = Number.isFinite(Number(merged.timeLimitMinutes)) ? Number(merged.timeLimitMinutes) : null;
+  const maxAttempts = toOptionalPositiveInteger(merged.maxAttemptsPerDevice, 100);
+  const timeLimit = toOptionalPositiveInteger(merged.timeLimitMinutes, 1_440);
 
   const result = await pool.query(
     `UPDATE surveys SET title = $2, description = $3, questions = $4, sections = $5, is_quiz = $6, display_mode = $7,
@@ -773,8 +782,8 @@ export async function getDrafts() {
     sections: row.sections || [],
     showScore: row.show_score !== false, displayMode: row.display_mode || 'single',
     closesAt: row.closes_at ? new Date(row.closes_at).toISOString() : null,
-    maxAttemptsPerDevice: row.max_attempts_per_device ?? null,
-    timeLimitMinutes: row.time_limit_minutes ?? null,
+    maxAttemptsPerDevice: toOptionalPositiveInteger(row.max_attempts_per_device, 100),
+    timeLimitMinutes: toOptionalPositiveInteger(row.time_limit_minutes, 1_440),
     updatedAt: row.updated_at,
   }));
 }
@@ -783,8 +792,8 @@ export async function saveDraft(data: any) {
   if (!process.env.DATABASE_URL) throw Object.assign(new Error('Database not configured'), { status: 503 });
   const { id, title, description, questions, sections, isQuiz, showScore, displayMode, closesAt, maxAttemptsPerDevice, timeLimitMinutes } = data;
   const draftId = id || generateId();
-  const maxAttempts = Number.isFinite(Number(maxAttemptsPerDevice)) ? Number(maxAttemptsPerDevice) : null;
-  const timeLimit = Number.isFinite(Number(timeLimitMinutes)) ? Number(timeLimitMinutes) : null;
+  const maxAttempts = toOptionalPositiveInteger(maxAttemptsPerDevice, 100);
+  const timeLimit = toOptionalPositiveInteger(timeLimitMinutes, 1_440);
 
   const result = await pool.query(
     `INSERT INTO survey_drafts (id, user_id, title, description, questions, sections, is_quiz, show_score, display_mode, closes_at, max_attempts_per_device, time_limit_minutes, updated_at)
@@ -801,8 +810,8 @@ export async function saveDraft(data: any) {
     sections: row.sections || [],
     showScore: row.show_score !== false, displayMode: row.display_mode || 'single',
     closesAt: row.closes_at ? new Date(row.closes_at).toISOString() : null,
-    maxAttemptsPerDevice: row.max_attempts_per_device ?? null,
-    timeLimitMinutes: row.time_limit_minutes ?? null,
+    maxAttemptsPerDevice: toOptionalPositiveInteger(row.max_attempts_per_device, 100),
+    timeLimitMinutes: toOptionalPositiveInteger(row.time_limit_minutes, 1_440),
     updatedAt: row.updated_at,
   };
 }

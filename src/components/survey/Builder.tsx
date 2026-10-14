@@ -39,6 +39,12 @@ const toDateTimeLocalValue = (value: string | null | undefined) => {
 };
 
 const roundScore = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
+const normalizeTimeLimit = (value: number | null | undefined) => (
+  typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : null
+);
+const normalizeAttempts = (value: number | null | undefined) => (
+  typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : null
+);
 
 export function Builder({ onPublished, onUpdated, onDraftSaved, onError, onActivity }: { onPublished?: () => void; onUpdated?: () => void; onDraftSaved?: () => void; onError?: (msg: string) => void; onActivity?: (message: string) => void }) {
   const { parseDocx, createSurvey, updateSurvey, currentSurvey, setCurrentSurvey, isLoading, pendingTemplate, clearPendingTemplate, chatWithAI, fetchDrafts, saveDraft, deleteDraft } = useSurvey();
@@ -252,8 +258,8 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError, onActiv
     setShowScore(currentSurvey.showScore !== false);
     setDisplayMode(currentSurvey.displayMode || 'single');
     setClosesAt(currentSurvey.closesAt || null);
-    setMaxAttemptsPerDevice(currentSurvey.maxAttemptsPerDevice ?? 1);
-    setTimeLimitMinutes(currentSurvey.timeLimitMinutes ?? null);
+    setMaxAttemptsPerDevice(normalizeAttempts(currentSurvey.maxAttemptsPerDevice));
+    setTimeLimitMinutes(normalizeTimeLimit(currentSurvey.timeLimitMinutes));
     setShowSurvey(true);
     setActiveQuestionId(currentSurvey.questions?.[0]?.id || null);
     setDraftId(null);
@@ -278,6 +284,7 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError, onActiv
             showScore?: boolean;
             displayMode?: SurveyDisplayMode;
             closesAt?: string | null;
+            maxAttemptsPerDevice?: number | null;
             timeLimitMinutes?: number | null;
             title?: string;
             description?: string;
@@ -297,7 +304,8 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError, onActiv
             setShowScore(draft.showScore !== false);
             setDisplayMode(draft.displayMode || 'single');
             setClosesAt(draft.closesAt || null);
-            setTimeLimitMinutes(draft.timeLimitMinutes ?? null);
+            setMaxAttemptsPerDevice(normalizeAttempts(draft.maxAttemptsPerDevice));
+            setTimeLimitMinutes(normalizeTimeLimit(draft.timeLimitMinutes));
             setShowSurvey(true);
             setActiveQuestionId(extractedQuestions[0]?.id || null);
           }
@@ -317,7 +325,8 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError, onActiv
       setShowScore(latest.showScore !== false);
       setDisplayMode(latest.displayMode || 'single');
       setClosesAt(latest.closesAt || null);
-      setTimeLimitMinutes(latest.timeLimitMinutes ?? null);
+      setMaxAttemptsPerDevice(normalizeAttempts(latest.maxAttemptsPerDevice));
+      setTimeLimitMinutes(normalizeTimeLimit(latest.timeLimitMinutes));
       setShowSurvey(true);
       setActiveQuestionId((latest.questions || [])[0]?.id || null);
       setDraftSavedAt(latest.updatedAt ? new Date(latest.updatedAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : null);
@@ -464,7 +473,7 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError, onActiv
       if (currentSurvey) onUpdated?.();
       else onPublished?.();
     } catch (err) {
-      if (onError) onError('Lỗi khi xuất bản khảo sát.');
+      if (onError) onError(err instanceof Error && err.message ? err.message : 'Lỗi khi xuất bản khảo sát.');
     } finally {
       setIsPublishing(false);
     }
@@ -1270,9 +1279,10 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError, onActiv
                        type="number"
                        min="1"
                        step="1"
-                       value={maxAttemptsPerDevice ?? 1}
-                       onChange={(e) => setMaxAttemptsPerDevice(Math.max(1, Number(e.target.value) || 1))}
-                       className="w-16 rounded-md border border-border-subtle bg-white px-2 py-1 text-[10px] md:text-xs text-text-primary focus:ring-2 focus:ring-primary/30 outline-none"
+                       value={maxAttemptsPerDevice ?? ''}
+                       onChange={(e) => setMaxAttemptsPerDevice(e.target.value ? Math.max(1, Number(e.target.value)) : null)}
+                       placeholder="Không giới hạn"
+                       className="w-24 rounded-md border border-border-subtle bg-white px-2 py-1 text-[10px] md:text-xs text-text-primary focus:ring-2 focus:ring-primary/30 outline-none"
                      />
                      <span>lần</span>
                    </label>
@@ -1310,7 +1320,7 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError, onActiv
                    </button>
                    <span className="text-[10px] md:text-xs text-text-secondary">{draftSavedAt ? `Đã lưu ${draftSavedAt}` : 'Chưa lưu'}</span>
                    <button
-                     onClick={() => { setShowSurvey(false); setQuestions([]); setSections([{ id: 'section-1', title: 'Phần 1' }]); setSurveyTitle(''); setSurveyDescription(''); setActiveQuestionId(null); setIsQuiz(false); setShowScore(true); setDisplayMode('single'); setClosesAt(null); setTimeLimitMinutes(null); clearDraft(); }}
+                    onClick={() => { setShowSurvey(false); setQuestions([]); setSections([{ id: 'section-1', title: 'Phần 1' }]); setSurveyTitle(''); setSurveyDescription(''); setActiveQuestionId(null); setIsQuiz(false); setShowScore(true); setDisplayMode('single'); setClosesAt(null); setMaxAttemptsPerDevice(1); setTimeLimitMinutes(null); clearDraft(); }}
                      className="text-xs md:text-sm font-semibold text-text-secondary hover:text-sentiment-negative transition-colors cursor-pointer"
                    >
                      Tạo lại

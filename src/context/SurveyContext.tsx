@@ -56,6 +56,28 @@ interface SurveyContextType {
 
 const SurveyContext = createContext<SurveyContextType | null>(null);
 
+// Some older records stored 0 to mean "not limited". The API now represents
+// an unset limit as null, so normalize only that legacy sentinel while keeping
+// all other values visible to normal validation.
+const normalizeLegacyOptionalLimit = (value: unknown): number | null => (
+  typeof value === 'number' && value !== 0 ? value : null
+);
+
+async function readApiError(response: Response, fallback: string) {
+  const body = await response.json().catch(() => null) as {
+    error?: unknown;
+    details?: Array<{ message?: unknown }>;
+  } | null;
+  const detail = Array.isArray(body?.details)
+    ? body.details
+      .map(item => typeof item?.message === 'string' ? item.message : '')
+      .filter(Boolean)
+      .join(' ')
+    : '';
+  const error = typeof body?.error === 'string' ? body.error : '';
+  return [error, detail].filter(Boolean).join(' ') || fallback;
+}
+
 export function SurveyProvider({ children }: { children: ReactNode }) {
   const [surveys, setSurveys] = useState<Survey[]>(() => {
     try {
@@ -138,8 +160,8 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
         showScore: item.showScore !== false,
         displayMode: item.displayMode || 'single',
         closesAt: item.closesAt || null,
-        maxAttemptsPerDevice: item.maxAttemptsPerDevice ?? item.max_attempts_per_device ?? null,
-        timeLimitMinutes: item.timeLimitMinutes ?? item.time_limit_minutes ?? null,
+        maxAttemptsPerDevice: normalizeLegacyOptionalLimit(item.maxAttemptsPerDevice ?? item.max_attempts_per_device),
+        timeLimitMinutes: normalizeLegacyOptionalLimit(item.timeLimitMinutes ?? item.time_limit_minutes),
       updatedAt: item.updatedAt || new Date().toISOString(),
     }));
   }, []);
@@ -160,8 +182,8 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
           closesAt: survey.closesAt ?? survey.closes_at ?? null,
           displayMode: survey.displayMode ?? survey.display_mode ?? 'single',
           showScore: survey.showScore ?? survey.show_score ?? true,
-          maxAttemptsPerDevice: survey.maxAttemptsPerDevice ?? survey.max_attempts_per_device ?? null,
-          timeLimitMinutes: survey.timeLimitMinutes ?? survey.time_limit_minutes ?? null,
+          maxAttemptsPerDevice: normalizeLegacyOptionalLimit(survey.maxAttemptsPerDevice ?? survey.max_attempts_per_device),
+          timeLimitMinutes: normalizeLegacyOptionalLimit(survey.timeLimitMinutes ?? survey.time_limit_minutes),
         }));
         setSurveys(normalized);
       } else {
@@ -192,8 +214,8 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
           closesAt: survey.closesAt ?? survey.closes_at ?? null,
           displayMode: survey.displayMode ?? survey.display_mode ?? 'single',
           showScore: survey.showScore ?? survey.show_score ?? true,
-          maxAttemptsPerDevice: survey.maxAttemptsPerDevice ?? survey.max_attempts_per_device ?? null,
-          timeLimitMinutes: survey.timeLimitMinutes ?? survey.time_limit_minutes ?? null,
+          maxAttemptsPerDevice: normalizeLegacyOptionalLimit(survey.maxAttemptsPerDevice ?? survey.max_attempts_per_device),
+          timeLimitMinutes: normalizeLegacyOptionalLimit(survey.timeLimitMinutes ?? survey.time_limit_minutes),
         };
       }
       if (res.status === 404) return null;
@@ -225,11 +247,11 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
           closesAt: surveyData.closesAt || null,
           displayMode: surveyData.displayMode || 'single',
           showScore: surveyData.showScore !== false,
-          maxAttemptsPerDevice: surveyData.maxAttemptsPerDevice ?? null,
-          timeLimitMinutes: surveyData.timeLimitMinutes ?? null,
+          maxAttemptsPerDevice: normalizeLegacyOptionalLimit(surveyData.maxAttemptsPerDevice),
+          timeLimitMinutes: normalizeLegacyOptionalLimit(surveyData.timeLimitMinutes),
         })
       });
-      if (!res.ok) throw new Error('Failed to create survey');
+      if (!res.ok) throw new Error(await readApiError(res, 'Không thể tạo khảo sát.'));
       const survey = await res.json();
       setSurveys(prev => [survey, ...prev]);
       return survey;
@@ -245,8 +267,8 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
         closesAt: surveyData.closesAt || null,
         displayMode: surveyData.displayMode || 'single',
         showScore: surveyData.showScore !== false,
-        maxAttemptsPerDevice: surveyData.maxAttemptsPerDevice ?? null,
-        timeLimitMinutes: surveyData.timeLimitMinutes ?? null,
+        maxAttemptsPerDevice: normalizeLegacyOptionalLimit(surveyData.maxAttemptsPerDevice),
+        timeLimitMinutes: normalizeLegacyOptionalLimit(surveyData.timeLimitMinutes),
       };
       setSurveys(prev => [newSurvey, ...prev]);
       try {
@@ -263,15 +285,15 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
       closesAt: surveyData.closesAt || null,
       displayMode: surveyData.displayMode || 'single',
       showScore: surveyData.showScore !== false,
-      maxAttemptsPerDevice: surveyData.maxAttemptsPerDevice ?? null,
-      timeLimitMinutes: surveyData.timeLimitMinutes ?? null,
+      maxAttemptsPerDevice: normalizeLegacyOptionalLimit(surveyData.maxAttemptsPerDevice),
+      timeLimitMinutes: normalizeLegacyOptionalLimit(surveyData.timeLimitMinutes),
     };
     const res = await apiFetch(`${API_BASE}/surveys/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
-    if (!res.ok) throw new Error('Failed to update survey');
+    if (!res.ok) throw new Error(await readApiError(res, 'Không thể cập nhật khảo sát.'));
     const survey = await res.json();
     setSurveys(prev => prev.map(item => item.id === id ? { ...item, ...survey } : item));
     setCurrentSurvey(prev => prev?.id === id ? survey : prev);
@@ -310,8 +332,8 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
       showScore: draft.showScore !== false,
       displayMode: draft.displayMode || 'single',
       closesAt: draft.closesAt || null,
-      maxAttemptsPerDevice: draft.maxAttemptsPerDevice ?? null,
-      timeLimitMinutes: draft.timeLimitMinutes ?? null,
+      maxAttemptsPerDevice: normalizeLegacyOptionalLimit(draft.maxAttemptsPerDevice),
+      timeLimitMinutes: normalizeLegacyOptionalLimit(draft.timeLimitMinutes),
     };
 
     try {
@@ -320,7 +342,7 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-      if (!res.ok) throw new Error('Failed to save draft');
+      if (!res.ok) throw new Error(await readApiError(res, 'Không thể lưu bản nháp.'));
       const saved = await res.json();
       setDrafts(prev => {
         const next = prev.filter(item => item.id !== saved.id);

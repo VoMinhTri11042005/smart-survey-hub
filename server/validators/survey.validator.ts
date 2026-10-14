@@ -23,6 +23,14 @@ const AnswerValueSchema = z.union([
   z.record(z.string(), GridRowAnswerSchema),
 ]);
 
+// Older surveys used 0 as a sentinel for an unset time/attempt limit. Keep
+// those records editable while retaining strict validation for new invalid
+// values such as negative or fractional limits.
+const OptionalPositiveIntegerSchema = (maximum: number) => z.preprocess(
+  value => value === 0 ? null : value,
+  z.number().int().positive().max(maximum).nullable().optional().default(null),
+);
+
 function validateQuestionConfiguration(
   question: {
     type: z.infer<typeof QuestionTypeSchema>;
@@ -177,8 +185,8 @@ const SurveyPayloadSchema = z.object({
   displayMode: z.enum(['single', 'all']).optional().default('single'),
   showScore: z.boolean().optional().default(true),
   closesAt: z.string().nullable().optional().default(null),
-  maxAttemptsPerDevice: z.number().int().positive().max(100).nullable().optional().default(null),
-  timeLimitMinutes: z.number().int().positive().max(1_440).nullable().optional().default(null),
+  maxAttemptsPerDevice: OptionalPositiveIntegerSchema(100),
+  timeLimitMinutes: OptionalPositiveIntegerSchema(1_440),
   status: z.enum(['draft', 'live', 'closed']).optional().default('live'),
 });
 

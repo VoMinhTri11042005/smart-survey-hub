@@ -7,6 +7,7 @@ import {
   calculateImportedQuizScore,
   computeServerQuizScore,
   getRespondentDeviceId,
+  mapRowToSurvey,
   mapRowToResponse,
   validateResponseAnswers,
 } from './survey.service';
@@ -141,6 +142,27 @@ describe('response validation', () => {
     expect(UpdateSurveySchema.safeParse({
       questions: [{ id: 'q1', type: 'single_choice', text: 'One', options: ['A', 'B'] }],
     }).success).toBe(true);
+  });
+
+  it('normalizes legacy zero limits to an unset setting but rejects new invalid limits', () => {
+    const legacyPayload = UpdateSurveySchema.safeParse({
+      maxAttemptsPerDevice: 0,
+      timeLimitMinutes: 0,
+    });
+    expect(legacyPayload.success).toBe(true);
+    if (!legacyPayload.success) throw legacyPayload.error;
+    expect(legacyPayload.data.maxAttemptsPerDevice).toBeNull();
+    expect(legacyPayload.data.timeLimitMinutes).toBeNull();
+    expect(UpdateSurveySchema.safeParse({ timeLimitMinutes: -1 }).success).toBe(false);
+    expect(UpdateSurveySchema.safeParse({ timeLimitMinutes: 1.5 }).success).toBe(false);
+
+    const mapped = mapRowToSurvey({
+      id: 'legacy', title: 'Legacy', description: '', questions: [], sections: [],
+      created_at: '2026-10-01T00:00:00.000Z', status: 'live', is_quiz: false,
+      display_mode: 'single', show_score: true, max_attempts_per_device: 0, time_limit_minutes: 0,
+    });
+    expect(mapped.maxAttemptsPerDevice).toBeNull();
+    expect(mapped.timeLimitMinutes).toBeNull();
   });
 
   it('keeps an optional response schema snapshot distinct from legacy rows', () => {
