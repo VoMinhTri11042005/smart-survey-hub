@@ -557,9 +557,9 @@ export function Analytics({ onFeedback }: { onFeedback?: (message: string, type:
                     </div>
                     {(versionDifferentResponses > 0 || legacyUnversionedResponses > 0) && <p className="-mt-3 mb-4 text-[11px] text-amber-800">{versionDifferentResponses > 0 ? `${versionDifferentResponses} phản hồi từ phiên bản khác được tách hoặc tính theo cấu trúc gốc.` : ''}{legacyUnversionedResponses > 0 ? `${versionDifferentResponses > 0 ? ' ' : ''}${legacyUnversionedResponses} phản hồi cũ chưa có phiên bản.` : ''}{incompatibleVersionResponses > 0 ? ` ${incompatibleVersionResponses} phản hồi có loại câu hỏi không tương thích nên không gộp vào biểu đồ này.` : ''}</p>}
                     {choice && (
-                      <div className={question.type === 'multiple_choice' ? 'space-y-3' : 'grid grid-cols-1 sm:grid-cols-[150px_1fr] gap-5 items-center'}>
+                      <div className={question.type === 'multiple_choice' ? 'min-w-0 space-y-3' : 'grid min-w-0 grid-cols-1 items-center gap-5 sm:grid-cols-[150px_minmax(0,1fr)]'}>
                         {question.type !== 'multiple_choice' && <DonutChart options={choice.options} totalLabel="phản hồi" />}
-                        <div className="space-y-3">
+                        <div className="min-w-0 space-y-3">
                           {choice.options.map((option, optionIndex) => (
                             <div key={option.id} className="space-y-1">
                               <div className="flex min-w-0 items-baseline gap-3 text-xs">
@@ -954,9 +954,9 @@ function TextCategorySummary({ distribution }: { distribution: TextCategoryDistr
           <p className="text-xs text-text-secondary mt-1">n = {distribution.totalAnswered} · {distribution.uniqueCategories} nhóm · {distribution.source === 'manual' ? 'đã bật thủ công' : 'tự động nhận diện'}</p>
         </div>
       </div>
-      <div className={showDonut ? 'grid grid-cols-1 sm:grid-cols-[150px_1fr] gap-5 items-center' : ''}>
+      <div className={showDonut ? 'grid min-w-0 grid-cols-1 items-center gap-5 sm:grid-cols-[150px_minmax(0,1fr)]' : ''}>
         {showDonut && <DonutChart options={distribution.options} totalLabel="phản hồi" />}
-        <div className="space-y-3 max-h-56 overflow-y-auto custom-scrollbar pr-1">
+        <div className="min-w-0 space-y-3 max-h-56 overflow-y-auto custom-scrollbar pr-1">
           {distribution.options.map((option, optionIndex) => (
             <div key={option.label} className="space-y-1">
               <div className="flex min-w-0 items-baseline gap-3 text-xs">
