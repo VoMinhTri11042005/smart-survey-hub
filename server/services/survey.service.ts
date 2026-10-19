@@ -6,6 +6,7 @@ import pool from '../db';
 import { createHash, randomUUID } from 'node:crypto';
 import { generateId } from '../utils/helpers';
 import { isIntegerStarRating } from '../../shared/starRating';
+import { findInvalidRankingSources, getRankingOptions, isCompleteRanking, isRankingApplicable } from '../../shared/ranking';
 
 // ─── In-memory fallback for development without DATABASE_URL ───
 const inMemorySurveys: Record<string, any> = {
@@ -203,6 +204,9 @@ export function assertMergedSurveyStructure(questions: unknown, sections: unknow
       throw Object.assign(new Error('Câu hỏi đang tham chiếu đến phần không tồn tại.'), { status: 400 });
     }
   }
+  if (findInvalidRankingSources(questions as any[], sections as { id: string }[]).length > 0) {
+    throw Object.assign(new Error('Nguồn của câu xếp hạng phải là câu nhiều lựa chọn xuất hiện trước.'), { status: 400 });
+  }
 }
 
 function assertIntegerStarRatings(questions: any[], answers: Record<string, unknown> | undefined) {
@@ -245,7 +249,8 @@ function assertRequiredAnswers(questions: any[], answers: Record<string, unknown
       || (typeof answer === 'string' && answer.trim() === '')
       || (Array.isArray(answer) && answer.length === 0)
       || (typeof answer === 'object' && !Array.isArray(answer) && Object.keys(answer).length === 0);
-    if (question.required !== false && empty) {
+    const hiddenRanking = question.type === 'ranking' && !isRankingApplicable(question, questions, answers || {});
+    if (question.required !== false && empty && !hiddenRanking) {
       throw Object.assign(new Error(`Vui lòng trả lời câu hỏi "${question.text}".`), { status: 400 });
     }
     if (empty) continue;
@@ -275,6 +280,18 @@ function assertRequiredAnswers(questions: any[], answers: Record<string, unknown
       throw Object.assign(new Error('Đánh giá sao chỉ nhận các mức nguyên từ 1 đến 5.'), { status: 400 });
     }
     if (question.type === 'single_choice' && answer === question.screenOutAnswer) break;
+  }
+}
+
+function assertRankingAnswers(questions: any[], answers: Record<string, unknown> | undefined) {
+  for (const question of questions || []) {
+    if (question.type !== 'ranking') continue;
+    const answer = answers?.[question.id];
+    if (answer === undefined || answer === null || answer === '' || (Array.isArray(answer) && answer.length === 0)) continue;
+    const options = getRankingOptions(question, questions, answers || {});
+    if (!options.length || !isCompleteRanking(options, answer)) {
+      throw Object.assign(new Error(`Câu xếp hạng "${question.text}" phải sắp xếp mỗi lựa chọn được phép đúng một lần.`), { status: 400 });
+    }
   }
 }
 
@@ -360,6 +377,7 @@ export function validateResponseAnswers(questions: any[], answers: Record<string
   assertRequiredAnswers(questions, answers);
   assertIntegerStarRatings(questions, answers);
   assertMultipleChoiceLimits(questions, answers);
+  assertRankingAnswers(questions, answers);
   assertAdditionalQuestionAnswers(questions, answers);
 }
 
@@ -620,7 +638,7 @@ function validateImportedAnswers(questions: any[], answers: Record<string, unkno
       }
     }
     if (question.type === 'multiple_choice') {
-      if (!Array.isArray(answer) || answer.some(item => typeof item !== 'string' || !(question.options || []).includes(item))) {
+      if (!Array.isArray(answer) || new Set(answer).size !== answer.length || answer.some(item => typeof item !== 'string' || !(question.options || []).includes(item))) {
         throw Object.assign(new Error(`Câu trả lời không khớp lựa chọn của câu hỏi "${question.text}".`), { status: 400 });
       }
       if (question.maxSelections && answer.length > question.maxSelections) {
@@ -665,6 +683,7 @@ function validateImportedAnswers(questions: any[], answers: Record<string, unkno
       }
     }
   }
+  assertRankingAnswers(questions, answers);
 }
 
 export async function importResponses(data: any) {

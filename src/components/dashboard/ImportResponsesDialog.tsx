@@ -4,6 +4,8 @@ import type { QuestionType, Survey, SurveyAnswer, SurveyQuestion } from '../../t
 import { stripHtml, toUnaccented } from '../../utils/stringUtils';
 import { API_BASE, apiFetch } from '../../utils/api';
 import { fingerprintImportFile } from '../../utils/importFileFingerprint';
+import { findImportedOption, parseRankingCell } from '../../utils/rankingImport';
+import { getRankingOptions, isCompleteRanking } from '../../../shared/ranking';
 import type { ToastType } from '../common/Toast';
 
 interface ImportedResponse {
@@ -137,8 +139,17 @@ function getOptions(values: string[], type: QuestionType) {
 }
 
 function splitMultipleAnswer(value: string, options: string[]) {
-  const exact = options.find(option => normalize(option) === normalize(value));
-  return exact ? [exact] : value.split(/[,;\n]+/).map(part => part.trim()).filter(Boolean);
+  if (value.trim().startsWith('[')) {
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) && parsed.every(item => typeof item === 'string') ? parsed as string[] : [value];
+    } catch { return [value]; }
+  }
+  const exact = findImportedOption(value, options);
+  if (exact) return [exact];
+  const semicolonParts = value.split(/[;\n]+/).map(part => part.trim()).filter(Boolean);
+  if (semicolonParts.length > 1 && semicolonParts.every(part => findImportedOption(part, options))) return semicolonParts;
+  return value.split(/[,;\n]+/).map(part => part.trim()).filter(Boolean);
 }
 
 function parseGridAnswer(value: string, question: SurveyQuestion): Record<string, string | string[]> | null {
@@ -266,6 +277,12 @@ export function ImportResponsesDialog({ surveys, onClose, onImported, onFeedback
           const valid = /^\d{4}-\d{2}-\d{2}$/.test(dateValue) && !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === dateValue;
           if (!valid) addIssue(`Dòng ${rowIndex + 2}, “${column.header}”: ngày không hợp lệ (“${value}”).`);
           else answers[question.id] = dateValue;
+        } else if (question.type === 'ranking') {
+          const source = selectedSurvey?.questions.find(item => item.id === question.carryForwardFromQuestionId);
+          const options = question.carryForwardFromQuestionId ? (source?.options ?? []) : (question.options ?? []);
+          const ranking = parseRankingCell(value, options);
+          if (!ranking) addIssue(`Dòng ${rowIndex + 2}, “${column.header}”: thứ tự xếp hạng không hợp lệ; dùng danh sách JSON từ tệp xuất của hệ thống.`);
+          else answers[question.id] = ranking;
         } else if (question.type === 'multiple_choice_grid' || question.type === 'checkbox_grid') {
           const gridAnswer = parseGridAnswer(value, question);
           if (!gridAnswer) addIssue(`Dòng ${rowIndex + 2}, “${column.header}”: nhập lưới theo định dạng “Hàng: Cột; Hàng khác: Cột”.`);
@@ -273,7 +290,7 @@ export function ImportResponsesDialog({ surveys, onClose, onImported, onFeedback
         } else {
           const options = question.options || [];
           const labels = question.type === 'multiple_choice' ? splitMultipleAnswer(value, options) : [value];
-          const matched = labels.map(label => options.find(option => normalize(option) === normalize(label)));
+          const matched = labels.map(label => findImportedOption(label, options));
           if (matched.some(option => !option)) {
             addIssue(`Dòng ${rowIndex + 2}, “${column.header}”: đáp án “${value}” không khớp lựa chọn.`);
           } else if (question.type === 'multiple_choice') {
@@ -286,6 +303,14 @@ export function ImportResponsesDialog({ surveys, onClose, onImported, onFeedback
           } else if (matched[0]) {
             answers[question.id] = matched[0];
           }
+        }
+      }
+      const targetQuestions = mode === 'existing' ? (selectedSurvey?.questions ?? []) : questions;
+      for (const question of targetQuestions) {
+        if (question.type !== 'ranking' || answers[question.id] === undefined) continue;
+        const options = getRankingOptions(question, targetQuestions, answers);
+        if (!options.length || !isCompleteRanking(options, answers[question.id])) {
+          addIssue(`Dòng ${rowIndex + 2}: thứ tự xếp hạng phải gồm đúng các lựa chọn đã chọn ở câu nguồn.`);
         }
       }
       const timeValue = timestampColumn === null ? undefined : rows[rowIndex][timestampColumn];

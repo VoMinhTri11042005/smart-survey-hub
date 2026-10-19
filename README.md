@@ -140,6 +140,10 @@ Trong trang **Phân tích**, chọn **Nhập file** rồi tải lên file `.xlsx
 
 Với câu hỏi **Nhiều lựa chọn**, người tạo có thể đặt giới hạn số đáp án được chọn; mặc định không giới hạn. Giới hạn này được hiển thị cho người tham gia và được kiểm tra lại tại API khi lưu phản hồi.
 
+Để người tham gia xếp hạng những đáp án đã chọn, thêm câu hỏi **Xếp hạng** sau một câu **Nhiều lựa chọn**, rồi chọn câu đó tại mục **Lấy lựa chọn để xếp hạng từ**. Câu xếp hạng chỉ hiển thị các đáp án đã chọn và tự bỏ qua nếu không có lựa chọn; khi đổi câu trả lời trước đó, người tham gia cần xác nhận lại thứ tự. Cũng có thể tự nhập một danh sách cố định thay vì liên kết câu trước. Trang phân tích hiển thị thứ hạng trung bình và số lần đứng đầu; khi xuất/nhập dữ liệu, các danh sách được lưu theo thứ tự để giữ chính xác dấu câu trong lựa chọn.
+
+Nếu frontend và backend được triển khai riêng, chờ cả hai hoàn tất cập nhật trước khi xuất bản câu hỏi xếp hạng mới.
+
 Với câu hỏi **Một lựa chọn**, người tạo có thể chọn một đáp án kết thúc khảo sát và tùy chỉnh thông báo. Khi người tham gia chọn đáp án đó, khảo sát dừng ngay; phản hồi được lưu riêng với nhãn sàng lọc và không tính vào thống kê chính.
 
 Trình tạo khảo sát cũng hỗ trợ **Menu thả xuống**, **Ngày**, **Thang tuyến tính** (tùy chỉnh mức và nhãn hai đầu), **Lưới trắc nghiệm** và **Lưới hộp kiểm**. Với câu hỏi lưới, người tạo cấu hình hàng và cột; phản hồi được lưu theo từng hàng, được kiểm tra ở máy chủ và có phân tích riêng cho từng hàng. Các kiểu câu hỏi cũ và dữ liệu phản hồi hiện có vẫn được giữ nguyên.

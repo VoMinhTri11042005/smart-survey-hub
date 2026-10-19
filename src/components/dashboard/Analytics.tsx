@@ -154,6 +154,7 @@ export function Analytics({ onFeedback }: { onFeedback?: (message: string, type:
     if (questionFilter === 'all') return true;
     if (questionFilter === 'choice') return question.type === 'single_choice'
       || question.type === 'multiple_choice'
+      || question.type === 'ranking'
       || question.type === 'dropdown'
       || question.type === 'multiple_choice_grid'
       || question.type === 'checkbox_grid';
@@ -534,6 +535,7 @@ export function Analytics({ onFeedback }: { onFeedback?: (message: string, type:
                 versionDifferentResponses, incompatibleVersionResponses, legacyUnversionedResponses,
               }, index) => {
                 const choice = analytics.choiceDistributions.find(item => item.questionId === question.id);
+                const ranking = analytics.rankingDistributions.find(item => item.questionId === question.id);
                 const rating = analytics.starRatings.find(item => item.questionId === question.id);
                 const ratingLevels = rating ? getRatingLevels(rating.distribution) : [];
                 const npsQuestion = question.type === 'nps' ? analytics.npsByQuestion.find(item => item.questionId === question.id) : null;
@@ -546,7 +548,7 @@ export function Analytics({ onFeedback }: { onFeedback?: (message: string, type:
                   <article key={question.id} className="bg-surface-container-lowest rounded-3xl border border-border-subtle shadow-sm p-5 min-w-0">
                     <div className="flex items-start justify-between gap-4 mb-4">
                       <div className="min-w-0">
-                        <p className="text-[11px] uppercase tracking-wider text-text-secondary font-bold">Câu {detailPage.page * detailPage.pageSize + index + 1} · {question.type.replace('_', ' ')}</p>
+                        <p className="text-[11px] uppercase tracking-wider text-text-secondary font-bold">Câu {detailPage.page * detailPage.pageSize + index + 1} · {question.type === 'ranking' ? 'Xếp hạng' : question.type.replace('_', ' ')}</p>
                         <h4 className="font-display font-bold text-text-primary mt-1 line-clamp-2">{stripHtml(question.text) || question.label || 'Chưa đặt nội dung'}</h4>
                       </div>
                       <span className="shrink-0 text-xs font-bold text-primary bg-primary-fixed px-2.5 py-1 rounded-full">{rate}%</span>
@@ -585,6 +587,18 @@ export function Analytics({ onFeedback }: { onFeedback?: (message: string, type:
                         </div>
                         {(choice.historicalVersionAnswered > 0 || choice.legacyUnversionedAnswered > 0 || choice.incompatibleVersionAnswered > 0) && <p className="text-[11px] text-amber-800">{choice.historicalVersionAnswered > 0 ? `${choice.historicalVersionAnswered} phản hồi phiên bản cũ được hiển thị riêng.` : ''}{choice.legacyUnversionedAnswered > 0 ? `${choice.historicalVersionAnswered > 0 ? ' ' : ''}${choice.legacyUnversionedAnswered} phản hồi cũ chưa có phiên bản dùng nhãn hiện tại có ghi chú.` : ''}{choice.incompatibleVersionAnswered > 0 ? ` ${choice.incompatibleVersionAnswered} phản hồi không tương thích không được gộp.` : ''}</p>}
                         {question.type === 'multiple_choice' && <p className="text-[11px] text-text-secondary pt-1">Tỷ lệ = số người chọn / {choice.totalAnswered} người đã trả lời câu này; có thể chọn nhiều đáp án nên tổng tỷ lệ có thể vượt 100%.</p>}
+                      </div>
+                    )}
+                    {ranking && (
+                      <div className="space-y-3">
+                        <p className="text-xs text-text-secondary">Thứ hạng trung bình trên các lượt có xếp phương án đó; số càng nhỏ càng được ưu tiên.</p>
+                        {ranking.options.length ? ranking.options.map(option => (
+                          <div key={option.label} className="flex items-center justify-between gap-3 rounded-xl bg-surface-container-low px-3 py-2.5 text-sm">
+                            <span className="min-w-0 break-words text-text-primary">{stripHtml(option.label)}</span>
+                            <span className="shrink-0 text-right text-xs text-text-secondary"><strong className="text-primary">TB {option.averageRank}</strong><br />Hạng 1: {option.firstPlace} · n={option.count}</span>
+                          </div>
+                        )) : <p className="text-sm text-text-secondary">Chưa có xếp hạng hợp lệ.</p>}
+                        {(ranking.excludedOtherVersion > 0 || ranking.invalidAnswers > 0) && <p className="text-xs text-amber-800">{ranking.excludedOtherVersion} phản hồi khác phiên bản và {ranking.invalidAnswers} phản hồi không hợp lệ không gộp vào bảng; dữ liệu gốc vẫn được giữ.</p>}
                       </div>
                     )}
                     {rating && (

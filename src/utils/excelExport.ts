@@ -836,6 +836,7 @@ export function createSurveyAnalysisWorkbook(survey: Survey, responses: SurveyRe
   // Keep the standard analytics workbook safe to share. Direct identifiers
   // remain stored in the database, but are not copied into its raw-data tab.
   const exportQuestions = survey.questions.filter(question => !isPersonalIdentifierQuestion(question));
+  const rankingSources = new Set(survey.questions.map(question => question.carryForwardFromQuestionId).filter(Boolean));
   const redactedIdentifierCount = survey.questions.length - exportQuestions.length;
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'Smart Survey Hub';
@@ -931,6 +932,9 @@ export function createSurveyAnalysisWorkbook(survey: Survey, responses: SurveyRe
     ...exportQuestions.map(question => {
       const answer = response.answers[question.id];
       if (question.type === 'star_rating') return parseStoredStarRating(answer) ?? spreadsheetValue(answer);
+      // Sanitize each label before encoding. Running HTML stripping over the
+      // whole JSON string could remove text between '<' and '>' in two labels.
+      if ((question.type === 'ranking' || rankingSources.has(question.id)) && Array.isArray(answer)) return sanitizeSpreadsheetValue(JSON.stringify(answer.map(item => displayText(String(item)))));
       if (Array.isArray(answer)) return spreadsheetValue(answer.map(item => displayText(String(item))).join('; '));
       if (answer && typeof answer === 'object') {
         return spreadsheetValue(Object.entries(answer)
@@ -945,6 +949,29 @@ export function createSurveyAnalysisWorkbook(survey: Survey, responses: SurveyRe
   raw.getColumn(2).numFmt = 'yyyy-mm-dd hh:mm';
   if (survey.isQuiz) raw.getColumn(5).numFmt = '0.0%';
   fitWrappedRows(raw, 1, responses.length + 1, rawWidths);
+
+  if (analytics.rankingDistributions.length > 0) {
+    const rankings = workbook.addWorksheet('Xếp hạng');
+    rankings.addRow(['STT câu', 'Câu hỏi', 'Lựa chọn', 'Hạng trung bình', 'Số lần hạng 1', 'Số lượt xếp lựa chọn', 'Phản hồi cùng phiên bản', 'Khác phiên bản', 'Không hợp lệ']);
+    analytics.rankingDistributions.forEach(distribution => {
+      const questionNumber = survey.questions.findIndex(question => question.id === distribution.questionId) + 1;
+      const options = distribution.options.length ? distribution.options : [null];
+      options.forEach(option => rankings.addRow([
+        questionNumber,
+        spreadsheetValue(distribution.questionText),
+        option ? spreadsheetValue(option.label) : 'Chưa có xếp hạng hợp lệ',
+        option?.averageRank ?? '',
+        option?.firstPlace ?? '',
+        option?.count ?? '',
+        distribution.totalAnswered,
+        distribution.excludedOtherVersion,
+        distribution.invalidAnswers,
+      ]));
+    });
+    const widths = [10, 62, 48, 18, 18, 20, 22, 18, 16];
+    formatSheet(rankings, widths);
+    fitWrappedRows(rankings, 1, rankings.rowCount, widths);
+  }
 
   const textQuestions = survey.questions
     .map((question, index) => ({ question, index }))

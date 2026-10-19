@@ -13,6 +13,7 @@ export interface UserProfile {
 export type QuestionType =
   | 'single_choice'
   | 'multiple_choice'
+  | 'ranking'
   | 'dropdown'
   | 'date'
   | 'linear_scale'
@@ -31,6 +32,8 @@ export interface SurveyQuestion {
   text: string;
   sectionId?: string;
   options?: string[];
+  /** For ranking questions, use the selected options of an earlier multiple-choice question. */
+  carryForwardFromQuestionId?: string;
   gridColumns?: string[];
   scaleMin?: number;
   scaleMax?: number;

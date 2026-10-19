@@ -2,10 +2,12 @@
  * Zod schemas for Survey, Response, and Draft validation.
  */
 import { z } from 'zod';
+import { findInvalidRankingSources } from '../../shared/ranking';
 
 const QuestionTypeSchema = z.enum([
   'single_choice',
   'multiple_choice',
+  'ranking',
   'dropdown',
   'date',
   'linear_scale',
@@ -39,6 +41,7 @@ function validateQuestionConfiguration(
   question: {
     type: z.infer<typeof QuestionTypeSchema>;
     options?: string[];
+    carryForwardFromQuestionId?: string;
     gridColumns?: string[];
     scaleMin?: number;
     scaleMax?: number;
@@ -52,12 +55,16 @@ function validateQuestionConfiguration(
   const isGrid = question.type === 'multiple_choice_grid' || question.type === 'checkbox_grid';
   const needsOptions = question.type === 'single_choice'
     || question.type === 'multiple_choice'
-    || question.type === 'dropdown';
+    || question.type === 'dropdown'
+    || (question.type === 'ranking' && !question.carryForwardFromQuestionId);
   const optionKey = (value: string) => value.trim().toLocaleLowerCase('vi-VN');
   const hasDuplicateOptions = Boolean(question.options && new Set(question.options.map(optionKey)).size !== question.options.length);
 
   if (needsOptions && !question.options?.length) {
     context.addIssue({ code: 'custom', path: ['options'], message: 'Câu hỏi lựa chọn cần ít nhất một đáp án.' });
+  }
+  if (question.carryForwardFromQuestionId && question.type !== 'ranking') {
+    context.addIssue({ code: 'custom', path: ['carryForwardFromQuestionId'], message: 'Chỉ câu hỏi xếp hạng mới lấy lựa chọn từ câu trước.' });
   }
   if ((needsOptions || isGrid) && hasDuplicateOptions) {
     context.addIssue({ code: 'custom', path: ['options'], message: 'Các lựa chọn trong câu hỏi phải khác nhau.' });
@@ -127,6 +134,7 @@ const SurveyQuestionSchema = z.object({
   text: z.string().refine(value => value.trim().length > 0, 'Nội dung câu hỏi không được để trống.'),
   sectionId: z.string().optional(),
   options: z.array(z.string().refine(value => value.trim().length > 0, 'Lựa chọn không được để trống.')).max(100).optional(),
+  carryForwardFromQuestionId: z.string().trim().min(1).optional(),
   gridColumns: z.array(z.string()).max(100).optional(),
   scaleMin: z.number().int().min(0).max(100).optional(),
   scaleMax: z.number().int().min(0).max(100).optional(),
@@ -149,13 +157,16 @@ const SurveySectionSchema = z.object({
 });
 
 function validateSurveyPayload(
-  value: { questions?: Array<{ id: string; sectionId?: string }>; sections?: Array<{ id: string }> },
+  value: { questions?: Array<{ id: string; type: string; sectionId?: string; carryForwardFromQuestionId?: string }>; sections?: Array<{ id: string }> },
   context: z.RefinementCtx,
 ) {
   if (value.questions) {
     const ids = value.questions.map(question => question.id.trim());
     if (new Set(ids).size !== ids.length) {
       context.addIssue({ code: 'custom', path: ['questions'], message: 'Mã câu hỏi phải là duy nhất.' });
+    }
+    for (const index of findInvalidRankingSources(value.questions, value.sections)) {
+      context.addIssue({ code: 'custom', path: ['questions', index, 'carryForwardFromQuestionId'], message: 'Nguồn phải là câu hỏi nhiều lựa chọn xuất hiện trước câu xếp hạng.' });
     }
   }
   if (value.sections) {
@@ -225,6 +236,7 @@ const ImportedQuestionSchema = z.object({
   type: QuestionTypeSchema,
   text: z.string().min(1),
   options: z.array(z.string()).max(100).optional(),
+  carryForwardFromQuestionId: z.string().trim().min(1).optional(),
   gridColumns: z.array(z.string()).max(100).optional(),
   scaleMin: z.number().int().min(0).max(100).optional(),
   scaleMax: z.number().int().min(0).max(100).optional(),
@@ -287,6 +299,9 @@ export const ImportResponsesSchema = z.object({
     const questionIds = value.newSurvey.questions.map(question => question.id);
     if (new Set(questionIds).size !== questionIds.length) {
       context.addIssue({ code: 'custom', path: ['newSurvey', 'questions'], message: 'Mã câu hỏi phải là duy nhất.' });
+    }
+    for (const index of findInvalidRankingSources(value.newSurvey.questions)) {
+      context.addIssue({ code: 'custom', path: ['newSurvey', 'questions', index, 'carryForwardFromQuestionId'], message: 'Nguồn phải là câu hỏi nhiều lựa chọn xuất hiện trước câu xếp hạng.' });
     }
   }
 });

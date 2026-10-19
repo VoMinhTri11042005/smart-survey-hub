@@ -1,4 +1,4 @@
-import { FileText, Sparkles, Search, CircleDot, CheckSquare, Star, AlignLeft, Minus, ChevronDown, CalendarDays, SlidersHorizontal } from 'lucide-react';
+import { FileText, Sparkles, Search, CircleDot, CheckSquare, Star, AlignLeft, Minus, ChevronDown, CalendarDays, SlidersHorizontal, ListOrdered } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { SURVEY_TEMPLATES, TEMPLATE_CATEGORIES } from '../../data/templates';
 import type { View, QuestionType } from '../../types';
@@ -8,6 +8,7 @@ import type { ToastType } from '../common/Toast';
 const typeIcons: Record<QuestionType, ReactNode> = {
   single_choice: <CircleDot size={12} />,
   multiple_choice: <CheckSquare size={12} />,
+  ranking: <ListOrdered size={12} />,
   dropdown: <ChevronDown size={12} />,
   date: <CalendarDays size={12} />,
   linear_scale: <SlidersHorizontal size={12} />,

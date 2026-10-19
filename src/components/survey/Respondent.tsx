@@ -1,9 +1,10 @@
-import { Timer, Undo2, Sparkles, CircleDot, CheckSquare, CheckCircle2, Home, Edit3, LogOut, X, Trash2, AlertTriangle } from 'lucide-react';
+import { Timer, Undo2, Sparkles, CircleDot, CheckSquare, CheckCircle2, Home, Edit3, LogOut, X, Trash2, AlertTriangle, ChevronUp, ChevronDown, GripVertical } from 'lucide-react';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSurvey } from '../../context/SurveyContext';
 import { stripHtml, cleanHtmlWhitespace, sanitizeHtml } from '../../utils/stringUtils';
 import type { Survey, SurveyQuestion } from '../../types';
 import { parseStoredStarRating } from '../../../shared/starRating';
+import { clearDependentRankings, getRankingOptions, isCompleteRanking, isRankingApplicable, moveRankingOption, removeInvalidRankingAnswers } from '../../../shared/ranking';
 
 interface RespondentProps {
   survey: Survey | null;
@@ -39,6 +40,7 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
   const answersRef = useRef<Record<string, any>>({});
   const isCompletedRef = useRef(false);
   const submissionInFlightRef = useRef(false);
+  const draggedRankingRef = useRef<{ questionId: string; index: number } | null>(null);
 
   const getDeviceId = useCallback(() => {
     const key = `survey-device-id:${survey?.id ?? 'anon'}`;
@@ -92,8 +94,9 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
           if (savedDraft) {
             const savedAnswers = JSON.parse(savedDraft);
             if (savedAnswers && typeof savedAnswers === 'object') {
-              answersRef.current = savedAnswers;
-              setAnswers(savedAnswers);
+              const restoredAnswers = removeInvalidRankingAnswers(survey.questions, savedAnswers);
+              answersRef.current = restoredAnswers;
+              setAnswers(restoredAnswers);
             }
           }
         } catch (error) {
@@ -181,15 +184,19 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
     return () => window.clearInterval(intervalId);
   }, [survey?.id, survey?.timeLimitMinutes, respondentId, hasStartedTimedSurvey, isCompleted]);
 
-  const questions = survey?.questions ?? [];
+  const allQuestions = survey?.questions ?? [];
+  const questions = allQuestions.filter(question => question.type !== 'ranking' || isRankingApplicable(question, allQuestions, answers));
   const displayMode = survey?.displayMode ?? 'single';
   const showAllQuestions = displayMode === 'all';
-  const sections = survey?.sections ?? [];
-  const sectionMode = sections.length > 1;
+  const allSections = survey?.sections ?? [];
+  const sectionMode = allSections.length > 1;
+  const sections = sectionMode ? allSections.filter(section => questions.some(question => (
+    allSections.some(item => item.id === question.sectionId) ? question.sectionId : allSections[0].id
+  ) === section.id)) : allSections;
   const currentSection = sectionMode ? sections[step] : undefined;
   const currentPageQuestions = sectionMode
     ? questions.filter(question => (
-        sections.some(section => section.id === question.sectionId) ? question.sectionId : sections[0].id
+        allSections.some(section => section.id === question.sectionId) ? question.sectionId : allSections[0].id
       ) === currentSection?.id)
     : showAllQuestions ? questions : questions[step] ? [questions[step]] : [];
   const totalSteps = sectionMode ? sections.length : showAllQuestions ? 1 : questions.length;
@@ -202,7 +209,7 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
   }, 0);
   const progress = showAllQuestions && !sectionMode
     ? Math.round((answeredQuestionCount / Math.max(questions.length, 1)) * 100)
-    : Math.round(((step + 1) / totalSteps) * 100);
+    : Math.round(((step + 1) / Math.max(totalSteps, 1)) * 100);
   const currentAnswer = currentQuestion ? answers[currentQuestion.id] : undefined;
   const hasAnswerProgress = Object.keys(answers).length > 0 || step > 0;
 
@@ -364,7 +371,7 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
   const setAnswerForQuestion = (questionId: string, value: any) => {
     setErrorMsg('');
     setAnswers(prev => {
-      const next = { ...prev, [questionId]: value };
+      const next = clearDependentRankings(survey.questions, { ...prev, [questionId]: value }, questionId);
       answersRef.current = next;
       return next;
     });
@@ -373,7 +380,7 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
   const clearAnswerForQuestion = (questionId: string) => {
     setErrorMsg('');
     setAnswers(prev => {
-      const next = { ...prev };
+      const next = clearDependentRankings(survey.questions, prev, questionId);
       delete next[questionId];
       answersRef.current = next;
       return next;
@@ -401,14 +408,22 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
   const clearCurrentPageAnswers = () => {
     setErrorMsg('');
     setAnswers(previous => {
-      const next = { ...previous };
-      currentPageQuestions.forEach(question => delete next[question.id]);
+      let next = { ...previous };
+      currentPageQuestions.forEach(question => {
+        next = clearDependentRankings(survey.questions, next, question.id);
+        delete next[question.id];
+      });
       answersRef.current = next;
       return next;
     });
   };
 
   const validateQuestion = (question: SurveyQuestion, answer: any) => {
+    if (question.type === 'ranking') {
+      if (!isRankingApplicable(question, allQuestions, answers)) return true;
+      if (!question.required && (answer === undefined || answer === null || (Array.isArray(answer) && answer.length === 0))) return true;
+      return isCompleteRanking(getRankingOptions(question, allQuestions, answers), answer);
+    }
     if (!question.required) return true;
     if (question.type === 'multiple_choice_grid' || question.type === 'checkbox_grid') {
       if (!answer || typeof answer !== 'object' || Array.isArray(answer)) return false;
@@ -770,6 +785,57 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
           </div>
         );
       }
+      case 'ranking': {
+        const options = getRankingOptions(question, allQuestions, answers);
+        const confirmed = options.length > 0 && isCompleteRanking(options, answer);
+        const ordered: string[] = confirmed ? answer : options;
+        const move = (from: number, to: number) => setAnswerForQuestion(questionId, moveRankingOption(ordered, from, to));
+        return (
+          <div className="space-y-3">
+            <p className="text-sm text-text-secondary">Kéo thả hoặc dùng nút lên/xuống để xếp thứ tự, quan trọng nhất ở vị trí 1.</p>
+            <ol className="space-y-2" aria-label="Thứ tự xếp hạng các lựa chọn">
+              {ordered.map((option, index) => (
+                <li
+                  key={option}
+                  draggable
+                  onDragStart={event => {
+                    draggedRankingRef.current = { questionId, index };
+                    event.dataTransfer.effectAllowed = 'move';
+                    event.dataTransfer.setData('text/plain', option);
+                  }}
+                  onDragOver={event => event.preventDefault()}
+                  onDrop={event => {
+                    event.preventDefault();
+                    const dragged = draggedRankingRef.current;
+                    if (dragged?.questionId === questionId) move(dragged.index, index);
+                    draggedRankingRef.current = null;
+                  }}
+                  onDragEnd={() => { draggedRankingRef.current = null; }}
+                  className="flex items-center gap-2 rounded-xl border border-border-subtle bg-white px-3 py-3 shadow-sm"
+                >
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary-fixed text-sm font-bold text-primary">{index + 1}</span>
+                  <GripVertical size={18} className="hidden shrink-0 cursor-grab text-text-secondary sm:block" aria-hidden="true" />
+                  <span className="min-w-0 flex-1 break-words text-sm font-medium rendered-option" dangerouslySetInnerHTML={{ __html: sanitizeHtml(option) }} />
+                  <div className="flex shrink-0 gap-1">
+                    <button type="button" aria-label={`Đưa ${stripHtml(option)} lên`} disabled={index === 0} onClick={() => move(index, index - 1)} className="rounded-lg border border-border-subtle p-2 text-text-secondary hover:text-primary disabled:cursor-not-allowed disabled:opacity-30"><ChevronUp size={18} /></button>
+                    <button type="button" aria-label={`Đưa ${stripHtml(option)} xuống`} disabled={index === ordered.length - 1} onClick={() => move(index, index + 1)} className="rounded-lg border border-border-subtle p-2 text-text-secondary hover:text-primary disabled:cursor-not-allowed disabled:opacity-30"><ChevronDown size={18} /></button>
+                  </div>
+                </li>
+              ))}
+            </ol>
+            {confirmed ? (
+              <div className="flex flex-wrap items-center gap-3">
+                <p className="text-xs font-semibold text-sentiment-positive" role="status">Đã ghi nhận thứ tự xếp hạng.</p>
+                {!question.required && (
+                  <button type="button" onClick={() => clearAnswerForQuestion(questionId)} className="text-xs font-semibold text-primary hover:underline">Bỏ câu trả lời</button>
+                )}
+              </div>
+            ) : (
+              <button type="button" onClick={() => setAnswerForQuestion(questionId, ordered)} className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary/90">Xác nhận thứ tự này</button>
+            )}
+          </div>
+        );
+      }
       case 'text':
         return (
           <textarea
@@ -992,7 +1058,7 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
 
             {showAllQuestions || sectionMode ? (
               (sectionMode ? currentPageQuestions : questions).map((question) => {
-                const index = questions.indexOf(question);
+                const index = allQuestions.indexOf(question);
                 return (
                 <section key={question.id} className="bg-white border border-border-subtle rounded-2xl shadow-sm p-4 sm:p-6 md:p-8">
                   <header className="space-y-2 mb-4 sm:mb-5">

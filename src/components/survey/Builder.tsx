@@ -1,5 +1,5 @@
 import React from 'react';
-import { CircleDot, CheckSquare, Star, AlignLeft, Minus, GripVertical, Copy, Trash2, Plus, GitBranch, Sparkles, RefreshCw, Send, CheckCircle2, Check, Info, UploadCloud, ChevronDown, X, FileText, CalendarDays, SlidersHorizontal } from 'lucide-react';
+import { CircleDot, CheckSquare, Star, AlignLeft, Minus, GripVertical, Copy, Trash2, Plus, GitBranch, Sparkles, RefreshCw, Send, CheckCircle2, Check, Info, UploadCloud, ChevronDown, X, FileText, CalendarDays, SlidersHorizontal, ListOrdered } from 'lucide-react';
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { useSurvey } from '../../context/SurveyContext';
 import { ShareModal } from '../common/ShareModal';
@@ -9,10 +9,12 @@ import 'react-quill-new/dist/quill.snow.css';
 import type { SurveyQuestion, QuestionType, SurveyDisplayMode, SurveySection } from '../../types';
 import { cleanHtmlWhitespace, sanitizeHtml, stripHtml } from '../../utils/stringUtils';
 import { createDraftId, sectionsForBuilder, writeLocalDraft, type SurveyDraft } from '../../utils/surveyDrafts';
+import { findInvalidRankingSources } from '../../../shared/ranking';
 
 const questionTypeLabels: Record<QuestionType, { label: string; icon: React.ReactNode }> = {
   single_choice: { label: 'Một lựa chọn', icon: <CircleDot size={16} className="text-primary" /> },
   multiple_choice: { label: 'Nhiều lựa chọn', icon: <CheckSquare size={16} className="text-primary" /> },
+  ranking: { label: 'Xếp hạng', icon: <ListOrdered size={16} className="text-primary" /> },
   dropdown: { label: 'Menu thả xuống', icon: <ChevronDown size={16} className="text-primary" /> },
   date: { label: 'Ngày', icon: <CalendarDays size={16} className="text-primary" /> },
   linear_scale: { label: 'Thang tuyến tính', icon: <SlidersHorizontal size={16} className="text-primary" /> },
@@ -463,6 +465,12 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError, onActiv
 
   const handlePublish = async () => {
     if (questions.length === 0) return;
+    const invalidSource = findInvalidRankingSources(questions, sections)[0];
+    if (invalidSource !== undefined) {
+      setActiveQuestionId(questions[invalidSource].id);
+      onError?.(`Câu ${invalidSource + 1}: hãy chọn câu nhiều lựa chọn nằm trước câu xếp hạng, kể cả thứ tự các phần.`);
+      return;
+    }
     const activeDraftId = draftIdRef.current;
     setIsPublishing(true);
     try {
@@ -547,6 +555,7 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError, onActiv
   const supportsOptions = (type: QuestionType) =>
     type === 'single_choice'
     || type === 'multiple_choice'
+    || type === 'ranking'
     || type === 'dropdown'
     || type === 'multiple_choice_grid'
     || type === 'checkbox_grid';
@@ -648,6 +657,7 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError, onActiv
     const updates: Partial<SurveyQuestion> = {
       type: newType,
       correctAnswer: undefined,
+      ...(newType !== 'ranking' ? { carryForwardFromQuestionId: undefined } : {}),
       ...(newType !== 'multiple_choice' ? { maxSelections: undefined } : {}),
       ...(newType !== 'single_choice' ? { screenOutAnswer: undefined, screenOutMessage: undefined } : {}),
       ...(isGridQuestion(newType)
@@ -837,6 +847,15 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError, onActiv
                  const startsSection = section && !questions.slice(0, idx).some(question =>
                    (sections.some(item => item.id === question.sectionId) ? question.sectionId : sections[0]?.id) === sectionId
                  );
+                 const sectionPosition = (question: SurveyQuestion) => {
+                   const position = sections.findIndex(item => item.id === question.sectionId);
+                   return position < 0 ? 0 : position;
+                 };
+                 const rankingSources = q.type === 'ranking'
+                   ? questions.slice(0, idx).filter(source => source.type === 'multiple_choice'
+                     && (sections.length <= 1 || sectionPosition(source) <= sectionPosition(q)))
+                   : [];
+                 const invalidRankingSource = Boolean(q.carryForwardFromQuestionId && !rankingSources.some(source => source.id === q.carryForwardFromQuestionId));
                  return (
                    <React.Fragment key={q.id}>
                      {sections.length > 1 && startsSection && section && (
@@ -938,8 +957,43 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError, onActiv
                        </div>
                      )}
 
+                     {q.type === 'ranking' && (
+                        <div className="mt-3 rounded-xl border border-primary/20 bg-primary-fixed/30 p-4">
+                         {isActive ? (
+                           <label className="block text-sm font-semibold text-text-primary">
+                             Lấy lựa chọn để xếp hạng từ
+                             <select
+                               value={q.carryForwardFromQuestionId ?? ''}
+                               onChange={event => updateQuestion(q.id, {
+                                 carryForwardFromQuestionId: event.target.value || undefined,
+                                 ...(!event.target.value && !q.options?.length ? { options: ['Lựa chọn 1', 'Lựa chọn 2'] } : {}),
+                               })}
+                               className="mt-2 w-full rounded-lg border border-border-subtle bg-white px-3 py-2 text-sm text-text-primary"
+                             >
+                               <option value="">Tự nhập danh sách lựa chọn</option>
+                               {invalidRankingSource && <option value={q.carryForwardFromQuestionId} disabled>Nguồn không còn hợp lệ — hãy chọn lại</option>}
+                               {rankingSources.map(source => (
+                                 <option key={source.id} value={source.id}>
+                                   Câu {questions.findIndex(item => item.id === source.id) + 1}: {stripHtml(source.text).trim() || 'Câu nhiều lựa chọn'}
+                                 </option>
+                               ))}
+                             </select>
+                           </label>
+                         ) : (
+                           <p className="text-sm font-semibold text-text-primary">{q.carryForwardFromQuestionId ? 'Lấy các đáp án đã chọn ở câu trước' : 'Xếp hạng danh sách lựa chọn cố định'}</p>
+                         )}
+                         {invalidRankingSource ? (
+                           <p className="mt-2 text-xs font-semibold text-sentiment-negative">Câu nguồn đã bị xóa, đổi loại hoặc chuyển xuống sau. Hãy chọn lại trước khi xuất bản.</p>
+                         ) : (
+                           <p className="mt-2 text-xs text-text-secondary">{q.carryForwardFromQuestionId
+                             ? 'Người trả lời chỉ xếp hạng những đáp án họ đã chọn; nếu không chọn đáp án nào, câu này được bỏ qua.'
+                             : 'Người trả lời sắp xếp toàn bộ lựa chọn theo thứ tự mong muốn.'}</p>
+                         )}
+                       </div>
+                     )}
+
                      {/* Choices or row labels */}
-                     {supportsOptions(q.type) && q.options && (
+                     {supportsOptions(q.type) && q.options && !(q.type === 'ranking' && q.carryForwardFromQuestionId) && (
                        <div className="space-y-2 mt-3">
                          {q.options.map((opt, optIdx) => (
                             <div
@@ -961,7 +1015,7 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError, onActiv
                               >
                                 <GripVertical size={16} />
                               </span>
-                              {q.type === 'dropdown' && (
+                              {(q.type === 'dropdown' || q.type === 'ranking') && (
                                 <span className="flex-shrink-0 w-5 text-center text-sm font-medium text-text-secondary" aria-label={`Lựa chọn ${optIdx + 1}`}>
                                   {optIdx + 1}.
                                 </span>
@@ -981,7 +1035,7 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError, onActiv
                                  )}
                                </button>
                              ) : (
-                               q.type === 'dropdown'
+                               q.type === 'dropdown' || q.type === 'ranking'
                                  ? null
                                  : q.type === 'multiple_choice' || q.type === 'checkbox_grid'
                                    ? <CheckSquare size={18} className="text-text-secondary flex-shrink-0" />

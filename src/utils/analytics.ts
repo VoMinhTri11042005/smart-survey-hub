@@ -3,6 +3,7 @@ import { stripHtml, cleanHtmlWhitespace } from './stringUtils';
 import { parseStoredStarRating } from '../../shared/starRating';
 import { allocateExclusivePercents, roundPercent, sanitizeSpreadsheetValue } from './percent';
 import { cleanTextAnswer, getTextAnalyticsEligibility, isPersonalIdentifierQuestion, summarizeTextCategories, type TextCategoryOption } from './textAnalytics';
+import { getRankingOptions, isCompleteRanking, isRankingApplicable } from '../../shared/ranking';
 
 export interface ChoiceDistribution {
   questionId: string;
@@ -96,6 +97,15 @@ export interface TextCategoryDistribution {
   options: TextCategoryOption[];
 }
 
+export interface RankingDistribution {
+  questionId: string;
+  questionText: string;
+  totalAnswered: number;
+  excludedOtherVersion: number;
+  invalidAnswers: number;
+  options: { label: string; count: number; firstPlace: number; averageRank: number }[];
+}
+
 export interface SurveyAnalytics {
   totalResponses: number;
   /** Number of responses that contain every required answer. */
@@ -111,6 +121,7 @@ export interface SurveyAnalytics {
   legacyCompletionResponses: number;
   nps: NpsResult | null;
   choiceDistributions: ChoiceDistribution[];
+  rankingDistributions: RankingDistribution[];
   starRatings: StarRatingResult[];
   linearScales: LinearScaleResult[];
   gridDistributions: GridDistribution[];
@@ -201,6 +212,7 @@ function questionSchemaSignature(question: Survey['questions'][number]): string 
     text: choiceDisplayKey(question.text),
     required: Boolean(question.required),
     options: (question.options ?? []).map(choiceDisplayKey),
+    carryForwardFromQuestionId: question.carryForwardFromQuestionId ?? null,
     gridColumns: (question.gridColumns ?? []).map(choiceDisplayKey),
     scaleMin: question.scaleMin ?? null,
     scaleMax: question.scaleMax ?? null,
@@ -349,6 +361,11 @@ export function computeSurveyAnalytics(survey: Survey, responses: SurveyResponse
       .filter(q => q.required)
       .every(q => {
         const ans = resp.answers[q.id];
+        if (q.type === 'ranking') {
+          if (!isRankingApplicable(q, responseQuestions, resp.answers)) return true;
+          const options = getRankingOptions(q, responseQuestions, resp.answers);
+          return options.length > 0 && isCompleteRanking(options, ans);
+        }
         return hasRequiredQuestionAnswer(q, ans);
       });
     if (answeredRequired) fullyAnswered++;
@@ -397,6 +414,8 @@ export function computeSurveyAnalytics(survey: Survey, responses: SurveyResponse
       // reported as a skipped answer. It was never shown that question.
       if (snapshotBacked && !snapshotQuestion) continue;
       const responseQuestion = snapshotQuestion ?? question;
+      const responseQuestions = getSnapshotQuestions(response) ?? survey.questions;
+      if (responseQuestion.type === 'ranking' && !isRankingApplicable(responseQuestion, responseQuestions, response.answers)) continue;
       applicableResponses++;
       const schemaDifferent = snapshotBacked && isQuestionSchemaDifferent(snapshotQuestion, question);
       if (schemaDifferent) {
@@ -410,7 +429,10 @@ export function computeSurveyAnalytics(survey: Survey, responses: SurveyResponse
       }
       comparableResponses++;
       const answer = response.answers[question.id];
-      if (!hasQuestionAnswer(responseQuestion, answer)) continue;
+      if (responseQuestion.type === 'ranking') {
+        const options = getRankingOptions(responseQuestion, responseQuestions, response.answers);
+        if (!options.length || !isCompleteRanking(options, answer)) continue;
+      } else if (!hasQuestionAnswer(responseQuestion, answer)) continue;
       answered++;
       if (survey.isQuiz && responseWasCollectedAsQuiz(response) && isScoreableQuestion(responseQuestion)) {
         hasScoringSchema = true;
@@ -753,6 +775,52 @@ export function computeSurveyAnalytics(survey: Survey, responses: SurveyResponse
     });
   }
 
+  const rankingDistributions: RankingDistribution[] = survey.questions.filter(question => question.type === 'ranking').map(question => {
+    const totals = new Map<string, { label: string; count: number; firstPlace: number; rankSum: number }>();
+    let totalAnswered = 0;
+    let excludedOtherVersion = 0;
+    let invalidAnswers = 0;
+    for (const response of responses) {
+      const answer = response.answers[question.id];
+      if (!hasAnswer(answer)) continue;
+      const responseQuestions = getSnapshotQuestions(response) ?? survey.questions;
+      const captured = responseUsesSnapshot(response) ? getSnapshotQuestion(response, question.id) : question;
+      const currentSource = survey.questions.find(item => item.id === question.carryForwardFromQuestionId);
+      const capturedSource = responseQuestions.find(item => item.id === captured?.carryForwardFromQuestionId);
+      if (!captured || captured.type !== 'ranking' || isQuestionSchemaDifferent(captured, question)
+        || (question.carryForwardFromQuestionId && (!currentSource || !capturedSource || isQuestionSchemaDifferent(capturedSource, currentSource)))) {
+        excludedOtherVersion++;
+        continue;
+      }
+      const options = getRankingOptions(captured, responseQuestions, response.answers);
+      if (!options.length || !isCompleteRanking(options, answer)) {
+        invalidAnswers++;
+        continue;
+      }
+      totalAnswered++;
+      answer.forEach((option, index) => {
+        const entry = totals.get(option) ?? { label: option, count: 0, firstPlace: 0, rankSum: 0 };
+        entry.count++;
+        entry.rankSum += index + 1;
+        if (index === 0) entry.firstPlace++;
+        totals.set(option, entry);
+      });
+    }
+    return {
+      questionId: question.id,
+      questionText: question.text,
+      totalAnswered,
+      excludedOtherVersion,
+      invalidAnswers,
+      options: [...totals.values()].map(entry => ({
+        label: entry.label,
+        count: entry.count,
+        firstPlace: entry.firstPlace,
+        averageRank: roundPercent(entry.rankSum / entry.count),
+      })).sort((a, b) => a.averageRank - b.averageRank || b.firstPlace - a.firstPlace || a.label.localeCompare(b.label, 'vi')),
+    };
+  });
+
   const textResponses: TextResponseResult[] = [];
   const textCategoryDistributions: TextCategoryDistribution[] = [];
   for (const q of survey.questions.filter(q => q.type === 'text')) {
@@ -789,6 +857,7 @@ export function computeSurveyAnalytics(survey: Survey, responses: SurveyResponse
     legacyCompletionResponses,
     nps,
     choiceDistributions,
+    rankingDistributions,
     starRatings,
     linearScales,
     gridDistributions,
@@ -818,6 +887,7 @@ export function computeSurveyAnalytics(survey: Survey, responses: SurveyResponse
  */
 export function exportResponsesToCsv(survey: Survey, responses: SurveyResponse[], includePersonalData = false): string {
   const exportQuestions = survey.questions.filter(question => includePersonalData || !isPersonalIdentifierQuestion(question));
+  const rankingSources = new Set(survey.questions.map(question => question.carryForwardFromQuestionId).filter(Boolean));
   const headers = ['ID', 'Ngày gửi'];
   if (survey.isQuiz) headers.push('Điểm số', 'Điểm tối đa', 'Tỷ lệ %');
   headers.push(...exportQuestions.map(q => stripHtml(cleanHtmlWhitespace(q.text))));
@@ -847,6 +917,7 @@ export function exportResponsesToCsv(survey: Survey, responses: SurveyResponse[]
     cells.push(
       ...exportQuestions.map(q => {
         const ans = r.answers[q.id];
+        if ((q.type === 'ranking' || rankingSources.has(q.id)) && Array.isArray(ans)) return JSON.stringify(ans.map(value => stripHtml(cleanHtmlWhitespace(value))));
         if (Array.isArray(ans)) return stripHtml(cleanHtmlWhitespace(ans.join('; ')));
         if (ans && typeof ans === 'object') {
           return stripHtml(cleanHtmlWhitespace(Object.entries(ans)
