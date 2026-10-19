@@ -24,7 +24,7 @@ SH/
 │   │   └── chat.routes.ts        # AI chatbot
 │   ├── services/                 # Business logic
 │   │   └── gemini.service.ts     # Gemini AI wrapper
-│   ├── store.ts                  # In-memory data store
+│   ├── db.ts                     # PostgreSQL connection and schema setup
 │   └── index.ts                  # Server entry point
 ├── package.json
 ├── vite.config.ts
@@ -48,14 +48,14 @@ npm run dev
 
 # Hoặc chạy riêng
 npm run dev:client   # Frontend: http://localhost:3000
-npm run dev:server   # Backend:  http://localhost:3001
+npm run dev:server   # Backend:  http://localhost:3005 by default
 ```
 
 ## Nhập phản hồi Google Forms
 
 Trong mục **Phân tích**, chọn **Nhập Excel** rồi tải file `.xlsx` hoặc `.csv` đã xuất từ Google Forms. Có thể tạo khảo sát mới từ tiêu đề cột hoặc ghép các cột vào khảo sát hiện có. Hệ thống hiển thị xem trước và kiểm tra lựa chọn trước khi xác nhận nhập. File `.xls` cần được lưu lại thành `.xlsx` trước khi tải lên.
 
-Import chỉ thêm phản hồi; không cập nhật hay xóa response hiện có. Việc tạo survey và thêm responses chạy trong cùng transaction PostgreSQL để lỗi sẽ rollback cả lần nhập. Phản hồi trùng được bỏ qua; thời gian gửi được giữ nếu file có cột Timestamp/Thời gian. Mỗi file hỗ trợ tối đa 5 MB, 5000 phản hồi và 100 câu hỏi.
+Import chỉ thêm phản hồi; không cập nhật hay xóa response hiện có. Việc tạo survey và thêm responses chạy trong cùng transaction PostgreSQL để lỗi sẽ rollback cả lần nhập. Khi nhập lại chính xác cùng tệp vào cùng khảo sát, hệ thống cảnh báo và chỉ tiếp tục nếu người dùng xác nhận; các dòng có câu trả lời giống nhau trong một tệp vẫn được giữ. Kiểm tra tệp trùng áp dụng cho những lần nhập từ bản cập nhật này, không nhận diện hồi tố các tệp cũ hoặc tệp đã thay đổi nội dung. Thời gian gửi được giữ nếu file có cột Timestamp/Thời gian. Mỗi file hỗ trợ tối đa 5 MB, 5000 phản hồi và 100 câu hỏi.
 
 ## 🚀 Deploy lên Render
 
@@ -105,23 +105,19 @@ Trong **Cài đặt tài khoản → Sao lưu và khôi phục**, có thể tả
 
 API gửi phản hồi công khai giới hạn tối đa 15 lần/phút trên mỗi IP tại mỗi tiến trình và xác minh số lượt theo mã thiết bị ở backend. Giới hạn mã thiết bị có thể bị né nếu người trả lời xóa dữ liệu trình duyệt hoặc đổi thiết bị; với khảo sát cần danh tính/lượt tham gia chống giả mạo, yêu cầu đăng nhập hoặc tích hợp CAPTCHA.
 
+Chatbot trên liên kết khảo sát công khai chỉ dùng nội dung của khảo sát đang mở, giới hạn 10 yêu cầu/phút trên mỗi IP tại mỗi tiến trình và không nhận ngữ cảnh khảo sát do trình duyệt tự gửi. Giới hạn tại tiến trình không thay thế hạn mức chi phí hoặc bảo vệ chống lạm dụng ở nhà cung cấp khi chạy nhiều máy chủ.
+
 `/api/health` xác nhận tiến trình đang chạy; `/api/ready` kiểm tra kết nối database và được Render dùng làm health check.
 
 ## 🐳 Deploy bằng Docker
 
-```bash
-# Build image
-docker build -t smart-survey-hub .
-
-# Run container
-docker run -p 3001:3001 --env-file .env.local smart-survey-hub
-```
-
-Hoặc dùng docker-compose:
+Tạo một tệp môi trường riêng, ví dụ `.env.docker`, từ `.env.example`. Điền `DATABASE_URL`, `FIREBASE_SERVICE_ACCOUNT`, `ADMIN_EMAILS`, `VITE_ADMIN_EMAILS` và các biến Firebase client; đặt `CORS_ORIGIN` hoặc `APP_URL` thành origin frontend thực tế, ví dụ `http://localhost:3001`. Đặt `VITE_PUBLIC_APP_URL` theo địa chỉ người tham gia sẽ mở. Không đưa tệp này lên Git.
 
 ```bash
-docker-compose up --build -d
+docker compose --env-file .env.docker up --build -d
 ```
+
+Compose truyền các biến `VITE_*` vào lúc build frontend và các secret máy chủ vào lúc chạy; mặc định dùng `/api` cùng origin. Sau khi đổi biến `VITE_*`, cần build lại image. Nếu dùng `docker build` trực tiếp, truyền các biến `VITE_*` cần thiết bằng `--build-arg`; `docker run --env-file` chỉ cấu hình được môi trường runtime, không sửa frontend đã build.
 
 ## 📋 API Endpoints
 
@@ -136,6 +132,7 @@ docker-compose up --build -d
 | GET | `/api/surveys/:id/responses` | Lấy phản hồi |
 | POST | `/api/surveys/import-responses` | Tạo khảo sát mới hoặc thêm phản hồi từ bảng tính |
 | POST | `/api/chat` | AI chatbot |
+| POST | `/api/surveys/:id/chat` | Trợ lý AI cho khảo sát công khai đang mở |
 
 ## Nhập phản hồi từ Google Forms
 

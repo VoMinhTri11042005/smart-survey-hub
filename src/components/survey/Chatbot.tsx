@@ -4,8 +4,9 @@ import { MessageSquare, X, Send, Sparkles, Bot } from 'lucide-react';
 import { useSurvey } from '../../context/SurveyContext';
 import type { Survey, ChatMessage } from '../../types';
 import { motion, useDragControls } from 'motion/react';
+import { API_BASE, apiFetch } from '../../utils/api';
 
-export function Chatbot({ survey }: { survey: Survey | null }) {
+export function Chatbot({ survey, isPublic = false }: { survey: Survey | null; isPublic?: boolean }) {
   const { chatWithAI } = useSurvey();
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([
@@ -28,12 +29,24 @@ export function Chatbot({ survey }: { survey: Survey | null }) {
     setIsTyping(true);
 
     try {
-      const reply = await chatWithAI(
-        userMsg,
-        survey?.title || '',
-        survey?.description || '',
-        survey?.questions || []
-      );
+      let reply: string;
+      if (isPublic && survey?.id) {
+        const response = await apiFetch(`${API_BASE}/surveys/${encodeURIComponent(survey.id)}/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: userMsg }),
+        });
+        const payload = await response.json().catch(() => null);
+        if (!response.ok) throw new Error(payload?.error || 'Không thể kết nối với trợ lý AI.');
+        reply = typeof payload?.reply === 'string' ? payload.reply : 'Xin lỗi, không có phản hồi từ AI.';
+      } else {
+        reply = await chatWithAI(
+          userMsg,
+          survey?.title || '',
+          survey?.description || '',
+          survey?.questions || []
+        );
+      }
       setMessages(prev => [...prev, { type: 'bot', text: reply }]);
     } catch (err: any) {
       setMessages(prev => [...prev, { type: 'bot', text: `Lỗi: ${err.message || 'Xin lỗi, đã xảy ra lỗi. Vui lòng thử lại.'}` }]);
@@ -138,6 +151,7 @@ export function Chatbot({ survey }: { survey: Survey | null }) {
           <div className="relative flex items-center">
             <input
               type="text"
+              maxLength={1000}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && !isTyping && handleSend()}

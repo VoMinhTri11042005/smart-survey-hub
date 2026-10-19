@@ -1,6 +1,6 @@
 import React from 'react';
 import { CircleDot, CheckSquare, Star, AlignLeft, Minus, GripVertical, Copy, Trash2, Plus, GitBranch, Sparkles, RefreshCw, Send, CheckCircle2, Check, Info, UploadCloud, ChevronDown, X, FileText, CalendarDays, SlidersHorizontal } from 'lucide-react';
-import { useState, useRef, useEffect, useMemo } from 'react';
+import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { useSurvey } from '../../context/SurveyContext';
 import { ShareModal } from '../common/ShareModal';
 import ReactMarkdown from 'react-markdown';
@@ -8,6 +8,7 @@ import ReactQuill from 'react-quill-new';
 import 'react-quill-new/dist/quill.snow.css';
 import type { SurveyQuestion, QuestionType, SurveyDisplayMode, SurveySection } from '../../types';
 import { cleanHtmlWhitespace, sanitizeHtml, stripHtml } from '../../utils/stringUtils';
+import { createDraftId, sectionsForBuilder, writeLocalDraft, type SurveyDraft } from '../../utils/surveyDrafts';
 
 const questionTypeLabels: Record<QuestionType, { label: string; icon: React.ReactNode }> = {
   single_choice: { label: 'Một lựa chọn', icon: <CircleDot size={16} className="text-primary" /> },
@@ -47,38 +48,7 @@ const normalizeAttempts = (value: number | null | undefined) => (
 );
 
 export function Builder({ onPublished, onUpdated, onDraftSaved, onError, onActivity }: { onPublished?: () => void; onUpdated?: () => void; onDraftSaved?: () => void; onError?: (msg: string) => void; onActivity?: (message: string) => void }) {
-  const { parseDocx, createSurvey, updateSurvey, currentSurvey, setCurrentSurvey, isLoading, pendingTemplate, clearPendingTemplate, chatWithAI, fetchDrafts, saveDraft, deleteDraft, freshBuilderRequestId, consumeFreshBuilderRequest } = useSurvey();
-  const DRAFT_STORAGE_KEY = 'smart-survey-hub-builder-draft';
-  const LEGACY_DRAFT_STORAGE_KEY = 'smart-survey-hub-drafts';
-
-  const readDraftsFromStorage = () => {
-    const candidates = [DRAFT_STORAGE_KEY, LEGACY_DRAFT_STORAGE_KEY];
-    const collected: any[] = [];
-
-    for (const key of candidates) {
-      try {
-        const raw = localStorage.getItem(key);
-        if (!raw) continue;
-        const value = JSON.parse(raw);
-        if (Array.isArray(value)) {
-          collected.push(...value);
-        } else if (value) {
-          collected.push(value);
-        }
-      } catch (error) {
-        console.error('Failed to read draft storage', error);
-      }
-    }
-
-    const seen = new Set<string>();
-    return collected.filter((draft) => {
-      if (!draft) return false;
-      if (!draft.id) return true;
-      if (seen.has(draft.id)) return false;
-      seen.add(draft.id);
-      return true;
-    });
-  };
+  const { parseDocx, createSurvey, updateSurvey, currentSurvey, setCurrentSurvey, isLoading, pendingTemplate, clearPendingTemplate, pendingDraft, consumePendingDraft, chatWithAI, fetchDrafts, saveDraft, deleteDraft, freshBuilderRequestId, consumeFreshBuilderRequest } = useSurvey();
   
   const [showSurvey, setShowSurvey] = useState(false);
   const [topic, setTopic] = useState('');
@@ -101,8 +71,45 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError, onActiv
   const [timeLimitMinutes, setTimeLimitMinutes] = useState<number | null>(null);
   const draftSyncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const draftSessionRef = useRef(0);
+  const draftIdRef = useRef<string | null>(null);
+  const draftSaveChainRef = useRef<Promise<void>>(Promise.resolve());
+  const clearingDraftRef = useRef(false);
   const handledFreshBuilderRequestRef = useRef<number | null>(null);
   const skipDraftRestoreRef = useRef(false);
+
+  const ensureDraftId = useCallback(() => {
+    if (!draftIdRef.current) {
+      draftIdRef.current = createDraftId();
+      setDraftId(draftIdRef.current);
+    }
+    return draftIdRef.current;
+  }, []);
+
+  // Serialize writes for this editor: an older autosave must not arrive after a
+  // newer one, or recreate a draft after publishing/deleting it.
+  const queueDraftSave = useCallback((draft: Partial<SurveyDraft>) => {
+    const pending = draftSaveChainRef.current.then(() => saveDraft(draft));
+    draftSaveChainRef.current = pending.then(() => undefined, () => undefined);
+    return pending;
+  }, [saveDraft]);
+
+  const applyDraft = useCallback((draft: SurveyDraft) => {
+    draftIdRef.current = draft.id;
+    setDraftId(draft.id);
+    setSurveyTitle(draft.title || '');
+    setSurveyDescription(draft.description || '');
+    setQuestions(draft.questions || []);
+    setSections(sectionsForBuilder(draft.sections));
+    setIsQuiz(Boolean(draft.isQuiz));
+    setShowScore(draft.showScore !== false);
+    setDisplayMode(draft.displayMode || 'single');
+    setClosesAt(draft.closesAt || null);
+    setMaxAttemptsPerDevice(normalizeAttempts(draft.maxAttemptsPerDevice));
+    setTimeLimitMinutes(normalizeTimeLimit(draft.timeLimitMinutes));
+    setShowSurvey(true);
+    setActiveQuestionId(draft.questions?.[0]?.id || null);
+    setDraftSavedAt(draft.updatedAt ? new Date(draft.updatedAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : null);
+  }, []);
 
   // Drag state for question reordering
   const [dragOverId, setDragOverId] = useState<string | null>(null);
@@ -264,6 +271,7 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError, onActiv
     setClosesAt(null);
     setMaxAttemptsPerDevice(1);
     setTimeLimitMinutes(null);
+    draftIdRef.current = null;
     setDraftId(null);
     setDraftSavedAt(null);
     setPublishedSurvey(null);
@@ -292,6 +300,7 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError, onActiv
     setSurveyTitle(currentSurvey.title || '');
     setSurveyDescription(currentSurvey.description || '');
     setQuestions(currentSurvey.questions || []);
+    setSections(sectionsForBuilder(currentSurvey.sections));
     setIsQuiz(Boolean(currentSurvey.isQuiz));
     setShowScore(currentSurvey.showScore !== false);
     setDisplayMode(currentSurvey.displayMode || 'single');
@@ -300,87 +309,39 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError, onActiv
     setTimeLimitMinutes(normalizeTimeLimit(currentSurvey.timeLimitMinutes));
     setShowSurvey(true);
     setActiveQuestionId(currentSurvey.questions?.[0]?.id || null);
+    draftIdRef.current = null;
     setDraftId(null);
   }, [currentSurvey]);
 
   useEffect(() => {
+    if (!pendingDraft || currentSurvey || pendingTemplate) return;
+    skipDraftRestoreRef.current = true;
+    draftSessionRef.current += 1;
+    if (draftSyncTimer.current) clearTimeout(draftSyncTimer.current);
+    applyDraft(pendingDraft);
+    consumePendingDraft(pendingDraft.id);
+  }, [pendingDraft, currentSurvey, pendingTemplate, applyDraft, consumePendingDraft]);
+
+  useEffect(() => {
+    let cancelled = false;
     const loadDrafts = async () => {
-      if (currentSurvey || pendingTemplate || skipDraftRestoreRef.current) return;
+      if (currentSurvey || pendingTemplate || pendingDraft || skipDraftRestoreRef.current) return;
       const drafts = await fetchDrafts();
-      if (skipDraftRestoreRef.current) return;
-      if (!drafts || drafts.length === 0) {
-        const savedDrafts = readDraftsFromStorage();
-        const saved = savedDrafts[0];
-        if (!saved) return;
-
-        try {
-          const draft = saved as {
-            surveyTitle?: string;
-            surveyDescription?: string;
-            questions?: SurveyQuestion[];
-            sections?: SurveySection[];
-            isQuiz?: boolean;
-            showScore?: boolean;
-            displayMode?: SurveyDisplayMode;
-            closesAt?: string | null;
-            maxAttemptsPerDevice?: number | null;
-            timeLimitMinutes?: number | null;
-            title?: string;
-            description?: string;
-            id?: string;
-          };
-
-          const extractedQuestions = draft.questions || [];
-          const title = draft.surveyTitle ?? draft.title ?? '';
-          const description = draft.surveyDescription ?? draft.description ?? '';
-
-          if (title || description || extractedQuestions.length) {
-            setSurveyTitle(title);
-            setSurveyDescription(description);
-            setQuestions(extractedQuestions);
-            setSections(draft.sections?.length ? draft.sections : [{ id: 'section-1', title: 'Phần 1' }]);
-            setIsQuiz(Boolean(draft.isQuiz));
-            setShowScore(draft.showScore !== false);
-            setDisplayMode(draft.displayMode || 'single');
-            setClosesAt(draft.closesAt || null);
-            setMaxAttemptsPerDevice(normalizeAttempts(draft.maxAttemptsPerDevice));
-            setTimeLimitMinutes(normalizeTimeLimit(draft.timeLimitMinutes));
-            setShowSurvey(true);
-            setActiveQuestionId(extractedQuestions[0]?.id || null);
-          }
-        } catch (error) {
-          console.error('Failed to restore saved survey draft', error);
-        }
-        return;
-      }
-
-      const latest = drafts[0];
-      setDraftId(latest.id);
-      setSurveyTitle(latest.title || '');
-      setSurveyDescription(latest.description || '');
-      setQuestions(latest.questions || []);
-      setSections(latest.sections?.length ? latest.sections : [{ id: 'section-1', title: 'Phần 1' }]);
-      setIsQuiz(Boolean(latest.isQuiz));
-      setShowScore(latest.showScore !== false);
-      setDisplayMode(latest.displayMode || 'single');
-      setClosesAt(latest.closesAt || null);
-      setMaxAttemptsPerDevice(normalizeAttempts(latest.maxAttemptsPerDevice));
-      setTimeLimitMinutes(normalizeTimeLimit(latest.timeLimitMinutes));
-      setShowSurvey(true);
-      setActiveQuestionId((latest.questions || [])[0]?.id || null);
-      setDraftSavedAt(latest.updatedAt ? new Date(latest.updatedAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : null);
+      if (cancelled || skipDraftRestoreRef.current || drafts.length === 0) return;
+      applyDraft(drafts[0]);
     };
 
     void loadDrafts();
-  }, [fetchDrafts, currentSurvey, pendingTemplate, freshBuilderRequestId]);
+    return () => { cancelled = true; };
+  }, [fetchDrafts, currentSurvey, pendingTemplate, pendingDraft, freshBuilderRequestId, applyDraft]);
 
   useEffect(() => {
-    if (!showSurvey) return;
+    if (!showSurvey || isPublishing || clearingDraftRef.current || !(surveyTitle.trim() || surveyDescription.trim() || questions.length > 0)) return;
 
-    const draft = {
-      id: draftId || undefined,
-      surveyTitle,
-      surveyDescription,
+    const draft: SurveyDraft = {
+      id: ensureDraftId(),
+      title: surveyTitle || 'Khảo sát nháp',
+      description: surveyDescription,
       questions,
       sections,
       isQuiz,
@@ -389,35 +350,43 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError, onActiv
       closesAt,
       maxAttemptsPerDevice,
       timeLimitMinutes,
+      updatedAt: new Date().toISOString(),
     };
 
     try {
-
-      localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft));
+      writeLocalDraft(localStorage, draft);
       setDraftSavedAt(new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }));
     } catch (error) {
       console.error('Failed to save draft', error);
     }
+    // Keep a local recovery copy while editing a published survey, but do not
+    // create a server draft unless the user explicitly chooses "Lưu nháp".
+    if (currentSurvey) return;
     if (draftSyncTimer.current) clearTimeout(draftSyncTimer.current);
     const draftSession = draftSessionRef.current;
-    if (!currentSurvey && (surveyTitle.trim() || questions.length > 0)) {
-      draftSyncTimer.current = setTimeout(() => {
-        void saveDraft({ id: draftId || undefined, title: surveyTitle || 'Khảo sát nháp', description: surveyDescription, questions, sections, isQuiz, showScore, displayMode, closesAt, maxAttemptsPerDevice, timeLimitMinutes }).then(saved => {
-          if (!draftId && saved?.id && draftSessionRef.current === draftSession) setDraftId(saved.id);
-        }).catch(error => console.warn('Background draft sync failed', error));
-      }, 700);
-    }
+    draftSyncTimer.current = setTimeout(() => {
+      draftSyncTimer.current = null;
+      if (draftSessionRef.current !== draftSession) return;
+      void queueDraftSave(draft).catch(error => console.warn('Background draft sync failed', error));
+    }, 700);
     return () => { if (draftSyncTimer.current) clearTimeout(draftSyncTimer.current); };
-  }, [showSurvey, surveyTitle, surveyDescription, questions, sections, isQuiz, showScore, displayMode, closesAt, maxAttemptsPerDevice, timeLimitMinutes, currentSurvey, draftId, saveDraft]);
+  }, [showSurvey, isPublishing, surveyTitle, surveyDescription, questions, sections, isQuiz, showScore, displayMode, closesAt, maxAttemptsPerDevice, timeLimitMinutes, currentSurvey, draftId, ensureDraftId, queueDraftSave]);
 
-  const clearDraft = () => {
-    localStorage.removeItem(DRAFT_STORAGE_KEY);
-    localStorage.removeItem(LEGACY_DRAFT_STORAGE_KEY);
-    if (draftId) {
-      void deleteDraft(draftId);
+  const clearDraft = async (draftIdToDelete = draftIdRef.current) => {
+    clearingDraftRef.current = true;
+    draftSessionRef.current += 1;
+    if (draftSyncTimer.current) clearTimeout(draftSyncTimer.current);
+    if (draftIdRef.current === draftIdToDelete) {
+      draftIdRef.current = null;
+      setDraftId(null);
     }
-    setDraftId(null);
     setDraftSavedAt(null);
+    try {
+      await draftSaveChainRef.current;
+      if (draftIdToDelete) await deleteDraft(draftIdToDelete);
+    } finally {
+      clearingDraftRef.current = false;
+    }
   };
 
   const totalPossibleScore = useMemo(() => {
@@ -444,8 +413,8 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError, onActiv
 
     setIsSavingDraft(true);
     const draftSession = draftSessionRef.current;
-    const draft = {
-      id: draftId || `draft-${Date.now()}`,
+    const draft: SurveyDraft = {
+      id: ensureDraftId(),
       title: surveyTitle || 'Khảo sát nháp',
       description: surveyDescription,
       questions,
@@ -456,13 +425,14 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError, onActiv
       closesAt,
       maxAttemptsPerDevice,
       timeLimitMinutes,
+      updatedAt: new Date().toISOString(),
     };
     try {
-      localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft));
-      // The legacy key stored the same draft a second time, causing duplicate cards.
-      localStorage.removeItem(LEGACY_DRAFT_STORAGE_KEY);
-      const saved = await saveDraft(draft);
+      if (draftSyncTimer.current) clearTimeout(draftSyncTimer.current);
+      writeLocalDraft(localStorage, draft);
+      const saved = await queueDraftSave(draft);
       if (draftSessionRef.current === draftSession) {
+        draftIdRef.current = saved.id || draft.id;
         setDraftId(saved.id || draft.id);
         setDraftSavedAt(new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }));
         onDraftSaved?.();
@@ -493,6 +463,7 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError, onActiv
 
   const handlePublish = async () => {
     if (questions.length === 0) return;
+    const activeDraftId = draftIdRef.current;
     setIsPublishing(true);
     try {
       const surveyData = {
@@ -510,8 +481,13 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError, onActiv
       const survey = currentSurvey
         ? await updateSurvey(currentSurvey.id, { ...surveyData, status: currentSurvey.status })
         : await createSurvey(surveyData);
+      try {
+        await clearDraft(activeDraftId);
+      } catch (error) {
+        console.warn('Survey was saved, but its draft could not be deleted', error);
+        onError?.('Đã lưu khảo sát, nhưng chưa thể xóa bản nháp. Bạn có thể xóa bản nháp sau.');
+      }
       setCurrentSurvey(survey);
-      clearDraft();
       setPublishedSurvey({ id: survey.id, title: survey.title });
       if (currentSurvey) onUpdated?.();
       else onPublished?.();
@@ -1363,7 +1339,7 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError, onActiv
                    </button>
                    <span className="text-[10px] md:text-xs text-text-secondary">{draftSavedAt ? `Đã lưu ${draftSavedAt}` : 'Chưa lưu'}</span>
                    <button
-                    onClick={() => { setShowSurvey(false); setQuestions([]); setSections([{ id: 'section-1', title: 'Phần 1' }]); setSurveyTitle(''); setSurveyDescription(''); setActiveQuestionId(null); setIsQuiz(false); setShowScore(true); setDisplayMode('single'); setClosesAt(null); setMaxAttemptsPerDevice(1); setTimeLimitMinutes(null); clearDraft(); }}
+                     onClick={() => { setShowSurvey(false); setQuestions([]); setSections([{ id: 'section-1', title: 'Phần 1' }]); setSurveyTitle(''); setSurveyDescription(''); setActiveQuestionId(null); setIsQuiz(false); setShowScore(true); setDisplayMode('single'); setClosesAt(null); setMaxAttemptsPerDevice(1); setTimeLimitMinutes(null); void clearDraft().catch(() => onError?.('Không thể xóa bản nháp. Vui lòng thử lại.')); }}
                      className="text-xs md:text-sm font-semibold text-text-secondary hover:text-sentiment-negative transition-colors cursor-pointer"
                    >
                      Tạo lại

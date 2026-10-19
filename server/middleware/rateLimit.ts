@@ -43,7 +43,7 @@ export function createRateLimit({ windowMs, maxRequests }: RateLimitOptions) {
     res.setHeader('RateLimit-Reset', String(Math.ceil(counter.resetAt / 1000)));
     if (counter.count > maxRequests) {
       res.setHeader('Retry-After', String(Math.max(1, Math.ceil((counter.resetAt - now) / 1000))));
-      res.status(429).json({ error: 'Bạn gửi quá nhiều phản hồi trong thời gian ngắn. Vui lòng thử lại sau.' });
+      res.status(429).json({ error: 'Bạn gửi quá nhiều yêu cầu trong thời gian ngắn. Vui lòng thử lại sau.' });
       return;
     }
     next();

@@ -3,6 +3,7 @@ import { AlertTriangle, CheckCircle2, FileSpreadsheet, Loader2, Upload, X } from
 import type { QuestionType, Survey, SurveyAnswer, SurveyQuestion } from '../../types';
 import { stripHtml, toUnaccented } from '../../utils/stringUtils';
 import { API_BASE, apiFetch } from '../../utils/api';
+import { fingerprintImportFile } from '../../utils/importFileFingerprint';
 import type { ToastType } from '../common/Toast';
 
 interface ImportedResponse {
@@ -171,6 +172,9 @@ export function ImportResponsesDialog({ surveys, onClose, onImported, onFeedback
   const [columnMappings, setColumnMappings] = useState<Record<number, string>>({});
   const [fileName, setFileName] = useState('');
   const [idempotencyKey, setIdempotencyKey] = useState('');
+  const [sourceFileHash, setSourceFileHash] = useState('');
+  const [duplicateSource, setDuplicateSource] = useState(false);
+  const [allowDuplicateFile, setAllowDuplicateFile] = useState(false);
   const [error, setError] = useState('');
   const [isReading, setIsReading] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
@@ -318,6 +322,13 @@ export function ImportResponsesDialog({ surveys, onClose, onImported, onFeedback
   const handleFile = async (file?: File) => {
     if (!file) return;
     setError('');
+    setHeaders([]);
+    setRows([]);
+    setFileName('');
+    setIdempotencyKey('');
+    setSourceFileHash('');
+    setDuplicateSource(false);
+    setAllowDuplicateFile(false);
     if (file.size > 5 * 1024 * 1024) {
       const message = 'File tối đa 5 MB để bảo đảm nhập ổn định.';
       setError(message);
@@ -326,13 +337,15 @@ export function ImportResponsesDialog({ surveys, onClose, onImported, onFeedback
     }
     setIsReading(true);
     try {
+      const fileBytes = await file.arrayBuffer();
+      const fileHash = await fingerprintImportFile(fileBytes);
       let sheetRows: unknown[][];
       if (file.name.toLocaleLowerCase().endsWith('.csv')) {
-        sheetRows = parseCsv((await file.text()).replace(/^\uFEFF/, ''));
+        sheetRows = parseCsv(new TextDecoder().decode(fileBytes).replace(/^\uFEFF/, ''));
       } else if (file.name.toLocaleLowerCase().endsWith('.xlsx')) {
         const ExcelJS = (await import('exceljs')).default;
         const workbook = new ExcelJS.Workbook();
-        await workbook.xlsx.load(await file.arrayBuffer());
+        await workbook.xlsx.load(fileBytes);
         const worksheet = workbook.worksheets.find(sheet => normalize(sheet.name).startsWith('du lieu phan hoi')) ?? workbook.worksheets[0];
         if (!worksheet) throw new Error('File Excel không có trang tính.');
         sheetRows = [];
@@ -368,6 +381,7 @@ export function ImportResponsesDialog({ surveys, onClose, onImported, onFeedback
       const includesScore = parsedHeaders.some(header => getImportMetadataColumn(header) === 'score');
       const includesMaxScore = parsedHeaders.some(header => getImportMetadataColumn(header) === 'maxScore');
       setCreateAsQuiz(includesScore && includesMaxScore);
+      setSourceFileHash(fileHash);
       setIdempotencyKey(crypto.randomUUID());
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : 'Không thể đọc file dữ liệu.';
@@ -376,18 +390,21 @@ export function ImportResponsesDialog({ surveys, onClose, onImported, onFeedback
       setHeaders([]);
       setRows([]);
       setIdempotencyKey('');
+      setSourceFileHash('');
     } finally {
       setIsReading(false);
     }
   };
 
   const submitImport = async () => {
-    if (!idempotencyKey || builtRows.issueCount > 0 || isImporting) return;
+    if (!idempotencyKey || !sourceFileHash || builtRows.issueCount > 0 || isImporting || (mode === 'existing' && duplicateSource && !allowDuplicateFile)) return;
     setIsImporting(true);
     setError('');
     try {
       const payload = {
         idempotencyKey,
+        sourceFileHash,
+        ...(mode === 'existing' && allowDuplicateFile ? { allowDuplicateFile: true } : {}),
         mode,
         ...(mode === 'existing' ? { surveyId: targetSurveyId } : {
           newSurvey: { title: title.trim(), description: `Được tạo từ file ${fileName}`, questions, isQuiz: createAsQuiz },
@@ -405,6 +422,11 @@ export function ImportResponsesDialog({ surveys, onClose, onImported, onFeedback
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Không nhập được dữ liệu.');
+      if (data.duplicateSource) {
+        setDuplicateSource(true);
+        setAllowDuplicateFile(false);
+        return;
+      }
       await onImported(data.surveyId);
       onFeedback(data.replayed
         ? `Lượt nhập này đã được xử lý trước đó (${data.imported} phản hồi). Không thêm trùng dữ liệu.`
@@ -419,11 +441,11 @@ export function ImportResponsesDialog({ surveys, onClose, onImported, onFeedback
     }
   };
 
-  const canImport = Boolean(idempotencyKey)
+  const canImport = Boolean(idempotencyKey && sourceFileHash)
     && builtRows.rows.length > 0
     && builtRows.issueCount === 0
     && (mode !== 'create' || title.trim().length > 0)
-    && (mode !== 'existing' || Boolean(selectedSurvey));
+    && (mode !== 'existing' || (Boolean(selectedSurvey) && (!duplicateSource || allowDuplicateFile)));
 
   return (
     <div className="fixed inset-0 z-[70] bg-slate-950/50 backdrop-blur-sm p-3 sm:p-6 flex items-center justify-center">
@@ -435,14 +457,15 @@ export function ImportResponsesDialog({ surveys, onClose, onImported, onFeedback
               <h2 className="font-display text-xl sm:text-2xl font-bold text-text-primary">Nhập phản hồi từ Excel</h2>
               <p className="text-sm text-text-secondary mt-1">Xem trước trước khi thêm; phản hồi hiện có không bị ghi đè hoặc xóa.</p>
               <p className="text-xs text-text-secondary mt-1">Nên xuất bản sao lưu trước lần nhập đầu tiên.</p>
+              <p className="text-xs text-text-secondary mt-1">Việc kiểm tra tệp trùng áp dụng cho các lần nhập từ bản cập nhật này.</p>
             </div>
           </div>
-          <button onClick={onClose} aria-label="Đóng" className="p-2 rounded-lg hover:bg-surface-container-low text-text-secondary cursor-pointer"><X size={20} /></button>
+          <button onClick={onClose} disabled={isImporting} aria-label="Đóng" className="p-2 rounded-lg hover:bg-surface-container-low text-text-secondary cursor-pointer disabled:opacity-50"><X size={20} /></button>
         </header>
 
         <div className="p-5 sm:p-6 space-y-5">
           <label className="block border-2 border-dashed border-border-subtle hover:border-primary/50 rounded-2xl p-6 text-center cursor-pointer transition-colors">
-            <input type="file" accept=".xlsx,.csv" className="sr-only" onChange={event => void handleFile(event.target.files?.[0])} />
+            <input type="file" accept=".xlsx,.csv" disabled={isReading || isImporting} className="sr-only" onChange={event => { const file = event.currentTarget.files?.[0]; event.currentTarget.value = ''; void handleFile(file); }} />
             {isReading ? <Loader2 size={28} className="mx-auto animate-spin text-primary" /> : <Upload size={28} className="mx-auto text-primary" />}
             <span className="block mt-2 font-bold text-text-primary">{fileName || 'Chọn file Google Forms (.xlsx, .csv)'}</span>
             <span className="block mt-1 text-xs text-text-secondary">Tối đa 5 MB, 5000 dòng phản hồi và 100 cột</span>
@@ -453,7 +476,7 @@ export function ImportResponsesDialog({ surveys, onClose, onImported, onFeedback
               <div className="grid sm:grid-cols-2 gap-4">
                 <label className="text-sm font-semibold text-text-primary">
                   Cách nhập
-                  <select value={mode} onChange={event => setMode(event.target.value as 'create' | 'existing')} className="mt-2 w-full rounded-xl border border-border-subtle bg-white p-3">
+                  <select value={mode} disabled={isImporting} onChange={event => { setMode(event.target.value as 'create' | 'existing'); setDuplicateSource(false); setAllowDuplicateFile(false); }} className="mt-2 w-full rounded-xl border border-border-subtle bg-white p-3">
                     <option value="create">Tạo khảo sát mới và nhập phản hồi</option>
                     <option value="existing" disabled={!surveys.length}>Thêm vào khảo sát có sẵn</option>
                   </select>
@@ -461,20 +484,30 @@ export function ImportResponsesDialog({ surveys, onClose, onImported, onFeedback
                 {mode === 'create' ? (
                   <label className="text-sm font-semibold text-text-primary">
                     Tên khảo sát mới
-                    <input value={title} onChange={event => setTitle(event.target.value)} maxLength={255} className="mt-2 w-full rounded-xl border border-border-subtle p-3" />
+                    <input value={title} disabled={isImporting} onChange={event => setTitle(event.target.value)} maxLength={255} className="mt-2 w-full rounded-xl border border-border-subtle p-3" />
                   </label>
                 ) : (
                   <label className="text-sm font-semibold text-text-primary">
                     Khảo sát nhận dữ liệu
-                    <select value={targetSurveyId} onChange={event => { setTargetSurveyId(event.target.value); setColumnMappings({}); }} className="mt-2 w-full rounded-xl border border-border-subtle bg-white p-3">
+                    <select value={targetSurveyId} disabled={isImporting} onChange={event => { setTargetSurveyId(event.target.value); setColumnMappings({}); setDuplicateSource(false); setAllowDuplicateFile(false); }} className="mt-2 w-full rounded-xl border border-border-subtle bg-white p-3">
                       {surveys.map(survey => <option key={survey.id} value={survey.id}>{stripHtml(survey.title)}</option>)}
                     </select>
                   </label>
                 )}
               </div>
 
+              {mode === 'existing' && duplicateSource && (
+                <div className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900" role="alert">
+                  <p className="flex items-start gap-2"><AlertTriangle size={18} className="shrink-0" /><span>Tệp này đã từng được xử lý cho khảo sát. Chưa có phản hồi nào được thêm ở lần này.</span></p>
+                  <label className="mt-3 flex cursor-pointer items-start gap-2">
+                    <input type="checkbox" checked={allowDuplicateFile} disabled={isImporting} onChange={event => setAllowDuplicateFile(event.target.checked)} className="mt-0.5" />
+                    <span>Tôi hiểu có thể tạo phản hồi trùng và vẫn muốn nhập lại tệp này.</span>
+                  </label>
+                </div>
+              )}
+
               {timestampColumn !== null && <p className="text-xs text-text-secondary bg-surface-container-low rounded-xl p-3">Đã nhận diện cột thời gian “{headers[timestampColumn]}”; thời gian gốc được giữ lại khi nhập.</p>}
-              {mode === 'create' && <div className="space-y-2 text-xs text-text-secondary bg-surface-container-low rounded-xl p-3"><p>Loại câu hỏi được đề xuất tự động và có thể chỉnh bên dưới. Câu mới không bắt buộc vì không thể suy ra thiết lập Google Forms.</p>{hasRecordedQuizScores && <label className="flex cursor-pointer items-start gap-2 text-text-primary"><input type="checkbox" checked={createAsQuiz} onChange={event => setCreateAsQuiz(event.target.checked)} className="mt-0.5" /><span><strong>Giữ đây là bài kiểm tra.</strong> Điểm và điểm tối đa trong file sẽ được giữ lại; đáp án đúng không thể suy ra từ bảng phản hồi.</span></label>}</div>}
+              {mode === 'create' && <div className="space-y-2 text-xs text-text-secondary bg-surface-container-low rounded-xl p-3"><p>Loại câu hỏi được đề xuất tự động và có thể chỉnh bên dưới. Câu mới không bắt buộc vì không thể suy ra thiết lập Google Forms.</p>{hasRecordedQuizScores && <label className="flex cursor-pointer items-start gap-2 text-text-primary"><input type="checkbox" checked={createAsQuiz} disabled={isImporting} onChange={event => setCreateAsQuiz(event.target.checked)} className="mt-0.5" /><span><strong>Giữ đây là bài kiểm tra.</strong> Điểm và điểm tối đa trong file sẽ được giữ lại; đáp án đúng không thể suy ra từ bảng phản hồi.</span></label>}</div>}
 
               <div className="rounded-2xl border border-border-subtle overflow-hidden">
                 <div className="p-4 bg-surface-container-low flex justify-between gap-3">
@@ -489,11 +522,11 @@ export function ImportResponsesDialog({ surveys, onClose, onImported, onFeedback
                         <td className="p-3 font-semibold text-text-primary max-w-[240px]">{header}</td>
                         <td className="p-3">
                           {mode === 'create' ? (
-                            <select value={initializedTypes[index] || 'text'} onChange={event => setQuestionTypes(previous => ({ ...previous, [index]: event.target.value as QuestionType }))} className="w-full rounded-lg border border-border-subtle p-2">
+                            <select value={initializedTypes[index] || 'text'} disabled={isImporting} onChange={event => setQuestionTypes(previous => ({ ...previous, [index]: event.target.value as QuestionType }))} className="w-full rounded-lg border border-border-subtle p-2">
                               {QUESTION_TYPES.map(type => <option key={type.value} value={type.value}>{type.label}</option>)}
                             </select>
                           ) : (
-                            <select value={suggestedMappings[index] || ''} onChange={event => setColumnMappings(previous => ({ ...previous, [index]: event.target.value }))} className="w-full rounded-lg border border-border-subtle p-2">
+                            <select value={suggestedMappings[index] || ''} disabled={isImporting} onChange={event => setColumnMappings(previous => ({ ...previous, [index]: event.target.value }))} className="w-full rounded-lg border border-border-subtle p-2">
                               <option value="">Bỏ qua cột này</option>
                               {(selectedSurvey?.questions || []).map(question => <option key={question.id} value={question.id}>{stripHtml(question.text)}</option>)}
                             </select>

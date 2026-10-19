@@ -47,6 +47,9 @@ export const initDB = async () => {
       );
     `);
     await client.query(`ALTER TABLE surveys ADD COLUMN IF NOT EXISTS sections JSONB NOT NULL DEFAULT '[]'::jsonb;`);
+    // A stable opaque revision lets a participant detect an edit made after
+    // opening the survey without exposing private quiz answer keys.
+    await client.query(`ALTER TABLE surveys ADD COLUMN IF NOT EXISTS survey_revision VARCHAR(64) NOT NULL DEFAULT 'initial';`);
     
     // Create responses table
     await client.query(`

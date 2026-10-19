@@ -53,7 +53,9 @@ app.get('/api/ready', async (_req, res) => {
 // explicitly public; management routes enforce the administrator allowlist.
 app.use('/api', surveyRoutes);
 app.use('/api', requireAdmin, uploadRoutes);
-app.use('/api', requireAdmin, chatRoutes);
+// The chat router protects its administrative endpoint itself and also exposes
+// a rate-limited, survey-scoped endpoint for public participants.
+app.use('/api', chatRoutes);
 app.use('/api', requireAdmin, teamRoutes);
 app.use('/api', requireAdmin, userRoutes);
 

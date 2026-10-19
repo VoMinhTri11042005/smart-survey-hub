@@ -165,6 +165,18 @@ describe('response validation', () => {
     expect(mapped.timeLimitMinutes).toBeNull();
   });
 
+  it('does not insert creation defaults into partial survey updates', () => {
+    const parsed = UpdateSurveySchema.parse({
+      questions: [{ id: 'q1', type: 'text', text: 'Câu hỏi mới', required: true }],
+    });
+    expect(Object.keys(parsed)).toEqual(['questions']);
+    for (const field of ['sections', 'isQuiz', 'showScore', 'displayMode', 'closesAt', 'status', 'maxAttemptsPerDevice', 'timeLimitMinutes']) {
+      expect(parsed).not.toHaveProperty(field);
+    }
+    const created = CreateSurveySchema.parse({ title: 'Mới', questions: [] });
+    expect(created).toMatchObject({ isQuiz: false, showScore: true, sections: [], status: 'live' });
+  });
+
   it('keeps an optional response schema snapshot distinct from legacy rows', () => {
     const snapshot = {
       schemaVersion: 1,

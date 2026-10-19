@@ -1,21 +1,7 @@
 import { createContext, useContext, useState, useCallback, useEffect, useRef, type ReactNode } from 'react';
-import type { Survey, SurveyAnswer, SurveyQuestion, SurveyResponse, SurveySection, SurveyTemplateData, TeamMember, TeamRole, SurveyDisplayMode } from '../types';
+import type { Survey, SurveyAnswer, SurveyQuestion, SurveyResponse, SurveyTemplateData, TeamMember, TeamRole, SurveyDisplayMode } from '../types';
 import { API_BASE, apiFetch } from '../utils/api';
-
-interface SurveyDraft {
-  id: string;
-  title: string;
-  description: string;
-  questions: SurveyQuestion[];
-  sections?: SurveySection[];
-  isQuiz?: boolean;
-  showScore?: boolean;
-  displayMode?: SurveyDisplayMode;
-  closesAt?: string | null;
-  timeLimitMinutes?: number | null;
-  maxAttemptsPerDevice?: number | null;
-  updatedAt?: string;
-}
+import { createDraftId, findDraftById, markLocalDraftSynced, mergeDrafts, readLocalDrafts, removeLocalDraft, writeLocalDraft, type SurveyDraft } from '../utils/surveyDrafts';
 
 interface SurveyContextType {
   surveys: Survey[];
@@ -39,12 +25,15 @@ interface SurveyContextType {
   startFreshSurvey: () => void;
   freshBuilderRequestId: number | null;
   consumeFreshBuilderRequest: (requestId: number) => void;
+  pendingDraft: SurveyDraft | null;
+  openDraft: (id: string) => boolean;
+  consumePendingDraft: (id: string) => void;
   setSearchQuery: (query: string) => void;
   fetchDrafts: () => Promise<SurveyDraft[]>;
   saveDraft: (draft: Partial<SurveyDraft> & { title?: string; description?: string; questions?: SurveyQuestion[] }) => Promise<SurveyDraft>;
   deleteDraft: (id: string) => Promise<void>;
 
-  submitResponse: (surveyId: string, respondentId: string, answers: Record<string, SurveyAnswer>) => Promise<SurveyResponse>;
+  submitResponse: (surveyId: string, respondentId: string, answers: Record<string, SurveyAnswer>, surveyRevision?: string) => Promise<SurveyResponse>;
   fetchResponses: (surveyId: string) => Promise<SurveyResponse[]>;
   fetchMyResponse: (surveyId: string, respondentId: string) => Promise<SurveyResponse | null>;
   resetResponses: (surveyId: string) => Promise<number>;
@@ -123,12 +112,13 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
 
   const [currentSurvey, setCurrentSurvey] = useState<Survey | null>(null);
   const [freshBuilderRequestId, setFreshBuilderRequestId] = useState<number | null>(null);
+  const [pendingDraft, setPendingDraft] = useState<SurveyDraft | null>(null);
   const freshBuilderSequenceRef = useRef(0);
   const [isLoading, setIsLoading] = useState(false);
   const [pendingTemplate, setPendingTemplate] = useState<SurveyTemplateData | null>(null);
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [drafts, setDrafts] = useState<any[]>([]);
+  const [drafts, setDrafts] = useState<SurveyDraft[]>([]);
 
   const requestFreshBuilder = useCallback(() => {
     freshBuilderSequenceRef.current += 1;
@@ -144,52 +134,22 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
     // builder to open a new, blank session instead of restoring the latest one.
     setCurrentSurvey(null);
     setPendingTemplate(null);
+    setPendingDraft(null);
     requestFreshBuilder();
   }, [requestFreshBuilder]);
 
-  const readLocalDrafts = useCallback(() => {
-    const keys = ['smart-survey-hub-builder-draft', 'smart-survey-hub-drafts'];
-    const collected: any[] = [];
+  const openDraft = useCallback((id: string) => {
+    const draft = findDraftById(drafts, id);
+    if (!draft) return false;
+    setCurrentSurvey(null);
+    setPendingTemplate(null);
+    setFreshBuilderRequestId(null);
+    setPendingDraft(draft);
+    return true;
+  }, [drafts]);
 
-    for (const key of keys) {
-      try {
-        const raw = localStorage.getItem(key);
-        if (!raw) continue;
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) {
-          collected.push(...parsed);
-        } else if (parsed && typeof parsed === 'object') {
-          collected.push(parsed);
-        }
-      } catch (error) {
-        console.warn('Failed to read local draft storage', error);
-      }
-    }
-
-    const seen = new Set<string>();
-    return collected
-      .filter(Boolean)
-      .filter((item: any) => item && (item.id || item.title || item.description || Array.isArray(item.questions)))
-      .filter((item: any) => {
-        if (!item.id) return true;
-        if (seen.has(item.id)) return false;
-        seen.add(item.id);
-        return true;
-      })
-      .map((item: any) => ({
-        id: item.id || `draft-${Date.now()}`,
-        title: item.title || 'Khảo sát nháp',
-        description: item.description || '',
-        questions: Array.isArray(item.questions) ? item.questions : [],
-        sections: Array.isArray(item.sections) ? item.sections : [],
-        isQuiz: Boolean(item.isQuiz),
-        showScore: item.showScore !== false,
-        displayMode: item.displayMode || 'single',
-        closesAt: item.closesAt || null,
-        maxAttemptsPerDevice: normalizeLegacyOptionalLimit(item.maxAttemptsPerDevice ?? item.max_attempts_per_device),
-        timeLimitMinutes: normalizeLegacyOptionalLimit(item.timeLimitMinutes ?? item.time_limit_minutes),
-      updatedAt: item.updatedAt || new Date().toISOString(),
-    }));
+  const consumePendingDraft = useCallback((id: string) => {
+    setPendingDraft(current => current?.id === id ? null : current);
   }, []);
 
   const fetchSurveys = useCallback(async () => {
@@ -330,26 +290,29 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
     try {
       const res = await apiFetch(`${API_BASE}/surveys/drafts`);
       if (!res.ok) {
-        const localDrafts = readLocalDrafts();
+        const localDrafts = readLocalDrafts(localStorage);
         setDrafts(localDrafts);
         return localDrafts;
       }
       const data = await res.json();
-      const localDrafts = readLocalDrafts();
-      const merged = data.length > 0 ? data : localDrafts;
+      if (!Array.isArray(data)) throw new Error('Dữ liệu bản nháp nhận được không hợp lệ.');
+      // A synchronized cache missing from a successful server response was
+      // removed elsewhere; only unsynchronized local work should reappear.
+      const merged = mergeDrafts(data, readLocalDrafts(localStorage), true);
       setDrafts(merged);
       return merged;
     } catch (error) {
       console.error('Error fetching drafts:', error);
-      const localDrafts = readLocalDrafts();
+      const localDrafts = readLocalDrafts(localStorage);
       setDrafts(localDrafts);
       return localDrafts;
     }
-  }, [readLocalDrafts]);
+  }, []);
 
-  const saveDraft = useCallback(async (draft: Partial<any> & { title?: string; description?: string; questions?: SurveyQuestion[] }) => {
+  const saveDraft = useCallback(async (draft: Partial<SurveyDraft>) => {
+    const requestedAt = new Date().toISOString();
     const payload = {
-      id: draft.id || `draft-${Date.now()}`,
+      id: draft.id || createDraftId(),
       title: draft.title || 'Khảo sát nháp',
       description: draft.description || '',
       questions: draft.questions || [],
@@ -370,6 +333,11 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
       });
       if (!res.ok) throw new Error(await readApiError(res, 'Không thể lưu bản nháp.'));
       const saved = await res.json();
+      try {
+        markLocalDraftSynced(localStorage, payload);
+      } catch (error) {
+        console.warn('Could not mark local draft as synchronized', error);
+      }
       setDrafts(prev => {
         const next = prev.filter(item => item.id !== saved.id);
         return [saved, ...next];
@@ -378,28 +346,12 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       console.error('Error saving draft:', error);
       if (import.meta.env.PROD) throw error;
-      const fallback = { ...payload, updatedAt: new Date().toISOString() };
-      const key = 'smart-survey-hub-builder-draft';
-      const legacyKey = 'smart-survey-hub-drafts';
-
-      const safeArray = (value: string | null) => {
-        if (!value) return [];
-        try {
-          const parsed = JSON.parse(value);
-          return Array.isArray(parsed) ? parsed : [parsed].filter(Boolean);
-        } catch {
-          return [];
-        }
-      };
-
-      const existing = safeArray(localStorage.getItem(key));
-      const legacyExisting = safeArray(localStorage.getItem(legacyKey));
-      const next = [fallback, ...existing.filter((item: any) => item.id !== payload.id), ...legacyExisting.filter((item: any) => item.id !== payload.id)];
-      localStorage.setItem(key, JSON.stringify(fallback));
-      localStorage.setItem(legacyKey, JSON.stringify(next));
-      const merged = [fallback, ...next.filter((item: any) => item.id !== fallback.id)];
-      setDrafts(merged);
-      return fallback;
+      const fallback: SurveyDraft = { ...payload, updatedAt: requestedAt };
+      const existing = findDraftById(readLocalDrafts(localStorage), payload.id);
+      const latest = existing && Date.parse(existing.updatedAt || '') >= Date.parse(requestedAt) ? existing : fallback;
+      if (latest === fallback) writeLocalDraft(localStorage, fallback);
+      setDrafts(prev => mergeDrafts([latest], prev.filter(item => item.id !== latest.id)));
+      return latest;
     }
   }, []);
 
@@ -412,18 +364,10 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
       console.warn('Draft delete API unavailable; removing local copy', error);
     }
 
-    // Keep the browser fallback storage in sync, without touching other drafts.
-    for (const key of ['smart-survey-hub-builder-draft', 'smart-survey-hub-drafts']) {
-      try {
-        const raw = localStorage.getItem(key);
-        if (!raw) continue;
-        const value = JSON.parse(raw);
-        const next = Array.isArray(value) ? value.filter((draft: any) => draft?.id !== id) : (value?.id === id || key === 'smart-survey-hub-builder-draft' ? null : value);
-        if (next === null) localStorage.removeItem(key);
-        else localStorage.setItem(key, JSON.stringify(next));
-      } catch (error) {
-        console.warn('Failed to synchronize local draft storage', error);
-      }
+    try {
+      removeLocalDraft(localStorage, id);
+    } catch (error) {
+      console.warn('Failed to synchronize local draft storage', error);
     }
     setDrafts(prev => prev.filter(d => d.id !== id));
   }, []);
@@ -435,12 +379,12 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
     if (currentSurvey?.id === id) setCurrentSurvey(null);
   }, [currentSurvey?.id]);
 
-  const submitResponse = useCallback(async (surveyId: string, respondentId: string, answers: Record<string, SurveyAnswer>) => {
+  const submitResponse = useCallback(async (surveyId: string, respondentId: string, answers: Record<string, SurveyAnswer>, surveyRevision?: string) => {
     try {
       const res = await apiFetch(`${API_BASE}/surveys/${surveyId}/responses`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ respondentId, answers })
+        body: JSON.stringify({ respondentId, answers, surveyRevision })
       });
       if (!res.ok) {
         const body = await res.json().catch(() => null);
@@ -560,6 +504,7 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
 
   const loadTemplate = useCallback((template: SurveyTemplateData) => {
     setCurrentSurvey(null);
+    setPendingDraft(null);
     requestFreshBuilder();
     setPendingTemplate(template);
   }, [requestFreshBuilder]);
@@ -631,6 +576,9 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
       startFreshSurvey,
       freshBuilderRequestId,
       consumeFreshBuilderRequest,
+      pendingDraft,
+      openDraft,
+      consumePendingDraft,
       setSearchQuery,
       drafts,
       fetchDrafts,

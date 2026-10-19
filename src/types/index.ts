@@ -60,6 +60,8 @@ export interface Survey {
   sections?: SurveySection[];
   createdAt: string;
   status: 'draft' | 'live' | 'closed';
+  /** Opaque version of the questionnaire returned by the server. */
+  surveyRevision?: string;
   closesAt?: string | null;
   isQuiz?: boolean;
   showScore?: boolean;

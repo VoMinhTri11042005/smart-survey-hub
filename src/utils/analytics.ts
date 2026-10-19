@@ -295,7 +295,7 @@ function isCorrectAnswer(question: Survey['questions'][number], answer: unknown)
  * include responses from that exact instrument (or legacy rows that predate
  * snapshots and are explicitly labelled as such in the UI).
  */
-function usesCurrentQuestionSchema(response: SurveyResponse, currentQuestion: Survey['questions'][number]): boolean {
+export function usesCurrentQuestionSchema(response: SurveyResponse, currentQuestion: Survey['questions'][number]): boolean {
   if (!responseUsesSnapshot(response)) return true;
   const captured = getSnapshotQuestion(response, currentQuestion.id);
   return Boolean(captured)

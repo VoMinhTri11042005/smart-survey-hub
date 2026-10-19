@@ -16,7 +16,7 @@ export function Dashboard({
   onShowToast?: (msg: string, type: 'success' | 'error' | 'info') => void;
   onAddNotification?: (msg: string) => void;
 }) {
-  const { surveys, drafts, fetchSurveys, fetchDrafts, setCurrentSurvey, startFreshSurvey, deleteSurvey, deleteDraft, searchQuery } = useSurvey();
+  const { surveys, drafts, fetchSurveys, fetchDrafts, setCurrentSurvey, startFreshSurvey, openDraft, deleteSurvey, deleteDraft, searchQuery } = useSurvey();
   const [shareModal, setShareModal] = useState<{ id: string; title: string } | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; title: string } | null>(null);
   const [deleteDraftConfirm, setDeleteDraftConfirm] = useState<{ id: string; title: string } | null>(null);
@@ -41,7 +41,7 @@ export function Dashboard({
     );
   }, [surveys, searchQuery]);
 
-  const draftCards = useMemo(() => drafts.map((draft: any) => ({
+  const draftCards = useMemo(() => drafts.map(draft => ({
     id: draft.id,
     title: draft.title || 'Bản nháp chưa có tiêu đề',
     description: draft.description || 'Chưa có mô tả',
@@ -208,7 +208,7 @@ export function Dashboard({
               <span className="text-text-secondary text-sm font-medium">{draftCards.length} bản nháp</span>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {draftCards.map((draft: any) => (
+               {draftCards.map(draft => (
                 <div key={draft.id} className="bg-surface-container-lowest rounded-2xl border border-border-subtle p-5 hover:shadow-lg transition-all group flex flex-col min-w-0">
                   <div className="flex justify-between items-start mb-4">
                     <div className="px-2.5 py-1 rounded-md flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide bg-surface-container-high text-text-secondary">
@@ -225,7 +225,10 @@ export function Dashboard({
                       <Trash2 size={16} />
                     </button>
                   </div>
-                  <button type="button" onClick={() => onViewChange?.('builder')} className="text-left cursor-pointer min-w-0">
+                  <button type="button" onClick={() => {
+                    if (openDraft(draft.id)) onViewChange?.('builder');
+                    else reportActivity('Không tìm thấy bản nháp. Vui lòng tải lại danh sách.', 'error');
+                  }} className="text-left cursor-pointer min-w-0">
                     <h4 className="font-display text-lg font-bold text-text-primary group-hover:text-primary transition-colors mb-1 leading-tight line-clamp-2 break-all" title={stripHtml(draft.title)}>{stripHtml(draft.title)}</h4>
                     <p className="text-text-secondary text-xs mb-4 line-clamp-2 break-all">{stripHtml(draft.description) || 'Chưa có mô tả'}</p>
                   </button>

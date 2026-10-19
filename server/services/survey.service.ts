@@ -3,7 +3,7 @@
  * Extracted from survey.routes.ts for clean separation of concerns.
  */
 import pool from '../db';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { generateId } from '../utils/helpers';
 import { isIntegerStarRating } from '../../shared/starRating';
 
@@ -20,6 +20,7 @@ const inMemorySurveys: Record<string, any> = {
     isQuiz: false,
     displayMode: 'single',
     showScore: true,
+    surveyRevision: 'initial',
     createdAt: new Date().toISOString(),
     status: 'live'
   }
@@ -48,6 +49,7 @@ export function mapRowToSurvey(row: any) {
     sections: row.sections || [],
     createdAt: row.created_at,
     status: row.status,
+    surveyRevision: row.survey_revision || 'initial',
     closesAt: row.closes_at ? new Date(row.closes_at).toISOString() : null,
     isQuiz: row.is_quiz || false,
     displayMode: row.display_mode || 'single',
@@ -105,6 +107,12 @@ function createSurveySnapshot(questions: unknown, isQuiz: unknown) {
     isQuiz: Boolean(isQuiz),
     questions: questionSnapshot,
   };
+}
+
+function assertSurveyRevision(received: string | undefined, current: string | undefined) {
+  if (received && received !== (current || 'initial')) {
+    throw Object.assign(new Error('Khảo sát đã thay đổi trong khi bạn đang trả lời. Vui lòng tải lại trang và kiểm tra câu trả lời.'), { status: 409 });
+  }
 }
 
 export function computeServerQuizScore(questions: any[], answers: Record<string, any>) {
@@ -368,6 +376,7 @@ export async function createSurvey(data: any) {
       id, title: title || 'Untitled survey', description: description || '',
       questions: questions || [], sections: sections || [], createdAt: new Date().toISOString(),
       status: status || 'live', closesAt: closesAt || null,
+      surveyRevision: 'initial',
       isQuiz: Boolean(isQuiz), displayMode: displayMode || 'single',
       showScore: showScore !== false, maxAttemptsPerDevice: maxAttempts, timeLimitMinutes: timeLimit,
     };
@@ -421,6 +430,7 @@ export async function updateSurvey(id: string, data: any) {
       closesAt: valueWhenProvided(data, 'closesAt', existing.closesAt),
       maxAttemptsPerDevice: toOptionalPositiveInteger(valueWhenProvided(data, 'maxAttemptsPerDevice', existing.maxAttemptsPerDevice), 100),
       timeLimitMinutes: toOptionalPositiveInteger(valueWhenProvided(data, 'timeLimitMinutes', existing.timeLimitMinutes), 1_440),
+      surveyRevision: randomUUID(),
     };
     if (data.questions !== undefined || data.sections !== undefined) {
       assertMergedSurveyStructure(survey.questions, survey.sections);
@@ -455,9 +465,9 @@ export async function updateSurvey(id: string, data: any) {
 
   const result = await pool.query(
     `UPDATE surveys SET title = $2, description = $3, questions = $4, sections = $5, is_quiz = $6, display_mode = $7,
-     show_score = $8, closes_at = $9, max_attempts_per_device = $10, time_limit_minutes = $11, status = $12
+     show_score = $8, closes_at = $9, max_attempts_per_device = $10, time_limit_minutes = $11, status = $12, survey_revision = $13
      WHERE id = $1 RETURNING *`,
-    [id, merged.title, merged.description, JSON.stringify(merged.questions), JSON.stringify(merged.sections || []), Boolean(merged.isQuiz), merged.displayMode || 'single', merged.showScore !== false, merged.closesAt ? new Date(merged.closesAt).toISOString() : null, maxAttempts, timeLimit, merged.status || 'live']
+    [id, merged.title, merged.description, JSON.stringify(merged.questions), JSON.stringify(merged.sections || []), Boolean(merged.isQuiz), merged.displayMode || 'single', merged.showScore !== false, merged.closesAt ? new Date(merged.closesAt).toISOString() : null, maxAttempts, timeLimit, merged.status || 'live', randomUUID()]
   );
   if (result.rows.length === 0) return null;
   return mapRowToSurvey(result.rows[0]);
@@ -472,7 +482,7 @@ export async function deleteSurvey(id: string) {
 // ─── Responses ───
 
 export async function submitResponse(surveyId: string, data: any) {
-  const { respondentId, answers } = data;
+  const { respondentId, answers, surveyRevision } = data;
   const deviceId = getRespondentDeviceId(respondentId);
 
   if (!process.env.DATABASE_URL) {
@@ -481,9 +491,10 @@ export async function submitResponse(surveyId: string, data: any) {
     if (survey.status !== 'live' || (survey.closesAt && new Date(survey.closesAt).getTime() <= Date.now())) {
       throw Object.assign(new Error('Khảo sát đã đóng hoặc chưa được phát hành.'), { status: 410 });
     }
+    assertSurveyRevision(surveyRevision, survey.surveyRevision);
     validateResponseAnswers(survey.questions, answers);
     const screenedOut = isScreenedOut(survey.questions, answers);
-    const surveySnapshot = createSurveySnapshot(survey.questions, survey.isQuiz);
+    const surveySnapshot = surveyRevision ? createSurveySnapshot(survey.questions, survey.isQuiz) : null;
     let finalScore: number | null = null;
     let finalTotal: number | null = null;
     if (survey?.isQuiz && !screenedOut) {
@@ -508,28 +519,32 @@ export async function submitResponse(surveyId: string, data: any) {
     return obj;
   }
 
-  // DB path
-  const surveyResult = await pool.query('SELECT * FROM surveys WHERE id = $1', [surveyId]);
-  if (surveyResult.rows.length === 0) return null; // survey not found
-
-  const survey = surveyResult.rows[0];
-  if (survey.status !== 'live' || (survey.closes_at && new Date(survey.closes_at).getTime() <= Date.now())) {
-    throw Object.assign(new Error('Khảo sát đã đóng hoặc chưa được phát hành.'), { status: 410 });
-  }
-  const questions = typeof survey.questions === 'string' ? JSON.parse(survey.questions) : survey.questions;
-  validateResponseAnswers(questions, answers);
-  const screenedOut = isScreenedOut(questions, answers);
-  const surveySnapshot = createSurveySnapshot(questions, survey.is_quiz);
-  let finalScore: number | null = null;
-  let finalTotal: number | null = null;
-  if (survey.is_quiz && !screenedOut) {
-    const computed = computeServerQuizScore(questions, answers || {});
-    finalScore = computed.score; finalTotal = computed.totalPossible;
-  }
-
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    // Keep the survey row stable until the response and its snapshot commit.
+    // This closes the race between reading the questionnaire and an edit.
+    const surveyResult = await client.query('SELECT * FROM surveys WHERE id = $1 FOR SHARE', [surveyId]);
+    if (surveyResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return null;
+    }
+    const survey = surveyResult.rows[0];
+    if (survey.status !== 'live' || (survey.closes_at && new Date(survey.closes_at).getTime() <= Date.now())) {
+      throw Object.assign(new Error('Khảo sát đã đóng hoặc chưa được phát hành.'), { status: 410 });
+    }
+    assertSurveyRevision(surveyRevision, survey.survey_revision);
+    const questions = typeof survey.questions === 'string' ? JSON.parse(survey.questions) : survey.questions;
+    validateResponseAnswers(questions, answers);
+    const screenedOut = isScreenedOut(questions, answers);
+    // Old clients can still submit, but their version cannot be verified.
+    const surveySnapshot = surveyRevision ? createSurveySnapshot(questions, survey.is_quiz) : null;
+    let finalScore: number | null = null;
+    let finalTotal: number | null = null;
+    if (survey.is_quiz && !screenedOut) {
+      const computed = computeServerQuizScore(questions, answers || {});
+      finalScore = computed.score; finalTotal = computed.totalPossible;
+    }
     await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`response:${surveyId}:${deviceId}`]);
     const existingCheck = await client.query(
       'SELECT id FROM responses WHERE survey_id = $1 AND respondent_id = $2',
@@ -547,12 +562,12 @@ export async function submitResponse(surveyId: string, data: any) {
       ? await client.query(
         `UPDATE responses SET answers = $3, score = $4, total_quiz_questions = $5, screened_out = $6, survey_snapshot = $7, submitted_at = CURRENT_TIMESTAMP
          WHERE survey_id = $1 AND respondent_id = $2 RETURNING *`,
-        [surveyId, respondentId, JSON.stringify(answers || {}), finalScore, finalTotal, screenedOut, JSON.stringify(surveySnapshot)],
+        [surveyId, respondentId, JSON.stringify(answers || {}), finalScore, finalTotal, screenedOut, surveySnapshot ? JSON.stringify(surveySnapshot) : null],
       )
       : await client.query(
         `INSERT INTO responses (id, survey_id, respondent_id, answers, score, total_quiz_questions, screened_out, survey_snapshot)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
-        [generateId(), surveyId, respondentId, JSON.stringify(answers || {}), finalScore, finalTotal, screenedOut, JSON.stringify(surveySnapshot)],
+        [generateId(), surveyId, respondentId, JSON.stringify(answers || {}), finalScore, finalTotal, screenedOut, surveySnapshot ? JSON.stringify(surveySnapshot) : null],
       );
     await client.query('COMMIT');
     return mapRowToResponse(result.rows[0]);
@@ -575,6 +590,14 @@ function canonicalJson(value: unknown): string {
     return `{${entries.map(([key, item]) => `${JSON.stringify(key)}:${canonicalJson(item)}`).join(',')}}`;
   }
   return JSON.stringify(value) ?? 'null';
+}
+
+// Track exact source files, not answer contents: two respondents may provide
+// identical answers, and both must remain in the imported batch. The reserved
+// marker is kept in the existing batch table so backups preserve it as well.
+export function importSourceMarkerKey(surveyId: string, sourceFileHash: string): string {
+  const digest = createHash('sha256').update(canonicalJson([surveyId, sourceFileHash])).digest('hex');
+  return `source-sha256:${digest}`;
 }
 
 function validateImportedAnswers(questions: any[], answers: Record<string, unknown>) {
@@ -655,6 +678,10 @@ export async function importResponses(data: any) {
     surveyId: data.surveyId || null,
     newSurvey: data.newSurvey || null,
     responses: data.responses,
+    ...(data.sourceFileHash ? {
+      sourceFileHash: data.sourceFileHash,
+      allowDuplicateFile: Boolean(data.allowDuplicateFile),
+    } : {}),
   })).digest('hex');
 
   try {
@@ -679,6 +706,22 @@ export async function importResponses(data: any) {
     }
 
     let surveyId = data.surveyId;
+    let sourceMarker = data.sourceFileHash && data.mode === 'existing'
+      ? importSourceMarkerKey(surveyId, data.sourceFileHash)
+      : null;
+    if (sourceMarker) {
+      // Use a separate advisory-lock namespace from request-key locks so two
+      // different requests for the same file cannot both pass this check.
+      await client.query('SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))', ['survey-import-source', sourceMarker]);
+      const previousSource = await client.query(
+        'SELECT idempotency_key FROM survey_import_batches WHERE idempotency_key = $1',
+        [sourceMarker],
+      );
+      if (previousSource.rows.length && !data.allowDuplicateFile) {
+        await client.query('COMMIT');
+        return { surveyId, imported: 0, skipped: 0, replayed: false, duplicateSource: true };
+      }
+    }
     let questions = data.newSurvey?.questions;
     let isQuiz = false;
     if (data.mode === 'create') {
@@ -690,6 +733,10 @@ export async function importResponses(data: any) {
          VALUES ($1, $2, $3, $4, $5, 'single', TRUE, 'live')`,
         [surveyId, survey.title, survey.description || '', JSON.stringify(survey.questions), isQuiz],
       );
+      if (data.sourceFileHash) {
+        sourceMarker = importSourceMarkerKey(surveyId, data.sourceFileHash);
+        await client.query('SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))', ['survey-import-source', sourceMarker]);
+      }
     } else {
       const surveyResult = await client.query('SELECT questions, is_quiz FROM surveys WHERE id = $1 FOR SHARE', [surveyId]);
       if (!surveyResult.rows.length) {
@@ -737,6 +784,13 @@ export async function importResponses(data: any) {
        VALUES ($1, $2, $3, $4, $5)`,
       [data.idempotencyKey, requestHash, surveyId, imported, skipped],
     );
+    if (sourceMarker) {
+      await client.query(
+        `INSERT INTO survey_import_batches (idempotency_key, request_hash, survey_id, imported_count, skipped_count)
+         VALUES ($1, $2, $3, $4, $5) ON CONFLICT (idempotency_key) DO NOTHING`,
+        [sourceMarker, requestHash, surveyId, imported, skipped],
+      );
+    }
     await client.query('COMMIT');
     return { surveyId, imported, skipped, replayed: false };
   } catch (error) {

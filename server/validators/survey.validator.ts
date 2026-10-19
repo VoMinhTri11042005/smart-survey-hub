@@ -30,6 +30,10 @@ const OptionalPositiveIntegerSchema = (maximum: number) => z.preprocess(
   value => value === 0 ? null : value,
   z.number().int().positive().max(maximum).nullable().optional().default(null),
 );
+const PositiveIntegerOrNullSchema = (maximum: number) => z.preprocess(
+  value => value === 0 ? null : value,
+  z.number().int().positive().max(maximum).nullable(),
+);
 
 function validateQuestionConfiguration(
   question: {
@@ -178,8 +182,23 @@ function validateSurveyPayload(
 const SurveyPayloadSchema = z.object({
   id: z.string().optional(),
   title: z.string().min(1, 'Tiêu đề không được để trống.'),
-  description: z.string().optional().default(''),
+  description: z.string(),
   questions: z.array(SurveyQuestionSchema),
+  sections: z.array(SurveySectionSchema).max(100),
+  isQuiz: z.boolean(),
+  displayMode: z.enum(['single', 'all']),
+  showScore: z.boolean(),
+  closesAt: z.string().nullable(),
+  maxAttemptsPerDevice: PositiveIntegerOrNullSchema(100),
+  timeLimitMinutes: PositiveIntegerOrNullSchema(1_440),
+  status: z.enum(['draft', 'live', 'closed']),
+});
+
+// Defaults are for creation only. Applying partial() to fields with defaults
+// causes omitted update fields to be populated again by Zod, silently resetting
+// unrelated settings on every partial update.
+export const CreateSurveySchema = SurveyPayloadSchema.extend({
+  description: z.string().optional().default(''),
   sections: z.array(SurveySectionSchema).max(100).optional().default([]),
   isQuiz: z.boolean().optional().default(false),
   displayMode: z.enum(['single', 'all']).optional().default('single'),
@@ -188,9 +207,7 @@ const SurveyPayloadSchema = z.object({
   maxAttemptsPerDevice: OptionalPositiveIntegerSchema(100),
   timeLimitMinutes: OptionalPositiveIntegerSchema(1_440),
   status: z.enum(['draft', 'live', 'closed']).optional().default('live'),
-});
-
-export const CreateSurveySchema = SurveyPayloadSchema.superRefine(validateSurveyPayload);
+}).superRefine(validateSurveyPayload);
 export const UpdateSurveySchema = SurveyPayloadSchema.partial().superRefine(validateSurveyPayload);
 
 export const SubmitResponseSchema = z.object({
@@ -198,6 +215,9 @@ export const SubmitResponseSchema = z.object({
     .max(255)
     .regex(/^device-[a-z0-9-]+-attempt-[1-9]\d*$/i, 'Định danh lượt làm khảo sát không hợp lệ.'),
   answers: z.record(z.string(), AnswerValueSchema),
+  // Optional for clients opened before deployment; those submissions are
+  // preserved as legacy responses without a verified schema snapshot.
+  surveyRevision: z.string().min(1).max(64).optional(),
 });
 
 const ImportedQuestionSchema = z.object({
@@ -240,9 +260,12 @@ const ImportedResponseSchema = z.object({
 });
 
 export const ImportResponsesSchema = z.object({
-  idempotencyKey: z.string().min(16).max(128),
+  // Source markers share the batch table, but are never valid request keys.
+  idempotencyKey: z.string().min(16).max(128).refine(value => !value.startsWith('source-sha256:'), 'Mã nhập không hợp lệ.'),
   mode: z.enum(['create', 'existing']),
   surveyId: z.string().min(1).optional(),
+  sourceFileHash: z.string().regex(/^[0-9a-f]{64}$/).optional(),
+  allowDuplicateFile: z.boolean().optional(),
   newSurvey: z.object({
     title: z.string().trim().min(1).max(255),
     description: z.string().max(5000).optional().default(''),
@@ -251,6 +274,9 @@ export const ImportResponsesSchema = z.object({
   }).optional(),
   responses: z.array(ImportedResponseSchema).min(1).max(5000),
 }).superRefine((value, context) => {
+  if (value.allowDuplicateFile && (value.mode !== 'existing' || !value.sourceFileHash)) {
+    context.addIssue({ code: 'custom', path: ['allowDuplicateFile'], message: 'Chỉ có thể nhập lại tệp xác định vào khảo sát có sẵn.' });
+  }
   if (value.mode === 'existing' && !value.surveyId) {
     context.addIssue({ code: 'custom', path: ['surveyId'], message: 'Hãy chọn khảo sát nhận dữ liệu.' });
   }

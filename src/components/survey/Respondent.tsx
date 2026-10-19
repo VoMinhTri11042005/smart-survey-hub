@@ -460,7 +460,7 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
     try {
       const submittedAnswers = answerOverrides ?? answersRef.current;
 
-      const submittedResponse = await submitResponse(survey.id, respondentId, submittedAnswers);
+      const submittedResponse = await submitResponse(survey.id, respondentId, submittedAnswers, survey.surveyRevision);
       if (survey?.isQuiz && !isScreenOutResponse) {
         setQuizScore(typeof submittedResponse.score === 'number' ? submittedResponse.score : 0);
         setQuizTotal(typeof submittedResponse.totalQuizQuestions === 'number' ? submittedResponse.totalQuizQuestions : 0);

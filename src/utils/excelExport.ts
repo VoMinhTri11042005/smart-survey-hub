@@ -1,6 +1,6 @@
 import ExcelJS from 'exceljs';
 import type { Survey, SurveyQuestion, SurveyResponse } from '../types';
-import { choiceDisplayKey, computeSurveyAnalytics } from './analytics';
+import { choiceDisplayKey, computeSurveyAnalytics, usesCurrentQuestionSchema } from './analytics';
 import { cleanHtmlWhitespace } from './stringUtils';
 import { parseStoredStarRating } from '../../shared/starRating';
 import { isPersonalIdentifierQuestion, normalizeTextCategoryValue } from './textAnalytics';
@@ -124,6 +124,64 @@ function drawBarChart(title: string, labels: string[], values: number[], color =
     ctx.fillText(valueLabel, x + Math.max(0, (barWidth - ctx.measureText(valueLabel).width) / 2), y - 8);
     ctx.fillStyle = '#475569'; ctx.font = '13px Arial';
     ctx.save(); ctx.translate(x + barWidth / 2, top + height + 18); ctx.rotate(-0.42); ctx.textAlign = 'right'; ctx.fillText(label, 0, 0); ctx.restore();
+  });
+  return canvas.toDataURL('image/png');
+}
+
+/** Render all series in a clustered chart, including a key for the groups. */
+function drawGroupedBarChart(title: string, labels: string[], series: NativeChartSpec['series']) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 1100;
+  canvas.height = 520;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return '';
+
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = '#172033';
+  ctx.font = 'bold 26px Arial';
+  ctx.fillText(title, 55, 55);
+
+  const left = 70;
+  const top = 90;
+  const width = 720;
+  const height = 320;
+  const max = Math.max(/%|tỷ lệ/i.test(title) ? 100 : 1, ...series.flatMap(item => item.values.filter(Number.isFinite)));
+  ctx.strokeStyle = '#dbe3ef';
+  ctx.lineWidth = 1;
+  for (let tick = 0; tick <= 4; tick++) {
+    const y = top + height - (height * tick) / 4;
+    ctx.beginPath(); ctx.moveTo(left, y); ctx.lineTo(left + width, y); ctx.stroke();
+    ctx.fillStyle = '#64748b'; ctx.font = '14px Arial'; ctx.fillText(String(Math.round((max * tick) / 4)), 25, y + 5);
+  }
+
+  const slot = width / Math.max(labels.length, 1);
+  const groupWidth = slot * 0.75;
+  const barWidth = Math.min(35, groupWidth / Math.max(series.length, 1));
+  labels.forEach((rawLabel, categoryIndex) => {
+    const groupLeft = left + categoryIndex * slot + (slot - barWidth * series.length) / 2;
+    series.forEach((item, seriesIndex) => {
+      const value = item.values[categoryIndex];
+      if (!Number.isFinite(value)) return;
+      const barHeight = (value / max) * height;
+      ctx.fillStyle = `#${item.color ?? PALETTE[seriesIndex % PALETTE.length]}`;
+      ctx.fillRect(groupLeft + seriesIndex * barWidth, top + height - barHeight, Math.max(1, barWidth - 2), barHeight);
+    });
+    ctx.fillStyle = '#475569'; ctx.font = '13px Arial';
+    ctx.save(); ctx.translate(left + categoryIndex * slot + slot / 2, top + height + 18); ctx.rotate(-0.42); ctx.textAlign = 'right'; ctx.fillText(chartLabel(rawLabel), 0, 0); ctx.restore();
+  });
+
+  ctx.font = 'bold 16px Arial';
+  ctx.fillStyle = '#172033';
+  ctx.fillText('Nhóm', 825, 95);
+  series.forEach((item, index) => {
+    const y = 130 + index * 50;
+    ctx.fillStyle = `#${item.color ?? PALETTE[index % PALETTE.length]}`;
+    ctx.fillRect(825, y - 14, 18, 18);
+    ctx.fillStyle = '#172033'; ctx.font = '15px Arial';
+    ctx.fillText(chartLabel(item.name, 30), 855, y);
   });
   return canvas.toDataURL('image/png');
 }
@@ -567,7 +625,9 @@ function buildProfessionalSheets(workbook: ExcelJS.Workbook, survey: Survey, res
   });
 
   const cross = workbook.addWorksheet('Phân tích chéo');
-  sheetTitle(cross, 'PHÂN TÍCH CHÉO — MỐI LIÊN HỆ GIỮA CÁC BIẾN', 'Tỷ lệ trong từng nhóm nhân khẩu học; các mẫu nhỏ cần diễn giải thận trọng.', 'H');
+  sheetTitle(cross, 'PHÂN TÍCH CHÉO — MỐI LIÊN HỆ GIỮA CÁC BIẾN', 'Mẫu gồm người trả lời cả hai câu; loại phiên bản khác, phản hồi cũ chưa có phiên bản vẫn được tính. Mẫu nhỏ cần diễn giải thận trọng.', 'H');
+  cross.getCell('A2').alignment = { wrapText: true, vertical: 'middle' };
+  cross.getRow(2).height = 36;
   ['A','B','C','D','E','F','G','H'].forEach((column, index) => cross.getColumn(column).width = [48, 16, 16, 16, 16, 16, 16, 16][index]);
   let crossRow = 4;
   // A cross-tab needs mutually exclusive groups. Multiple-choice responses
@@ -582,39 +642,61 @@ function buildProfessionalSheets(workbook: ExcelJS.Workbook, survey: Survey, res
     const outcome = currentChoiceOptions(outcomeQuestion.id).slice(0, 6).map(option => ({ ...option, label: displayText(option.label) }));
     if (groups.length && outcome.length) {
       cross.mergeCells(`A${crossRow}:H${crossRow}`); cross.getCell(`A${crossRow}`).value = `Tỷ lệ chọn “${displayText(outcomeQuestion.text)}” theo “${displayText(groupQuestion.text)}”`; cross.getCell(`A${crossRow}`).font = { bold: true, color: { argb: `FF${BRAND}` } }; cross.getCell(`A${crossRow}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEDE9FE' } };
-      const groupHeaders = [`Lựa chọn trong “${displayText(outcomeQuestion.text)}”`, ...groups.map(group => group.label)]; cross.getRow(crossRow + 1).values = groupHeaders; styleTableHeader(cross.getRow(crossRow + 1));
       const groupKeys = groups.map(group => ({
         label: group.label,
         key: groupQuestion.type === 'text'
           ? normalizeTextCategoryValue(group.label)?.key ?? ''
           : choiceDisplayKey(group.label),
-      }));
+      })).map(group => {
+        const matchingResponses = responses.filter(response =>
+          usesCurrentQuestionSchema(response, groupQuestion)
+          && groupAnswerKey(groupQuestion, response.answers[groupQuestion.id]) === group.key,
+        );
+        const outcomeResponses = matchingResponses.filter(response => {
+          if (!usesCurrentQuestionSchema(response, outcomeQuestion)) return false;
+          const answer = response.answers[outcomeQuestion.id];
+          return Array.isArray(answer) && answer.some(value => typeof value === 'string' && choiceDisplayKey(value).length > 0);
+        });
+        return { ...group, matchingResponses, outcomeResponses };
+      });
+      const groupHeaders = [`Lựa chọn trong “${displayText(outcomeQuestion.text)}”`, ...groupKeys.map(group => `${group.label} (n=${group.outcomeResponses.length})`)];
+      cross.getRow(crossRow + 1).values = groupHeaders; styleTableHeader(cross.getRow(crossRow + 1));
       const rows = outcome.map(option => {
         const values = groupKeys.map(group => {
-          const inGroup = responses.filter(response => groupAnswerKey(groupQuestion, response.answers[groupQuestion.id]) === group.key);
-          const hits = inGroup.filter(response => responseHasSelection(response, outcomeQuestion.id, option.label)).length;
-          return inGroup.length ? hits / inGroup.length : 0;
+          const hits = group.outcomeResponses.filter(response => responseHasSelection(response, outcomeQuestion.id, option.label)).length;
+          return group.outcomeResponses.length ? hits / group.outcomeResponses.length : '—';
         });
-        return [option.label, ...values] as [string, ...number[]];
+        return [option.label, ...values] as [string, ...(number | string)[]];
       });
-      rows.forEach((values, index) => cross.getRow(crossRow + index + 2).values = values);
-      for (let groupIndex = 0; groupIndex < groups.length; groupIndex++) cross.getColumn(2 + groupIndex).numFmt = '0.0%'; styleTableBody(cross, crossRow + 2, crossRow + 1 + rows.length, [48, ...groups.map(() => 16)]);
-      const insight = rows.flatMap(row => row.slice(1).map((value, index) => ({ label: row[0], group: groups[index].label, value: Number(value) }))).sort((a, b) => b.value - a.value)[0];
+      rows.forEach((values, index) => {
+        const row = cross.getRow(crossRow + index + 2);
+        row.values = values;
+        groups.forEach((_, groupIndex) => { row.getCell(2 + groupIndex).numFmt = '0.0%'; });
+      });
+      styleTableBody(cross, crossRow + 2, crossRow + 1 + rows.length, [48, ...groups.map(() => 16)]);
+      const insight = rows.flatMap(row => row.slice(1).flatMap((value, index) => typeof value === 'number' ? [{ label: row[0], group: groups[index].label, value }] : [])).sort((a, b) => b.value - a.value)[0];
       cross.mergeCells(`A${crossRow + rows.length + 3}:H${crossRow + rows.length + 4}`); cross.getCell(`A${crossRow + rows.length + 3}`).value = insight ? `Nhận xét định lượng: “${insight.label}” cao nhất ở nhóm “${insight.group}” (${(insight.value * 100).toFixed(1)}%). Đây là mô tả theo mẫu khảo sát, không phải kết luận nhân quả.` : 'Chưa đủ dữ liệu để tạo nhận xét định lượng.'; cross.getCell(`A${crossRow + rows.length + 3}`).font = { name: 'Arial', size: 10, italic: true, color: { argb: 'FF475569' } }; cross.getCell(`A${crossRow + rows.length + 3}`).alignment = { wrapText: true, vertical: 'top' }; crossRow += rows.length + 7;
-      nativeCharts.push({ sheetName: 'Phân tích chéo', type: 'bar', title: 'Tỷ lệ theo nhóm (%)', categoryFormula: `'Phân tích chéo'!$A$${crossRow - rows.length - 5}:$A$${crossRow - 6}`, categories: rows.map(row => String(row[0])), series: groups.map((group, index) => ({ name: group.label, valueFormula: `'Phân tích chéo'!$${String.fromCharCode(66 + index)}$${crossRow - rows.length - 5}:$${String.fromCharCode(66 + index)}$${crossRow - 6}`, values: rows.map(row => Number(row[index + 1]) * 100), color: index % 2 ? '70AD47' : '1F4E78', numberFormat: '0.0' })), anchor: { from: { col: 7, row: 3 }, to: { col: 15, row: 22 } }, showLegend: true, valueAxisTitle: 'Tỷ lệ (%)', valueAxisNumberFormat: '0.0' });
+      const chartSeries = groupKeys.flatMap((group, index) => group.outcomeResponses.length ? [{ name: `${group.label} (n=${group.outcomeResponses.length})`, valueFormula: `'Phân tích chéo'!$${String.fromCharCode(66 + index)}$${crossRow - rows.length - 5}:$${String.fromCharCode(66 + index)}$${crossRow - 6}`, values: rows.map(row => Number(row[index + 1]) * 100), color: PALETTE[index % PALETTE.length], numberFormat: '0.0' }] : []);
+      if (chartSeries.length) nativeCharts.push({ sheetName: 'Phân tích chéo', type: 'bar', title: 'Tỷ lệ theo nhóm (%)', categoryFormula: `'Phân tích chéo'!$A$${crossRow - rows.length - 5}:$A$${crossRow - 6}`, categories: rows.map(row => String(row[0])), series: chartSeries, anchor: { from: { col: 7, row: 3 }, to: { col: 15, row: 22 } }, showLegend: true, valueAxisTitle: 'Tỷ lệ (%)', valueAxisNumberFormat: '0.0' });
       if (primaryRating) {
         const start = crossRow + 1;
         const title = `Điểm trung bình “${displayText(primaryRating.questionText)}” theo “${displayText(groupQuestion.text)}”`;
         cross.getCell(`A${start}`).value = title; cross.getCell(`A${start}`).font = { bold: true, color: { argb: `FF${BRAND}` } };
         cross.getRow(start + 1).values = ['Nhóm', 'Số mẫu', 'Điểm TB']; styleTableHeader(cross.getRow(start + 1));
+        const ratingQuestion = survey.questions.find(question => question.id === primaryRating.questionId);
         const table = groupKeys.map(group => {
-          const ratings = responses
-            .filter(response => groupAnswerKey(groupQuestion, response.answers[groupQuestion.id]) === group.key)
+          const ratings = group.matchingResponses
+            .filter(response => ratingQuestion && usesCurrentQuestionSchema(response, ratingQuestion))
             .map(response => parseStoredStarRating(response.answers[primaryRating.questionId]))
             .filter((value): value is number => value !== null);
           return [group.label, ratings.length, ratings.length ? ratings.reduce((sum, value) => sum + value, 0) / ratings.length : 0] as [string, number, number];
         });
-        table.forEach((values, i) => cross.getRow(start + i + 2).values = values); cross.getColumn(3).numFmt = '0.00'; styleTableBody(cross, start + 2, start + table.length + 1, [48, 16, 16]);
+        table.forEach((values, i) => {
+          const row = cross.getRow(start + i + 2);
+          row.values = values;
+          row.getCell(3).numFmt = '0.00';
+        });
+        styleTableBody(cross, start + 2, start + table.length + 1, [48, 16, 16]);
         nativeCharts.push({ sheetName: 'Phân tích chéo', type: 'bar', title, categoryFormula: `'Phân tích chéo'!$A$${start + 2}:$A$${start + table.length + 1}`, categories: table.map(row => row[0]), series: [{ name: 'Điểm TB', valueFormula: `'Phân tích chéo'!$C$${start + 2}:$C$${start + table.length + 1}`, values: table.map(row => row[2]), color: '70AD47', numberFormat: '0.00' }], anchor: { from: { col: 7, row: start - 1 }, to: { col: 15, row: start + 16 } }, showLegend: false, showValues: true, valueAxisTitle: 'Điểm trung bình', valueAxisNumberFormat: '0.00' });
       }
     } else {
@@ -1089,10 +1171,12 @@ export async function exportSurveyAnalysisToExcel(survey: Survey, responses: Sur
   // the fragile hand-built OOXML that desktop Excel was repairing/removing.
   nativeCharts.forEach(spec => {
     const sheet = workbook.getWorksheet(spec.sheetName);
-    if (!sheet) return;
+    if (!sheet || !spec.series.length) return;
     const image = spec.type === 'doughnut' || spec.type === 'pie'
       ? drawDoughnutChart(displayText(spec.title), spec.categories.map(label => displayText(label)), spec.series[0].values)
-      : drawBarChart(displayText(spec.title), spec.categories.map(label => displayText(label)), spec.series[0].values, `#${spec.series[0].color ?? '3730A3'}`);
+      : spec.showLegend || spec.series.length > 1
+        ? drawGroupedBarChart(displayText(spec.title), spec.categories.map(label => displayText(label)), spec.series)
+        : drawBarChart(displayText(spec.title), spec.categories.map(label => displayText(label)), spec.series[0].values, `#${spec.series[0].color ?? '3730A3'}`);
     if (!image) return;
     const imageId = workbook.addImage({ base64: image, extension: 'png' });
     sheet.addImage(imageId, { tl: { col: spec.anchor.from.col, row: spec.anchor.from.row }, ext: { width: 720, height: 340 } });
