@@ -47,6 +47,9 @@ export const initDB = async () => {
       );
     `);
     await client.query(`ALTER TABLE surveys ADD COLUMN IF NOT EXISTS sections JSONB NOT NULL DEFAULT '[]'::jsonb;`);
+    // Nullable, additive columns preserve all legacy surveys and drafts; the
+    // client uses its existing default message when this value is absent.
+    await client.query(`ALTER TABLE surveys ADD COLUMN IF NOT EXISTS thank_you_message TEXT;`);
     // A stable opaque revision lets a participant detect an edit made after
     // opening the survey without exposing private quiz answer keys.
     await client.query(`ALTER TABLE surveys ADD COLUMN IF NOT EXISTS survey_revision VARCHAR(64) NOT NULL DEFAULT 'initial';`);
@@ -178,6 +181,7 @@ export const initDB = async () => {
       await client.query(`ALTER TABLE surveys ADD COLUMN IF NOT EXISTS time_limit_minutes INTEGER;`);
       await client.query(`ALTER TABLE survey_drafts ADD COLUMN IF NOT EXISTS closes_at TIMESTAMP;`);
       await client.query(`ALTER TABLE survey_drafts ADD COLUMN IF NOT EXISTS sections JSONB NOT NULL DEFAULT '[]'::jsonb;`);
+      await client.query(`ALTER TABLE survey_drafts ADD COLUMN IF NOT EXISTS thank_you_message TEXT;`);
       await client.query(`ALTER TABLE survey_drafts ADD COLUMN IF NOT EXISTS max_attempts_per_device INTEGER;`);
       await client.query(`ALTER TABLE survey_drafts ADD COLUMN IF NOT EXISTS time_limit_minutes INTEGER;`);
     }

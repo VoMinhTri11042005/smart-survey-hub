@@ -46,6 +46,7 @@ export function mapRowToSurvey(row: any) {
     id: row.id,
     title: row.title,
     description: row.description,
+    thankYouMessage: row.thank_you_message ?? '',
     questions: row.questions,
     sections: row.sections || [],
     createdAt: row.created_at,
@@ -385,13 +386,13 @@ export function validateResponseAnswers(questions: any[], answers: Record<string
 
 export async function createSurvey(data: any) {
   const id = data.id || generateId();
-  const { title, description, questions, sections, status, isQuiz, displayMode, showScore, closesAt, maxAttemptsPerDevice, timeLimitMinutes } = data;
+  const { title, description, thankYouMessage, questions, sections, status, isQuiz, displayMode, showScore, closesAt, maxAttemptsPerDevice, timeLimitMinutes } = data;
   const maxAttempts = toOptionalPositiveInteger(maxAttemptsPerDevice, 100);
   const timeLimit = toOptionalPositiveInteger(timeLimitMinutes, 1_440);
 
   if (!process.env.DATABASE_URL) {
     const survey = {
-      id, title: title || 'Untitled survey', description: description || '',
+      id, title: title || 'Untitled survey', description: description || '', thankYouMessage: thankYouMessage ?? '',
       questions: questions || [], sections: sections || [], createdAt: new Date().toISOString(),
       status: status || 'live', closesAt: closesAt || null,
       surveyRevision: 'initial',
@@ -403,9 +404,9 @@ export async function createSurvey(data: any) {
   }
 
   const result = await pool.query(
-    `INSERT INTO surveys (id, title, description, questions, sections, is_quiz, display_mode, show_score, closes_at, max_attempts_per_device, time_limit_minutes, status)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *`,
-    [id, title, description, JSON.stringify(questions), JSON.stringify(sections || []), Boolean(isQuiz), displayMode || 'single', showScore !== false, closesAt ? new Date(closesAt).toISOString() : null, maxAttempts, timeLimit, status || 'live']
+    `INSERT INTO surveys (id, title, description, questions, sections, is_quiz, display_mode, show_score, closes_at, max_attempts_per_device, time_limit_minutes, status, thank_you_message)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING *`,
+    [id, title, description, JSON.stringify(questions), JSON.stringify(sections || []), Boolean(isQuiz), displayMode || 'single', showScore !== false, closesAt ? new Date(closesAt).toISOString() : null, maxAttempts, timeLimit, status || 'live', thankYouMessage ?? null]
   );
   return mapRowToSurvey(result.rows[0]);
 }
@@ -439,6 +440,7 @@ export async function updateSurvey(id: string, data: any) {
       ...existing,
       title: data.title ?? existing.title,
       description: data.description ?? existing.description,
+      thankYouMessage: data.thankYouMessage ?? existing.thankYouMessage ?? '',
       questions: data.questions ?? existing.questions,
       sections: data.sections ?? existing.sections ?? [],
       status: data.status ?? existing.status,
@@ -465,6 +467,7 @@ export async function updateSurvey(id: string, data: any) {
   const merged = {
     title: data.title ?? current.title,
     description: data.description ?? current.description,
+    thankYouMessage: data.thankYouMessage ?? current.thankYouMessage ?? '',
     questions: data.questions ?? current.questions,
     sections: data.sections ?? current.sections ?? [],
     status: data.status ?? current.status,
@@ -483,9 +486,9 @@ export async function updateSurvey(id: string, data: any) {
 
   const result = await pool.query(
     `UPDATE surveys SET title = $2, description = $3, questions = $4, sections = $5, is_quiz = $6, display_mode = $7,
-     show_score = $8, closes_at = $9, max_attempts_per_device = $10, time_limit_minutes = $11, status = $12, survey_revision = $13
+     show_score = $8, closes_at = $9, max_attempts_per_device = $10, time_limit_minutes = $11, status = $12, survey_revision = $13, thank_you_message = $14
      WHERE id = $1 RETURNING *`,
-    [id, merged.title, merged.description, JSON.stringify(merged.questions), JSON.stringify(merged.sections || []), Boolean(merged.isQuiz), merged.displayMode || 'single', merged.showScore !== false, merged.closesAt ? new Date(merged.closesAt).toISOString() : null, maxAttempts, timeLimit, merged.status || 'live', randomUUID()]
+    [id, merged.title, merged.description, JSON.stringify(merged.questions), JSON.stringify(merged.sections || []), Boolean(merged.isQuiz), merged.displayMode || 'single', merged.showScore !== false, merged.closesAt ? new Date(merged.closesAt).toISOString() : null, maxAttempts, timeLimit, merged.status || 'live', randomUUID(), merged.thankYouMessage]
   );
   if (result.rows.length === 0) return null;
   return mapRowToSurvey(result.rows[0]);
@@ -748,9 +751,9 @@ export async function importResponses(data: any) {
       const survey = data.newSurvey;
       isQuiz = Boolean(survey.isQuiz);
       await client.query(
-        `INSERT INTO surveys (id, title, description, questions, is_quiz, display_mode, show_score, status)
-         VALUES ($1, $2, $3, $4, $5, 'single', TRUE, 'live')`,
-        [surveyId, survey.title, survey.description || '', JSON.stringify(survey.questions), isQuiz],
+        `INSERT INTO surveys (id, title, description, questions, is_quiz, display_mode, show_score, status, thank_you_message)
+         VALUES ($1, $2, $3, $4, $5, 'single', TRUE, 'live', $6)`,
+        [surveyId, survey.title, survey.description || '', JSON.stringify(survey.questions), isQuiz, survey.thankYouMessage ?? null],
       );
       if (data.sourceFileHash) {
         sourceMarker = importSourceMarkerKey(surveyId, data.sourceFileHash);
@@ -850,7 +853,7 @@ export async function getDrafts() {
   if (!process.env.DATABASE_URL) return [];
   const result = await pool.query('SELECT * FROM survey_drafts WHERE user_id = $1 ORDER BY updated_at DESC', ['admin']);
   return result.rows.map(row => ({
-    id: row.id, title: row.title, description: row.description,
+    id: row.id, title: row.title, description: row.description, thankYouMessage: row.thank_you_message ?? '',
     questions: row.questions || [], isQuiz: Boolean(row.is_quiz),
     sections: row.sections || [],
     showScore: row.show_score !== false, displayMode: row.display_mode || 'single',
@@ -863,22 +866,22 @@ export async function getDrafts() {
 
 export async function saveDraft(data: any) {
   if (!process.env.DATABASE_URL) throw Object.assign(new Error('Database not configured'), { status: 503 });
-  const { id, title, description, questions, sections, isQuiz, showScore, displayMode, closesAt, maxAttemptsPerDevice, timeLimitMinutes } = data;
+  const { id, title, description, thankYouMessage, questions, sections, isQuiz, showScore, displayMode, closesAt, maxAttemptsPerDevice, timeLimitMinutes } = data;
   const draftId = id || generateId();
   const maxAttempts = toOptionalPositiveInteger(maxAttemptsPerDevice, 100);
   const timeLimit = toOptionalPositiveInteger(timeLimitMinutes, 1_440);
 
   const result = await pool.query(
-    `INSERT INTO survey_drafts (id, user_id, title, description, questions, sections, is_quiz, show_score, display_mode, closes_at, max_attempts_per_device, time_limit_minutes, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, CURRENT_TIMESTAMP)
+    `INSERT INTO survey_drafts (id, user_id, title, description, questions, sections, is_quiz, show_score, display_mode, closes_at, max_attempts_per_device, time_limit_minutes, thank_you_message, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, CURRENT_TIMESTAMP)
      ON CONFLICT (id)
-     DO UPDATE SET title = EXCLUDED.title, description = EXCLUDED.description, questions = EXCLUDED.questions, sections = EXCLUDED.sections, is_quiz = EXCLUDED.is_quiz, show_score = EXCLUDED.show_score, display_mode = EXCLUDED.display_mode, closes_at = EXCLUDED.closes_at, max_attempts_per_device = EXCLUDED.max_attempts_per_device, time_limit_minutes = EXCLUDED.time_limit_minutes, updated_at = CURRENT_TIMESTAMP
+     DO UPDATE SET title = EXCLUDED.title, description = EXCLUDED.description, questions = EXCLUDED.questions, sections = EXCLUDED.sections, is_quiz = EXCLUDED.is_quiz, show_score = EXCLUDED.show_score, display_mode = EXCLUDED.display_mode, closes_at = EXCLUDED.closes_at, max_attempts_per_device = EXCLUDED.max_attempts_per_device, time_limit_minutes = EXCLUDED.time_limit_minutes, thank_you_message = COALESCE(EXCLUDED.thank_you_message, survey_drafts.thank_you_message), updated_at = CURRENT_TIMESTAMP
      RETURNING *`,
-    [draftId, 'admin', title || 'Khảo sát nháp', description || '', JSON.stringify(questions || []), JSON.stringify(sections || []), Boolean(isQuiz), showScore !== false, displayMode || 'single', closesAt ? new Date(closesAt).toISOString() : null, maxAttempts, timeLimit]
+    [draftId, 'admin', title || 'Khảo sát nháp', description || '', JSON.stringify(questions || []), JSON.stringify(sections || []), Boolean(isQuiz), showScore !== false, displayMode || 'single', closesAt ? new Date(closesAt).toISOString() : null, maxAttempts, timeLimit, thankYouMessage ?? null]
   );
   const row = result.rows[0];
   return {
-    id: row.id, title: row.title, description: row.description,
+    id: row.id, title: row.title, description: row.description, thankYouMessage: row.thank_you_message ?? '',
     questions: row.questions || [], isQuiz: Boolean(row.is_quiz),
     sections: row.sections || [],
     showScore: row.show_score !== false, displayMode: row.display_mode || 'single',
@@ -932,10 +935,10 @@ export async function importBackup(data: any) {
 
   for (const row of surveys) {
     await client.query(
-      `INSERT INTO surveys (id, title, description, questions, sections, is_quiz, display_mode, show_score, closes_at, max_attempts_per_device, time_limit_minutes, status, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, COALESCE($13, CURRENT_TIMESTAMP))
+      `INSERT INTO surveys (id, title, description, questions, sections, is_quiz, display_mode, show_score, closes_at, max_attempts_per_device, time_limit_minutes, status, created_at, thank_you_message)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, COALESCE($13, CURRENT_TIMESTAMP), $14)
        ON CONFLICT (id) DO NOTHING`,
-      [row.id, row.title, row.description, JSON.stringify(row.questions || []), JSON.stringify(row.sections || []), Boolean(row.is_quiz), row.display_mode || 'single', row.show_score !== false, row.closes_at ? new Date(row.closes_at).toISOString() : null, row.max_attempts_per_device ?? null, row.time_limit_minutes ?? null, row.status || 'live', row.created_at]
+      [row.id, row.title, row.description, JSON.stringify(row.questions || []), JSON.stringify(row.sections || []), Boolean(row.is_quiz), row.display_mode || 'single', row.show_score !== false, row.closes_at ? new Date(row.closes_at).toISOString() : null, row.max_attempts_per_device ?? null, row.time_limit_minutes ?? null, row.status || 'live', row.created_at, row.thank_you_message ?? null]
     );
   }
   for (const row of responses) {
@@ -961,9 +964,9 @@ export async function importBackup(data: any) {
   }
   for (const row of drafts) {
     await client.query(
-      `INSERT INTO survey_drafts (id, user_id, title, description, questions, sections, is_quiz, show_score, display_mode, closes_at, max_attempts_per_device, time_limit_minutes, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+      `INSERT INTO survey_drafts (id, user_id, title, description, questions, sections, is_quiz, show_score, display_mode, closes_at, max_attempts_per_device, time_limit_minutes, updated_at, thank_you_message) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
        ON CONFLICT (id) DO NOTHING`,
-      [row.id, row.user_id || 'admin', row.title || 'Khảo sát nháp', row.description || '', JSON.stringify(row.questions || []), JSON.stringify(row.sections || []), Boolean(row.is_quiz), row.show_score !== false, row.display_mode || 'single', row.closes_at ? new Date(row.closes_at).toISOString() : null, row.max_attempts_per_device ?? null, row.time_limit_minutes ?? null, row.updated_at || new Date().toISOString()]
+      [row.id, row.user_id || 'admin', row.title || 'Khảo sát nháp', row.description || '', JSON.stringify(row.questions || []), JSON.stringify(row.sections || []), Boolean(row.is_quiz), row.show_score !== false, row.display_mode || 'single', row.closes_at ? new Date(row.closes_at).toISOString() : null, row.max_attempts_per_device ?? null, row.time_limit_minutes ?? null, row.updated_at || new Date().toISOString(), row.thank_you_message ?? null]
     );
   }
   for (const batch of surveyImportBatches) {

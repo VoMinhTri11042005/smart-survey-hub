@@ -9,6 +9,7 @@ import 'react-quill-new/dist/quill.snow.css';
 import type { SurveyQuestion, QuestionType, SurveyDisplayMode, SurveySection } from '../../types';
 import { cleanHtmlWhitespace, sanitizeHtml, stripHtml } from '../../utils/stringUtils';
 import { createDraftId, sectionsForBuilder, writeLocalDraft, type SurveyDraft } from '../../utils/surveyDrafts';
+import { getStarRatingLabels } from '../../utils/respondentMessages';
 import { findInvalidRankingSources } from '../../../shared/ranking';
 
 const questionTypeLabels: Record<QuestionType, { label: string; icon: React.ReactNode }> = {
@@ -57,6 +58,7 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError, onActiv
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [surveyTitle, setSurveyTitle] = useState('');
   const [surveyDescription, setSurveyDescription] = useState('');
+  const [thankYouMessage, setThankYouMessage] = useState('');
   const [questions, setQuestions] = useState<SurveyQuestion[]>([]);
   const [sections, setSections] = useState<SurveySection[]>([{ id: 'section-1', title: 'Phần 1' }]);
   const [activeQuestionId, setActiveQuestionId] = useState<string | null>(null);
@@ -100,6 +102,7 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError, onActiv
     setDraftId(draft.id);
     setSurveyTitle(draft.title || '');
     setSurveyDescription(draft.description || '');
+    setThankYouMessage(draft.thankYouMessage ?? '');
     setQuestions(draft.questions || []);
     setSections(sectionsForBuilder(draft.sections));
     setIsQuiz(Boolean(draft.isQuiz));
@@ -264,6 +267,7 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError, onActiv
     setSelectedFile(null);
     setSurveyTitle('');
     setSurveyDescription('');
+    setThankYouMessage('');
     setQuestions([]);
     setSections([{ id: 'section-1', title: 'Phần 1' }]);
     setActiveQuestionId(null);
@@ -286,6 +290,7 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError, onActiv
     if (pendingTemplate) {
       setSurveyTitle(pendingTemplate.title);
       setSurveyDescription(pendingTemplate.description);
+      setThankYouMessage('');
       setQuestions(pendingTemplate.questions.map((q, i) => ({ ...q, id: `q${i + 1}` })));
       setSections(pendingTemplate.sections?.length ? pendingTemplate.sections : [{ id: 'section-1', title: 'Phần 1' }]);
       setShowSurvey(true);
@@ -301,6 +306,7 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError, onActiv
 
     setSurveyTitle(currentSurvey.title || '');
     setSurveyDescription(currentSurvey.description || '');
+    setThankYouMessage(currentSurvey.thankYouMessage ?? '');
     setQuestions(currentSurvey.questions || []);
     setSections(sectionsForBuilder(currentSurvey.sections));
     setIsQuiz(Boolean(currentSurvey.isQuiz));
@@ -338,12 +344,13 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError, onActiv
   }, [fetchDrafts, currentSurvey, pendingTemplate, pendingDraft, freshBuilderRequestId, applyDraft]);
 
   useEffect(() => {
-    if (!showSurvey || isPublishing || clearingDraftRef.current || !(surveyTitle.trim() || surveyDescription.trim() || questions.length > 0)) return;
+    if (!showSurvey || isPublishing || clearingDraftRef.current || !(surveyTitle.trim() || surveyDescription.trim() || thankYouMessage.trim() || questions.length > 0)) return;
 
     const draft: SurveyDraft = {
       id: ensureDraftId(),
       title: surveyTitle || 'Khảo sát nháp',
       description: surveyDescription,
+      thankYouMessage,
       questions,
       sections,
       isQuiz,
@@ -372,7 +379,7 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError, onActiv
       void queueDraftSave(draft).catch(error => console.warn('Background draft sync failed', error));
     }, 700);
     return () => { if (draftSyncTimer.current) clearTimeout(draftSyncTimer.current); };
-  }, [showSurvey, isPublishing, surveyTitle, surveyDescription, questions, sections, isQuiz, showScore, displayMode, closesAt, maxAttemptsPerDevice, timeLimitMinutes, currentSurvey, draftId, ensureDraftId, queueDraftSave]);
+  }, [showSurvey, isPublishing, surveyTitle, surveyDescription, thankYouMessage, questions, sections, isQuiz, showScore, displayMode, closesAt, maxAttemptsPerDevice, timeLimitMinutes, currentSurvey, draftId, ensureDraftId, queueDraftSave]);
 
   const clearDraft = async (draftIdToDelete = draftIdRef.current) => {
     clearingDraftRef.current = true;
@@ -419,6 +426,7 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError, onActiv
       id: ensureDraftId(),
       title: surveyTitle || 'Khảo sát nháp',
       description: surveyDescription,
+      thankYouMessage,
       questions,
       sections,
       isQuiz,
@@ -477,6 +485,7 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError, onActiv
       const surveyData = {
         title: surveyTitle,
         description: surveyDescription,
+        thankYouMessage,
         questions,
         sections,
         isQuiz,
@@ -665,7 +674,10 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError, onActiv
         : { gridColumns: undefined }),
       ...(newType === 'linear_scale'
         ? { scaleMin: question?.scaleMin ?? 1, scaleMax: question?.scaleMax ?? 5 }
-        : { scaleMin: undefined, scaleMax: undefined, scaleMinLabel: undefined, scaleMaxLabel: undefined }),
+        : { scaleMin: undefined, scaleMax: undefined }),
+      ...(!['linear_scale', 'star_rating'].includes(newType)
+        ? { scaleMinLabel: undefined, scaleMaxLabel: undefined }
+        : {}),
     };
     if (supportsOptions(newType)) {
       if (!question?.options || question.options.length === 0) {
@@ -797,6 +809,7 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError, onActiv
                   onClick={() => {
                     setSurveyTitle('Khảo sát mới');
                     setSurveyDescription('');
+                    setThankYouMessage('');
                     setQuestions([{
                       id: `q${Date.now()}`,
                       type: 'single_choice',
@@ -837,6 +850,22 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError, onActiv
                      modules={quillModules}
                    />
                  </div>
+                 <div className="mt-6 border-t border-border-subtle pt-5">
+                   <label htmlFor="thank-you-message" className="block text-sm font-semibold text-text-primary">Lời cảm ơn sau khi hoàn thành</label>
+                   <textarea
+                     id="thank-you-message"
+                     value={thankYouMessage}
+                     onChange={event => setThankYouMessage(event.target.value)}
+                     maxLength={2000}
+                     rows={4}
+                     placeholder="Cảm ơn bạn đã dành thời gian hoàn thành khảo sát..."
+                     className="mt-2 w-full resize-y rounded-xl border border-border-subtle bg-surface-background px-3 py-2 text-sm text-text-primary outline-none focus:ring-2 focus:ring-primary/30"
+                   />
+                   <div className="mt-1 flex items-center justify-between gap-3 text-[11px] text-text-secondary">
+                     <span>Để trống để dùng lời cảm ơn mặc định.</span>
+                     <span>{thankYouMessage.length}/2000</span>
+                   </div>
+                 </div>
                </div>
 
                {/* Question Cards */}
@@ -855,6 +884,7 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError, onActiv
                    ? questions.slice(0, idx).filter(source => source.type === 'multiple_choice'
                      && (sections.length <= 1 || sectionPosition(source) <= sectionPosition(q)))
                    : [];
+                 const starLabels = q.type === 'star_rating' ? getStarRatingLabels(q) : null;
                  const invalidRankingSource = Boolean(q.carryForwardFromQuestionId && !rankingSources.some(source => source.id === q.carryForwardFromQuestionId));
                  return (
                    <React.Fragment key={q.id}>
@@ -1106,10 +1136,13 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError, onActiv
 
                      {/* Preview for other types */}
                      {q.type === 'star_rating' && (
-                       <div className="flex gap-1 mt-2 opacity-50">
-                         {[1,2,3,4,5].map(s => (
-                           <Star key={s} size={24} className="text-surface-container-highest" />
-                         ))}
+                       <div className="mt-2 space-y-2 opacity-50">
+                         <div className="flex gap-1">
+                           {[1,2,3,4,5].map(s => (
+                             <Star key={s} size={24} className="text-surface-container-highest" />
+                           ))}
+                         </div>
+                         <div className="flex justify-between gap-4 text-xs text-text-secondary"><span>{starLabels?.min}</span><span className="text-right">{starLabels?.max}</span></div>
                        </div>
                      )}
                      {q.type === 'text' && (
@@ -1231,6 +1264,33 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError, onActiv
                                 <span className="text-sm font-medium text-text-secondary">Nhãn mức cao (không bắt buộc)</span>
                                 <input value={q.scaleMaxLabel ?? ''} maxLength={100} onChange={event => updateQuestion(q.id, { scaleMaxLabel: event.target.value })} className="rounded-lg border border-border-subtle bg-surface-background px-3 py-2 text-sm" />
                               </label>
+                            </div>
+                          )}
+                          {q.type === 'star_rating' && (
+                            <div className="grid w-full grid-cols-1 gap-3 sm:mr-auto sm:max-w-xl sm:grid-cols-2">
+                              <label className="flex flex-col gap-1.5">
+                                <span className="text-sm font-medium text-text-secondary">Nhãn mức thấp</span>
+                                <input
+                                  value={q.scaleMinLabel ?? ''}
+                                  maxLength={100}
+                                  onChange={event => updateQuestion(q.id, { scaleMinLabel: event.target.value })}
+                                  placeholder="Cần cải thiện"
+                                  aria-label="Nhãn mức thấp của thang điểm sao"
+                                  className="rounded-lg border border-border-subtle bg-surface-background px-3 py-2 text-sm"
+                                />
+                              </label>
+                              <label className="flex flex-col gap-1.5">
+                                <span className="text-sm font-medium text-text-secondary">Nhãn mức cao</span>
+                                <input
+                                  value={q.scaleMaxLabel ?? ''}
+                                  maxLength={100}
+                                  onChange={event => updateQuestion(q.id, { scaleMaxLabel: event.target.value })}
+                                  placeholder="Tuyệt vời"
+                                  aria-label="Nhãn mức cao của thang điểm sao"
+                                  className="rounded-lg border border-border-subtle bg-surface-background px-3 py-2 text-sm"
+                                />
+                              </label>
+                              <p className="sm:col-span-2 text-[11px] text-text-secondary">Để trống sẽ dùng “Cần cải thiện” và “Tuyệt vời”.</p>
                             </div>
                           )}
                           {q.type === 'text' && (
@@ -1393,7 +1453,7 @@ export function Builder({ onPublished, onUpdated, onDraftSaved, onError, onActiv
                    </button>
                    <span className="text-[10px] md:text-xs text-text-secondary">{draftSavedAt ? `Đã lưu ${draftSavedAt}` : 'Chưa lưu'}</span>
                    <button
-                     onClick={() => { setShowSurvey(false); setQuestions([]); setSections([{ id: 'section-1', title: 'Phần 1' }]); setSurveyTitle(''); setSurveyDescription(''); setActiveQuestionId(null); setIsQuiz(false); setShowScore(true); setDisplayMode('single'); setClosesAt(null); setMaxAttemptsPerDevice(1); setTimeLimitMinutes(null); void clearDraft().catch(() => onError?.('Không thể xóa bản nháp. Vui lòng thử lại.')); }}
+                    onClick={() => { setShowSurvey(false); setQuestions([]); setSections([{ id: 'section-1', title: 'Phần 1' }]); setSurveyTitle(''); setSurveyDescription(''); setThankYouMessage(''); setActiveQuestionId(null); setIsQuiz(false); setShowScore(true); setDisplayMode('single'); setClosesAt(null); setMaxAttemptsPerDevice(1); setTimeLimitMinutes(null); void clearDraft().catch(() => onError?.('Không thể xóa bản nháp. Vui lòng thử lại.')); }}
                      className="text-xs md:text-sm font-semibold text-text-secondary hover:text-sentiment-negative transition-colors cursor-pointer"
                    >
                      Tạo lại

@@ -59,6 +59,8 @@ export interface Survey {
   id: string;
   title: string;
   description: string;
+  /** Custom completion text; an empty or missing value uses the default message. */
+  thankYouMessage?: string;
   questions: SurveyQuestion[];
   sections?: SurveySection[];
   createdAt: string;

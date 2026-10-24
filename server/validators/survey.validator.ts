@@ -194,6 +194,7 @@ const SurveyPayloadSchema = z.object({
   id: z.string().optional(),
   title: z.string().min(1, 'Tiêu đề không được để trống.'),
   description: z.string(),
+  thankYouMessage: z.string().max(2000).optional(),
   questions: z.array(SurveyQuestionSchema),
   sections: z.array(SurveySectionSchema).max(100),
   isQuiz: z.boolean(),
@@ -281,6 +282,7 @@ export const ImportResponsesSchema = z.object({
   newSurvey: z.object({
     title: z.string().trim().min(1).max(255),
     description: z.string().max(5000).optional().default(''),
+    thankYouMessage: z.string().max(2000).optional(),
     questions: z.array(ImportedQuestionSchema).min(1).max(100),
     isQuiz: z.boolean().optional().default(false),
   }).optional(),
@@ -311,6 +313,9 @@ export const SaveDraftSchema = z.object({
   id: z.string().optional(),
   title: z.string().optional().default('Khảo sát nháp'),
   description: z.string().optional().default(''),
+  // Do not default an omitted value: an older client saving an existing draft
+  // must not accidentally overwrite a message set by a newer client.
+  thankYouMessage: z.string().max(2000).optional(),
   questions: z.array(z.any()).optional().default([]),
   sections: z.array(SurveySectionSchema).max(100).optional().default([]),
   isQuiz: z.boolean().optional().default(false),

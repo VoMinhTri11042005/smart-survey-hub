@@ -315,6 +315,7 @@ export function SurveyProvider({ children }: { children: ReactNode }) {
       id: draft.id || createDraftId(),
       title: draft.title || 'Khảo sát nháp',
       description: draft.description || '',
+      thankYouMessage: draft.thankYouMessage ?? '',
       questions: draft.questions || [],
       sections: draft.sections || [],
       isQuiz: Boolean(draft.isQuiz),

@@ -4,6 +4,7 @@ import { parseStoredStarRating } from '../../shared/starRating';
 import { allocateExclusivePercents, roundPercent, sanitizeSpreadsheetValue } from './percent';
 import { cleanTextAnswer, getTextAnalyticsEligibility, isPersonalIdentifierQuestion, summarizeTextCategories, type TextCategoryOption } from './textAnalytics';
 import { getRankingOptions, isCompleteRanking, isRankingApplicable } from '../../shared/ranking';
+import { getStarRatingLabels } from './respondentMessages';
 
 export interface ChoiceDistribution {
   questionId: string;
@@ -201,9 +202,10 @@ function choiceAnswerSchemaValue(value: unknown): string | string[] | null {
 }
 
 function questionSchemaSignature(question: Survey['questions'][number]): string {
-  // Keep only fields that change how an answer is interpreted. Presentation-only
-  // fields such as labels do not make an existing response statistically
-  // incompatible.
+  // Keep fields that change how an answer is interpreted. Internal question
+  // labels are presentation-only, but the endpoints of a star scale describe
+  // the meaning of the rating and belong to the captured instrument.
+  const starLabels = question.type === 'star_rating' ? getStarRatingLabels(question) : null;
   return JSON.stringify({
     id: question.id,
     type: question.type,
@@ -216,6 +218,8 @@ function questionSchemaSignature(question: Survey['questions'][number]): string 
     gridColumns: (question.gridColumns ?? []).map(choiceDisplayKey),
     scaleMin: question.scaleMin ?? null,
     scaleMax: question.scaleMax ?? null,
+    starMinLabel: starLabels?.min.replace(/\s+/g, ' ') ?? null,
+    starMaxLabel: starLabels?.max.replace(/\s+/g, ' ') ?? null,
     maxSelections: question.maxSelections ?? null,
     screenOutAnswer: choiceAnswerSchemaValue(question.screenOutAnswer),
     correctAnswer: choiceAnswerSchemaValue(question.correctAnswer),

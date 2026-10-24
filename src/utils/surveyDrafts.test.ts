@@ -109,6 +109,29 @@ describe('survey draft selection and local storage', () => {
     expect(mergeDrafts([], local, true)[0].title).toBe('Newer edit');
   });
 
+  it('retains custom star labels and completion text in a local draft', () => {
+    const storage = memoryStorage();
+    const original: SurveyDraft = {
+      ...draft('custom'),
+      thankYouMessage: 'Cảm ơn bạn đã chia sẻ!\nChúc bạn một ngày tốt lành.',
+      questions: [{ id: 'stars', type: 'star_rating', text: 'Bạn thấy thế nào?', required: true, scaleMinLabel: 'Chưa tốt', scaleMaxLabel: 'Rất hài lòng' }],
+    };
+    writeLocalDraft(storage, original);
+    expect(readLocalDrafts(storage)[0]).toMatchObject({ thankYouMessage: original.thankYouMessage, questions: original.questions });
+  });
+
+  it('does not mark a newer completion message as synchronized by an older save', () => {
+    const storage = memoryStorage();
+    const sent = { ...draft('a'), thankYouMessage: 'Thông điệp trước' };
+    const newer = { ...sent, thankYouMessage: 'Thông điệp mới' };
+    writeLocalDraft(storage, newer);
+    markLocalDraftSynced(storage, sent);
+    expect(readLocalDrafts(storage)[0]).toMatchObject({ thankYouMessage: 'Thông điệp mới' });
+    expect(readLocalDrafts(storage)[0].syncedAt).toBeUndefined();
+    markLocalDraftSynced(storage, newer);
+    expect(readLocalDrafts(storage)[0].syncedAt).toBeTruthy();
+  });
+
   it('does not overwrite malformed legacy storage when saving another draft', () => {
     const storage = memoryStorage();
     storage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft('a')));

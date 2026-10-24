@@ -4,6 +4,7 @@ export interface SurveyDraft {
   id: string;
   title: string;
   description: string;
+  thankYouMessage?: string;
   questions: SurveyQuestion[];
   sections?: SurveySection[];
   isQuiz?: boolean;
@@ -49,6 +50,7 @@ function normalizeStoredDraft(item: StoredDraft): SurveyDraft {
     id: storedDraftId(item),
     title: item.title || item.surveyTitle || 'Khảo sát nháp',
     description: item.description || item.surveyDescription || '',
+    thankYouMessage: typeof item.thankYouMessage === 'string' ? item.thankYouMessage : typeof item.thank_you_message === 'string' ? item.thank_you_message : '',
     questions: Array.isArray(item.questions) ? item.questions : [],
     sections: Array.isArray(item.sections) ? item.sections : [],
     isQuiz: Boolean(item.isQuiz),
@@ -144,6 +146,7 @@ function comparableDraft(draft: SurveyDraft) {
     id: draft.id,
     title: draft.title || 'Khảo sát nháp',
     description: draft.description || '',
+    thankYouMessage: draft.thankYouMessage || '',
     questions: draft.questions || [],
     sections: draft.sections || [],
     isQuiz: Boolean(draft.isQuiz),

@@ -265,6 +265,24 @@ describe('computeSurveyAnalytics', () => {
     expect(choice.options.some(option => option.isHistorical || option.isUnknown)).toBe(false);
   });
 
+  it('separates star answers collected with different endpoint meanings while preserving old defaults', () => {
+    const oldQuestion: SurveyQuestion = { id: 'stars', type: 'star_rating', text: 'Đánh giá', required: true };
+    const explicitDefault = { ...oldQuestion, scaleMinLabel: 'Cần cải thiện', scaleMaxLabel: 'Tuyệt vời' };
+    const customQuestion = { ...oldQuestion, scaleMinLabel: 'Chưa hài lòng', scaleMaxLabel: 'Rất hài lòng' };
+    const snapshot = (question: SurveyQuestion) => ({ schemaVersion: 1, capturedAt: '2026-01-01T00:00:00.000Z', isQuiz: false, questions: [question] });
+    const responses = [
+      makeResponse('old', { stars: 2 }, { surveySnapshot: snapshot(oldQuestion) }),
+      makeResponse('default', { stars: 5 }, { surveySnapshot: snapshot(explicitDefault) }),
+      makeResponse('custom', { stars: 4 }, { surveySnapshot: snapshot(customQuestion) }),
+    ];
+    const defaults = computeSurveyAnalytics(makeSurvey([explicitDefault]), responses);
+    expect(defaults.starRatings[0]).toMatchObject({ totalAnswered: 2, average: 3.5 });
+    expect(defaults.questionMetrics[0].versionDifferentResponses).toBe(1);
+    const custom = computeSurveyAnalytics(makeSurvey([customQuestion]), responses);
+    expect(custom.starRatings[0]).toMatchObject({ totalAnswered: 1, average: 4 });
+    expect(custom.questionMetrics[0].versionDifferentResponses).toBe(2);
+  });
+
   it('uses each captured question version for completion and correctness without merging old choices', () => {
     const currentQuestion: SurveyQuestion = {
       id: 'knowledge',

@@ -5,6 +5,7 @@ import { stripHtml, cleanHtmlWhitespace, sanitizeHtml } from '../../utils/string
 import type { Survey, SurveyQuestion } from '../../types';
 import { parseStoredStarRating } from '../../../shared/starRating';
 import { clearDependentRankings, getRankingOptions, isCompleteRanking, isRankingApplicable, moveRankingOption, removeInvalidRankingAnswers } from '../../../shared/ranking';
+import { DEFAULT_SCREEN_OUT_MESSAGE, getCompletionMessage, getStarRatingLabels } from '../../utils/respondentMessages';
 
 interface RespondentProps {
   survey: Survey | null;
@@ -12,8 +13,6 @@ interface RespondentProps {
   onComplete?: () => void;
   isPublic?: boolean;
 }
-
-const DEFAULT_SCREEN_OUT_MESSAGE = 'Cảm ơn bạn đã tham gia. Dựa trên câu trả lời của bạn, bạn không thuộc đối tượng khảo sát này.';
 
 export function Respondent({ survey, onExit, onComplete, isPublic = false }: RespondentProps) {
   const { submitResponse, fetchMyResponse } = useSurvey();
@@ -620,7 +619,8 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
 
   const renderQuestionInput = (question: SurveyQuestion, answer: any, questionId: string) => {
     switch (question.type) {
-      case 'star_rating':
+      case 'star_rating': {
+        const labels = getStarRatingLabels(question);
         return (
           <div className="flex flex-col items-center gap-6 py-8 bg-white border border-border-subtle rounded-2xl shadow-sm">
             <div className="flex flex-row gap-2">
@@ -644,12 +644,13 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
               })}
             </div>
             <p className="text-sm font-medium text-text-secondary">Chọn một mức nguyên từ 1 đến 5 sao</p>
-            <div className="flex justify-between w-full px-8 text-sm font-semibold text-text-secondary italic">
-              <span>Cần cải thiện</span>
-              <span>Tuyệt vời</span>
+            <div className="flex justify-between gap-4 w-full px-8 text-sm font-semibold text-text-secondary italic">
+              <span className="min-w-0 break-words">{labels.min}</span>
+              <span className="min-w-0 break-words text-right">{labels.max}</span>
             </div>
           </div>
         );
+      }
       case 'single_choice':
         return (
           <div className="space-y-3">
@@ -868,6 +869,12 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
   };
 
   if (isCompleted) {
+    const completionMessage = getCompletionMessage({
+      isScreenedOut,
+      isQuiz: survey.isQuiz,
+      screenOutNotice,
+      thankYouMessage: survey.thankYouMessage,
+    });
     return (
       <div className="min-h-screen bg-surface-background flex flex-col font-sans text-text-primary selection:bg-secondary-fixed selection:text-on-secondary-fixed relative overflow-hidden">
         {/* Luxurious background elements */}
@@ -891,9 +898,7 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
             <h1 className="font-display text-4xl md:text-5xl font-extrabold text-text-primary mb-4 tracking-tight leading-tight">
               {isScreenedOut ? 'Khảo sát đã kết thúc' : survey.isQuiz ? 'Hoàn thành Bài kiểm tra!' : 'Cảm ơn bạn!'}
             </h1>
-            {isScreenedOut ? (
-              <p className="text-text-secondary text-lg md:text-xl mb-10 max-w-lg mx-auto leading-relaxed">{screenOutNotice || DEFAULT_SCREEN_OUT_MESSAGE}</p>
-            ) : survey.isQuiz ? (
+            {!isScreenedOut && survey.isQuiz && (
               survey.showScore !== false ? (
                 <div className="mb-10 text-center animate-in slide-in-from-bottom-4 duration-700 delay-150 fill-mode-both">
                   <p className="text-text-secondary text-lg mb-2 font-medium">Điểm số của bạn:</p>
@@ -911,9 +916,10 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
                   Đã ghi nhận kết quả bài làm của bạn.
                 </p>
               )
-            ) : (
-              <p className="text-text-secondary text-lg md:text-xl mb-10 max-w-lg mx-auto leading-relaxed">
-                Phản hồi của bạn đã được ghi nhận. Những đóng góp quý báu này sẽ giúp chúng tôi nâng cao chất lượng dịch vụ.
+            )}
+            {completionMessage && (
+              <p className="text-text-secondary text-lg md:text-xl mb-10 max-w-lg mx-auto leading-relaxed whitespace-pre-wrap break-words">
+                {completionMessage}
               </p>
             )}
 
