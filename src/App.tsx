@@ -242,7 +242,9 @@ function AppContent() {
         <Suspense fallback={<AppFallback />}>
           <>
             <Respondent survey={shareSurvey} isPublic={true} onExit={() => {
-              // Public exit is fully handled inside Respondent component (callExit)
+              // A regular browser tab cannot always be closed by script. Do
+              // not return a participant to the survey or the admin sign-in.
+              window.location.replace('about:blank');
             }} />
             {/* Show Chatbot for public/shared surveys as well */}
             <Chatbot survey={shareSurvey} isPublic />

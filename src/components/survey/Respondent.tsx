@@ -1,4 +1,4 @@
-import { Timer, Undo2, Sparkles, CircleDot, CheckSquare, CheckCircle2, Home, Edit3, LogOut, X, Trash2, AlertTriangle, ChevronUp, ChevronDown, GripVertical } from 'lucide-react';
+import { Timer, Undo2, Sparkles, CircleDot, CheckSquare, CheckCircle2, Home, Edit3, LogOut, Trash2, AlertTriangle, ChevronUp, ChevronDown, GripVertical } from 'lucide-react';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSurvey } from '../../context/SurveyContext';
 import { stripHtml, cleanHtmlWhitespace, sanitizeHtml } from '../../utils/stringUtils';
@@ -6,6 +6,7 @@ import type { Survey, SurveyQuestion } from '../../types';
 import { parseStoredStarRating } from '../../../shared/starRating';
 import { clearDependentRankings, getRankingOptions, isCompleteRanking, isRankingApplicable, moveRankingOption, removeInvalidRankingAnswers } from '../../../shared/ranking';
 import { DEFAULT_SCREEN_OUT_MESSAGE, getCompletionMessage, getStarRatingLabels } from '../../utils/respondentMessages';
+import { leavePublicSurvey } from '../../utils/publicExit';
 
 interface RespondentProps {
   survey: Survey | null;
@@ -30,7 +31,6 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
   const [quizTotal, setQuizTotal] = useState<number | undefined>(undefined);
   const [draftSavedAt, setDraftSavedAt] = useState<string | null>(null);
   const [showExitConfirm, setShowExitConfirm] = useState(false);
-  const [showCloseHint, setShowCloseHint] = useState(false);
   const [remainingSeconds, setRemainingSeconds] = useState<number | null>(null);
   const [hasStartedTimedSurvey, setHasStartedTimedSurvey] = useState(false);
   const hasAnswerProgressRef = useRef(false);
@@ -214,12 +214,7 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
 
   const callExit = useCallback(() => {
     if (isPublic) {
-      // Try closing the tab; if blocked, show a friendly hint instead of leaving user stuck
-      try {
-        window.close();
-      } catch (_) { /* ignore */ }
-      // window.close() is silently ignored on non-popup tabs — show fallback hint
-      setTimeout(() => setShowCloseHint(true), 300);
+      leavePublicSurvey(onExit);
       return;
     }
 
@@ -302,7 +297,7 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
         </div>
         <h2 className="font-display text-2xl font-bold text-text-primary">Bạn đã hết lượt làm khảo sát trên thiết bị này</h2>
         <p className="text-text-secondary text-sm max-w-md">Mỗi thiết bị chỉ được làm tối đa {maxAttemptsPerDevice} lần.</p>
-        <button onClick={onExit} className="mt-4 px-6 py-2.5 bg-primary text-white rounded-xl font-semibold text-sm hover:bg-primary/90 transition-colors cursor-pointer">
+        <button onClick={callExit} className="mt-4 px-6 py-2.5 bg-primary text-white rounded-xl font-semibold text-sm hover:bg-primary/90 transition-colors cursor-pointer">
           Quay lại
         </button>
       </div>
@@ -327,7 +322,7 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
         </div>
         <h2 className="font-display text-2xl font-bold text-text-primary">Khảo sát đã kết thúc</h2>
         <p className="text-text-secondary text-sm max-w-md">Thời gian tham gia khảo sát đã hết. Cảm ơn bạn đã quan tâm.</p>
-        <button onClick={onExit} className="mt-4 px-6 py-2.5 bg-primary text-white rounded-xl font-semibold text-sm hover:bg-primary/90 transition-colors cursor-pointer">
+        <button onClick={callExit} className="mt-4 px-6 py-2.5 bg-primary text-white rounded-xl font-semibold text-sm hover:bg-primary/90 transition-colors cursor-pointer">
           Quay lại
         </button>
       </div>
@@ -342,7 +337,7 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
         </div>
         <h2 className="font-display text-2xl font-bold text-text-primary">Không có khảo sát nào để hiển thị</h2>
         <p className="text-text-secondary text-sm">Vui lòng quay lại sau hoặc liên hệ quản trị viên.</p>
-        <button onClick={onExit} className="mt-4 px-6 py-2.5 bg-primary text-white rounded-xl font-semibold text-sm hover:bg-primary/90 transition-colors cursor-pointer">
+        <button onClick={callExit} className="mt-4 px-6 py-2.5 bg-primary text-white rounded-xl font-semibold text-sm hover:bg-primary/90 transition-colors cursor-pointer">
           Quay lại
         </button>
       </div>
@@ -362,7 +357,7 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
         <button onClick={startTimedSurvey} className="px-7 py-3 bg-primary text-white rounded-xl font-bold text-base hover:bg-primary/90 transition-colors shadow-lg shadow-primary/25 cursor-pointer">
           Bắt đầu làm bài
         </button>
-        <button onClick={onExit} className="text-sm font-semibold text-text-secondary hover:text-primary transition-colors cursor-pointer">Quay lại</button>
+        <button onClick={callExit} className="text-sm font-semibold text-text-secondary hover:text-primary transition-colors cursor-pointer">Quay lại</button>
       </div>
     );
   }
@@ -930,14 +925,9 @@ export function Respondent({ survey, onExit, onComplete, isPublic = false }: Res
                     onClick={callExit} 
                     className="w-full sm:w-auto px-8 py-3.5 bg-primary text-white font-bold rounded-2xl shadow-xl shadow-primary/25 hover:bg-primary/90 transition-all active:scale-95 flex items-center justify-center gap-2"
                   >
-                    <X size={18} />
-                    Đóng trang
+                    <LogOut size={18} />
+                    Kết thúc khảo sát
                   </button>
-                  {showCloseHint && (
-                    <div className="animate-in fade-in slide-in-from-bottom-2 duration-500 bg-surface-container-high/80 backdrop-blur-sm text-text-secondary text-sm font-medium px-5 py-3 rounded-xl text-center max-w-sm">
-                      Trình duyệt không cho phép tự động đóng tab. Bạn có thể <strong className="text-text-primary">đóng tab này thủ công</strong> bằng cách nhấn nút × trên trình duyệt.
-                    </div>
-                  )}
                 </>
               ) : (
                 <button 
